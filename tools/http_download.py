@@ -12,7 +12,7 @@ from ._http_utils import validate_url, SafeRedirectHandler
 
 
 def _make_opener():
-    return urllib.request.build_opener(SafeRedirectHandler()), SafeRedirectHandler
+    return urllib.request.build_opener(SafeRedirectHandler())
 from ._file_utils import human_size
 
 # C4: 下载沙箱根目录
