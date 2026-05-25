@@ -788,7 +788,7 @@ class Base64EncodeTool(FunctionTool):
         },
         "required": ["data"]
     })
-    async def call(self, context, data: str, as_uri: bool = False, **kwargs) -> ToolExecResult:
+    async def call(self, context: ContextWrapper[AstrAgentContext], data: str, as_uri: bool = False, **kwargs) -> ToolExecResult:
         try: return _unwrap(b64_encode(data, as_uri))
         except Exception as e: return _err(f"base64_encode 失败: {e}")
 
@@ -805,7 +805,7 @@ class Base64DecodeTool(FunctionTool):
         },
         "required": ["data"]
     })
-    async def call(self, context, data: str, strip_uri: bool = False, **kwargs) -> ToolExecResult:
+    async def call(self, context: ContextWrapper[AstrAgentContext], data: str, strip_uri: bool = False, **kwargs) -> ToolExecResult:
         try: return _unwrap(b64_decode(data, strip_uri))
         except Exception as e: return _err(f"base64_decode 失败: {e}")
 
@@ -819,7 +819,7 @@ class UrlEncodeTool(FunctionTool):
         "properties": {"data": {"type": "string", "description": "要编码的文本"}},
         "required": ["data"]
     })
-    async def call(self, context, data: str, **kwargs) -> ToolExecResult:
+    async def call(self, context: ContextWrapper[AstrAgentContext], data: str, **kwargs) -> ToolExecResult:
         try: return _unwrap(url_encode(data))
         except Exception as e: return _err(f"url_encode 失败: {e}")
 
@@ -833,7 +833,7 @@ class UrlDecodeTool(FunctionTool):
         "properties": {"data": {"type": "string", "description": "URL 编码的文本"}},
         "required": ["data"]
     })
-    async def call(self, context, data: str, **kwargs) -> ToolExecResult:
+    async def call(self, context: ContextWrapper[AstrAgentContext], data: str, **kwargs) -> ToolExecResult:
         try: return _unwrap(url_decode(data))
         except Exception as e: return _err(f"url_decode 失败: {e}")
 
@@ -847,7 +847,7 @@ class HexEncodeTool(FunctionTool):
         "properties": {"data": {"type": "string", "description": "要编码的文本"}},
         "required": ["data"]
     })
-    async def call(self, context, data: str, **kwargs) -> ToolExecResult:
+    async def call(self, context: ContextWrapper[AstrAgentContext], data: str, **kwargs) -> ToolExecResult:
         try: return _unwrap(hex_encode(data))
         except Exception as e: return _err(f"hex_encode 失败: {e}")
 
@@ -861,7 +861,7 @@ class HexDecodeTool(FunctionTool):
         "properties": {"data": {"type": "string", "description": "十六进制字符串"}},
         "required": ["data"]
     })
-    async def call(self, context, data: str, **kwargs) -> ToolExecResult:
+    async def call(self, context: ContextWrapper[AstrAgentContext], data: str, **kwargs) -> ToolExecResult:
         try: return _unwrap(hex_decode(data))
         except Exception as e: return _err(f"hex_decode 失败: {e}")
 
@@ -871,7 +871,7 @@ class TimeNowTool(FunctionTool):
     name: str = "time_now"
     description: str = "获取当前时间：ISO 字符串 + Unix 时间戳（秒和毫秒）。"
     parameters: dict = field(default_factory=lambda: {"type": "object", "properties": {}, "required": []})
-    async def call(self, context, **kwargs) -> ToolExecResult:
+    async def call(self, context: ContextWrapper[AstrAgentContext], **kwargs) -> ToolExecResult:
         try: return _unwrap(_time_now())
         except Exception as e: return _err(f"time_now 失败: {e}")
 
@@ -888,7 +888,7 @@ class TsToIsoTool(FunctionTool):
         },
         "required": ["ts"]
     })
-    async def call(self, context, ts: int, ms: bool = False, **kwargs) -> ToolExecResult:
+    async def call(self, context: ContextWrapper[AstrAgentContext], ts: int, ms: bool = False, **kwargs) -> ToolExecResult:
         try: return _unwrap(ts_to_iso(ts, ms))
         except Exception as e: return _err(f"ts_to_iso 失败: {e}")
 
@@ -902,7 +902,7 @@ class IsoToTsTool(FunctionTool):
         "properties": {"iso": {"type": "string", "description": "ISO 时间字符串"}},
         "required": ["iso"]
     })
-    async def call(self, context, iso: str, **kwargs) -> ToolExecResult:
+    async def call(self, context: ContextWrapper[AstrAgentContext], iso: str, **kwargs) -> ToolExecResult:
         try: return _unwrap(iso_to_ts(iso))
         except Exception as e: return _err(f"iso_to_ts 失败: {e}")
 
@@ -919,7 +919,7 @@ class TimeDiffTool(FunctionTool):
         },
         "required": ["iso1", "iso2"]
     })
-    async def call(self, context, iso1: str, iso2: str, **kwargs) -> ToolExecResult:
+    async def call(self, context: ContextWrapper[AstrAgentContext], iso1: str, iso2: str, **kwargs) -> ToolExecResult:
         try: return _unwrap(time_diff(iso1, iso2))
         except Exception as e: return _err(f"time_diff 失败: {e}")
 
@@ -1035,9 +1035,8 @@ class TextFilterTool(FunctionTool):
     """行文本过滤。"""
     name: str = "text_filter"
     description: str = (
-        "行文本过滤器：head/tail/grep/invert/count，处理已加载文本。"
-        "action: head(前N行)/tail(后N行)/grep(匹配)/invert(反向)/count(统计)。"
-        "grep/invert 支持 *? 通配（非完整正则，如需正则用 regex_test）。"
+        "行文本过滤器：grep/invert/head/tail/count。"
+        "regex=False 时用 fnmatch 通配(*?)，regex=True 时用正则。"
         "不依赖 shell，纯 Python。上限 200 行。"
     )
     parameters: dict = field(default_factory=lambda: {
@@ -1045,16 +1044,17 @@ class TextFilterTool(FunctionTool):
         "properties": {
             "action": {"type": "string", "description": "操作: grep / invert / head / tail / count"},
             "text": {"type": "string", "description": "输入文本"},
-            "pattern": {"type": "string", "description": "grep/invert 时的匹配模式"},
+            "pattern": {"type": "string", "description": "grep/invert 时的匹配模式（通配或正则）"},
             "n": {"type": "integer", "description": "head/tail 时取的行数，默认 10"},
             "case_sensitive": {"type": "boolean", "description": "是否区分大小写，默认 false"},
+            "regex": {"type": "boolean", "description": "是否将 pattern 视为正则表达式，默认 false"},
         },
         "required": ["action", "text"]
     })
 
-    async def call(self, context: ContextWrapper[AstrAgentContext], action: str, text: str, pattern: str = "", n: int = 10, case_sensitive: bool = False, **kwargs) -> ToolExecResult:
+    async def call(self, context: ContextWrapper[AstrAgentContext], action: str, text: str, pattern: str = "", n: int = 10, case_sensitive: bool = False, regex: bool = False, **kwargs) -> ToolExecResult:
         try:
-            return _unwrap(_text_filter(text, action, pattern, n, case_sensitive))
+            return _unwrap(_text_filter(text, action, pattern, n, case_sensitive, regex))
         except Exception as e:
             return _err(f"text_filter 失败: {e}")
 
@@ -1312,7 +1312,7 @@ class LogParseTool(FunctionTool):
         },
         "required": ["text"]
     })
-    async def call(self, context, text: str, format: str = "auto", **kwargs) -> ToolExecResult:
+    async def call(self, context: ContextWrapper[AstrAgentContext], text: str, format: str = "auto", **kwargs) -> ToolExecResult:
         try: return _unwrap(await _run_sync(_log_parse, text, format))
         except Exception as e: return _err(f"log_parse 失败: {e}")
 
@@ -1330,7 +1330,7 @@ class FileWatchTool(FunctionTool):
         },
         "required": ["path"]
     })
-    async def call(self, context, path: str, duration_s: int = 10, interval_s: float = 1.0, **kwargs) -> ToolExecResult:
+    async def call(self, context: ContextWrapper[AstrAgentContext], path: str, duration_s: int = 10, interval_s: float = 1.0, **kwargs) -> ToolExecResult:
         try: return _unwrap(await _run_sync(_file_watch, path, duration_s, interval_s))
         except Exception as e: return _err(f"file_watch 失败: {e}")
 
@@ -1347,7 +1347,7 @@ class ConfigDiffTool(FunctionTool):
         },
         "required": ["file_a", "file_b"]
     })
-    async def call(self, context, file_a: str, file_b: str, **kwargs) -> ToolExecResult:
+    async def call(self, context: ContextWrapper[AstrAgentContext], file_a: str, file_b: str, **kwargs) -> ToolExecResult:
         try: return _unwrap(await _run_sync(_config_diff, file_a, file_b))
         except Exception as e: return _err(f"config_diff 失败: {e}")
 
@@ -1364,7 +1364,7 @@ class SvgRenderTool(FunctionTool):
         },
         "required": ["svg_path"]
     })
-    async def call(self, context, svg_path: str, output_path: str = "", **kwargs) -> ToolExecResult:
+    async def call(self, context: ContextWrapper[AstrAgentContext], svg_path: str, output_path: str = "", **kwargs) -> ToolExecResult:
         try: return _unwrap(await _run_sync(_svg_render, svg_path, output_path))
         except Exception as e: return _err(f"svg_render 失败: {e}")
 
@@ -1381,7 +1381,7 @@ class JsonSchemaValTool(FunctionTool):
         },
         "required": ["data", "schema"]
     })
-    async def call(self, context, data: str, schema: str, **kwargs) -> ToolExecResult:
+    async def call(self, context: ContextWrapper[AstrAgentContext], data: str, schema: str, **kwargs) -> ToolExecResult:
         try: return _unwrap(await _run_sync(_json_schema_val, data, schema))
         except Exception as e: return _err(f"json_schema_val 失败: {e}")
 
