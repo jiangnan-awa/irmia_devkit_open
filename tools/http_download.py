@@ -4,7 +4,6 @@ http_download — 二进制文件下载。
 """
 import urllib.request
 import urllib.error
-import os
 import time
 from pathlib import Path
 

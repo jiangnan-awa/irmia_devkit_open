@@ -5,7 +5,6 @@ config_diff — 配置文件结构化差异比较。
 import json
 from pathlib import Path
 
-from ._helpers import proposal_reply
 
 
 def diff(file_a: str, file_b: str) -> dict:

@@ -129,7 +129,7 @@ def search(
                               options=["缩小 path 范围", "简化 query 通配符", "回退到 dir_list"],
                               next_call={"tool": "dir_list", "params": {"path": path or "."}})
     except Exception as e:
-        return proposal_reply(False, f"es.exe 执行失败",
+        return proposal_reply(False, "es.exe 执行失败",
                               error=f"es.exe 执行失败: {e}",
                               evidence={"query": query},
                               options=["检查 query 语法", "回退到 dir_list"],

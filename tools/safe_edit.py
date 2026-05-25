@@ -57,10 +57,10 @@ def edit(filepath: str, old: str, new: str, replace_all: bool = False, occurrenc
 
     p = Path(filepath).resolve()
     filepath = str(p)
-    
+
     if not p.exists():
         return {"ok": False, "error": f"文件不存在: {filepath}"}
-    
+
     # 0. 读取文件内容 (H3: GBK fallback, H11: 保留原始换行符)
     content = None
     encoding = "utf-8"
@@ -74,14 +74,14 @@ def edit(filepath: str, old: str, new: str, replace_all: bool = False, occurrenc
                 encoding = "gbk"
         except Exception as e:
             return {"ok": False, "error": f"无法解码文件: {e}"}
-    
+
     # 0.1 消歧：计数 old 出现次数
     old_count = content.count(old)
     if old_count == 0:
-        return {"ok": False, "error": f"未找到匹配文本，文件内容未修改",
+        return {"ok": False, "error": "未找到匹配文本，文件内容未修改",
                 "proposal": "old 文本在文件中未找到——检查是否包含完整且精确的文本片段（包括缩进和换行）。",
                 "options": ["检查缩进是否匹配", "用 file_preview 先预览", "确认 old 文本来自文件的准确复制"]}
-    
+
     # ── 消歧与替换 ──
 
     if old_count > 1 and not replace_all and occurrence == 0:
@@ -102,13 +102,13 @@ def edit(filepath: str, old: str, new: str, replace_all: bool = False, occurrenc
             "matches": positions[:20],
             "hint": f"请使用 occurrence=N 指定目标（1~{old_count}），或设 replace_all=True 替换全部"
         }
-    
+
     # 1. 备份（在任何修改之前）
     ts = datetime.now().strftime("%Y%m%d_%H%M%S_%f")
     backup_path = _backup_dir() / f"{p.name}.{ts}.bak"
     _backup_dir().mkdir(parents=True, exist_ok=True)
     shutil.copy2(filepath, str(backup_path))
-    
+
     result = {
         "file": filepath,
         "backup": str(backup_path),
@@ -124,7 +124,6 @@ def edit(filepath: str, old: str, new: str, replace_all: bool = False, occurrenc
         content = content[:idx] + new + content[idx + len(old):]
         with open(filepath, "w", encoding=encoding, newline="") as f:
             f.write(content)
-        skip_patch = True
         result["replaced"] = 1
         result["occurrence"] = occurrence
     else:
@@ -132,13 +131,13 @@ def edit(filepath: str, old: str, new: str, replace_all: bool = False, occurrenc
         if not patch_result.get("ok"):
             return {**result, "ok": False, "error": patch_result.get("error", "patch 失败"), "rolled_back": False}
         result["replaced"] = patch_result.get("replaced", 0)
-    
+
     # 3. 语法检查（只对代码文件）
     suffix = p.suffix.lower()
     if suffix in (".py", ".nim", ".go", ".js", ".ts", ".jsx", ".tsx"):
         check_result = syntax_check(filepath)
         result["syntax_check"] = check_result
-        
+
         if not check_result.get("ok"):
             if check_result.get("skipped"):
                 result["syntax_ok"] = None
@@ -170,7 +169,7 @@ def edit(filepath: str, old: str, new: str, replace_all: bool = False, occurrenc
     else:
         result["syntax_ok"] = None
         result["syntax_check"] = {"note": "非代码文件，跳过语法检查"}
-    
+
     result["ok"] = True
     return result
 
@@ -186,12 +185,12 @@ def list_backups(filepath: str = None) -> dict:
             "size": stat.st_size,
             "time": datetime.fromtimestamp(stat.st_mtime).isoformat()
         })
-    
+
     if filepath:
         name = Path(filepath).name
         prefix = f"{name}."
         backups = [b for b in backups if b["file"].startswith(prefix)]
-    
+
     return {"ok": True, "backups": backups[:20], "total": len(backups)}
 
 
@@ -200,7 +199,7 @@ def rollback(filepath: str, backup_name: str = None) -> dict:
     回滚文件到指定备份。不指定则回滚到最近的备份。
     """
     p = Path(filepath)
-    
+
     if backup_name:
         backup_path = _backup_dir() / Path(backup_name).name  # 只取文件名防路径穿越
         if not backup_path.exists():
@@ -212,7 +211,7 @@ def rollback(filepath: str, backup_name: str = None) -> dict:
         if not candidates:
             return {"ok": False, "error": f"没有找到 {p.name} 的备份"}
         backup_path = candidates[0]
-    
+
     shutil.copy2(str(backup_path), filepath)
     return {
         "ok": True,

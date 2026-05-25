@@ -56,14 +56,14 @@ def _resolve(obj, path: str):
         inner = m.group(1)
         if inner == "*":
             if not isinstance(obj, list):
-                raise TypeError(f"不能对非数组使用 [*]")
+                raise TypeError("不能对非数组使用 [*]")
             if not rest:
                 return obj
             return [_resolve(item, rest) for item in obj]
         else:
             idx = int(inner)
             if not isinstance(obj, list):
-                raise TypeError(f"不能对非数组使用索引")
+                raise TypeError("不能对非数组使用索引")
             return _resolve(obj[idx], rest)
     else:
         m = re.match(r'^(\w+)', path)
@@ -74,5 +74,5 @@ def _resolve(obj, path: str):
         if rest.startswith("."):
             rest = rest[1:]
         if not isinstance(obj, dict):
-            raise TypeError(f"不能对非对象使用 .key")
+            raise TypeError("不能对非对象使用 .key")
         return _resolve(obj[seg], rest)

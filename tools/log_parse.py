@@ -5,7 +5,6 @@ log_parse — 日志解析器。
 import re
 import json
 
-from ._helpers import proposal_reply
 
 
 def parse(text: str, format: str = "auto", max_lines: int = 200) -> dict:

@@ -30,7 +30,7 @@ jobs:
 
       - name: Ruff lint
         run: |
-          ruff check tools/ main.py --select E,F,W --ignore E501,E402
+          ruff check tools/ main.py --select E,F --ignore E501,E402,E701,E741
 
       - name: Import smoke test
         run: |

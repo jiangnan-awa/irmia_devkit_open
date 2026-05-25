@@ -2,7 +2,6 @@
 file_watch — 文件变化监控。
 轮询 mtime/size，返回变更事件列表。不依赖 inotify/Watchdog。
 """
-import os
 import time
 from pathlib import Path
 

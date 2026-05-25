@@ -3,7 +3,6 @@ git_smart — Git 操作封装。
 常用 git 命令的结构化输出。不要用 shell 直接执行 git 命令——用此工具。
 """
 import subprocess
-from pathlib import Path
 
 from ._helpers import proposal_reply
 
@@ -77,7 +76,7 @@ def commit(cwd: str, message: str) -> dict:
         return {"ok": False, "error": f"无法获取状态: {s.get('error', '未知')}"}
     if s.get("clean"):
         return {"ok": False, "error": "没有可提交的更改"}
-    
+
     changed = s.get("changed_count", 0)
     if changed > 10:
         groups = {"Python": [], "Config": [], "Other": []}
@@ -97,11 +96,11 @@ def commit(cwd: str, message: str) -> dict:
     r1 = _run_git(cwd, ["add", "-A"])
     if not r1["ok"]:
         return {"ok": False, "error": f"git add 失败: {r1['stderr']}"}
-    
+
     r2 = _run_git(cwd, ["commit", "-m", message], timeout=30)
     if not r2["ok"]:
         return {"ok": False, "error": f"git commit 失败: {r2['stderr']}"}
-    
+
     return {
         "ok": True,
         "message": message,
@@ -134,12 +133,12 @@ def push(cwd: str, remote: str = "origin", branch: str = "") -> dict:
         if not b.get("ok"):
             return {"ok": False, "error": f"无法获取当前分支: {b.get('error')}"}
         branch = b["branch"]
-    
+
     # 检查是否有未推送的 commit（远程分支不存在时跳过，由后续 push 自己报错）
     r_check = _run_git(cwd, ["log", f"origin/{branch}..HEAD", "--oneline"])
     if r_check["ok"]:
         if not r_check["stdout"].strip():
             return {"ok": False, "error": "没有未推送的提交——所有 commit 已在远程"}
-    
+
     args = ["push", remote, branch]
     return _run_git(cwd, args, timeout=30)

@@ -34,7 +34,7 @@ def patch(filepath: str, old: str, new: str, replace_all: bool = False) -> dict:
         content, encoding = read_file_with_encoding(p)
     except Exception as e:
         return {"ok": False, "error": f"无法读取文件: {e}"}
-    
+
     if old not in content:
         # 尝试给出最接近的匹配
         lines = content.split("\n")
@@ -45,17 +45,17 @@ def patch(filepath: str, old: str, new: str, replace_all: bool = False) -> dict:
             if ratio > best_ratio:
                 best_ratio = ratio
                 best = (i + 1, line.strip()[:80])
-        
+
         hint = ""
         if best and best_ratio > 0.3:
             hint = f" 最接近的行 #{best[0]}: {best[1]}"
-        
+
         return {
             "ok": False,
             "error": f"旧文本在文件中未找到。{hint}",
-            "hint": f"检查 old 参数是否包含完整且精确的文本片段。"
+            "hint": "检查 old 参数是否包含完整且精确的文本片段。"
         }
-    
+
     count = content.count(old)
     new_content = content.replace(old, new) if replace_all else content.replace(old, new, 1)
     actual_replaced = 1 if not replace_all else count
@@ -85,15 +85,15 @@ def preview(filepath: str, old: str, new: str, replace_all: bool = False) -> dic
         content = read_file(p)
     except Exception as e:
         return {"ok": False, "error": f"无法读取文件: {e}"}
-    
+
     if old not in content:
         return {"ok": False, "error": "旧文本在文件中未找到"}
-    
+
     new_content = content.replace(old, new) if replace_all else content.replace(old, new, 1)
     diff = "\n".join(difflib.unified_diff(
         content.split("\n"), new_content.split("\n"),
         fromfile=filepath, tofile=filepath + " (preview)",
         lineterm=""
     ))
-    
+
     return {"ok": True, "diff": diff}

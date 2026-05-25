@@ -3,7 +3,6 @@ _helpers — main.py 和 registry 共用的辅助函数。
 """
 import asyncio
 import json
-from typing import Any
 
 
 def err_json(error: str) -> str:

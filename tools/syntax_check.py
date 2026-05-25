@@ -20,9 +20,9 @@ def check(filepath: str) -> dict:
     p = Path(filepath)
     if not p.exists():
         return {"ok": False, "error": f"文件不存在: {filepath}", "language": "unknown"}
-    
+
     suffix = p.suffix.lower()
-    
+
     if suffix == ".py":
         return _check_python(p)
     elif suffix == ".nim":
