@@ -64,6 +64,16 @@ data/plugins/
 
 > 其余 40+ 个工具为纯 Python 标准库，零外部依赖。
 
+## 协议
+
+失败/歧义返回统一为四字段提案，帮助 LLM 快速定位和选择下一步：
+- `proposal` — 自然语言：发生了什么、可以做什么
+- `evidence` — 结构化证据（支持提案的数据）
+- `options` — 离散选项列表
+- `next_call` — 预格式化的下次调用参数
+
+覆盖工具：`safe_edit`、`git_commit`、`syntax_check`、`port_check`、`es_search`、`lint_runner`、`dep_scan`、`config_diff`、`log_parse`、`text_filter` 等 17 个工具。`ok:true` 的正常路径不受影响。
+
 ## 工具列表 (63 个)
 
 > 快速查找: `safe_edit` / `git_commit` / `es_search` / `http_get` / `log_parse` / `base64_encode` / `time_now` / `project_init` / `lint_runner` / `db_query` ...
@@ -181,7 +191,7 @@ data/plugins/
 
 ## 版本
 
-**2.0.0** — tool_stats统计 + db_query只读查询 + dep_scan依赖分析
+**2.2.0** — 统一交互协议 — 工具失败/歧义时返回 `{proposal, evidence, options, next_call}` 结构化提案
 
 ## 作者
 

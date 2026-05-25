@@ -3,7 +3,7 @@ name: dev-workflow
 description: >
   收到编码任务时强制走安全工作流。触发：写代码、改代码、修bug、重构、实现功能、修改文件。
   核心原则：先确认后执行、自动备份回滚、语法门禁。
-  可用工具：safe_edit、git_*、syntax_check、lint_runner、file_diff、es_search、gh_pr、gh_issue。
+  可用工具：safe_edit、git_*、syntax_check、lint_runner、file_diff、es_search、gh_pr、gh_issue、dep_scan。
 ---
 
 # 开发工作流
@@ -39,6 +39,8 @@ description: >
 - 改前 `git status`，改后 `git diff --staged`
 - `safe_edit` 自动跑 `syntax_check`，语法错就分析根因重新改
 - 语法失败自动回滚，不要手动恢复
+- 回滚后工具返回 `proposal` 和 `options`——直接看提案，选一个选项，重试
+- 代码改完后用 `lint_runner` 检查质量
 - 想回到之前版本 → `safe_rollback`
 
 ## git 提交
@@ -46,4 +48,4 @@ description: >
 - commit message 按 `fix:` / `feat:` / `refactor:` 规范
 - `git diff --cached` 自查无敏感内容
 - 大改动前备份到安全目录（如插件的 backups/ 目录）
-- 推送后如需创建 PR 或发布 Release → 用 `gh_pr` / `gh_release`
+- 推送后如需创建 PR → 用 `gh_pr`
