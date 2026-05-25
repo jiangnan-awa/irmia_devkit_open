@@ -59,16 +59,20 @@ def patch(filepath: str, old: str, new: str, replace_all: bool = False) -> dict:
     count = content.count(old)
     new_content = content.replace(old, new) if replace_all else content.replace(old, new, 1)
     actual_replaced = 1 if not replace_all else count
-    
+
     p.write_text(new_content, encoding=encoding)
-    
-    return {
+
+    result = {
         "ok": True,
         "replaced": actual_replaced,
         "total_occurrences": count,
         "replace_all": replace_all,
-        "file": str(p.absolute())
+        "file": str(p.absolute()),
     }
+    if not replace_all and count > 1:
+        result["proposal"] = f"仅替换了第1次出现(共{count}处)。设 replace_all=True 替换全部。"
+        result["options"] = ["replace_all=True", "逐个替换"]
+    return result
 
 
 def preview(filepath: str, old: str, new: str, replace_all: bool = False) -> dict:

@@ -5,6 +5,8 @@ config_diff — 配置文件结构化差异比较。
 import json
 from pathlib import Path
 
+from ._helpers import proposal_reply
+
 
 def diff(file_a: str, file_b: str) -> dict:
     """比较两个配置文件的结构化差异。
@@ -49,7 +51,7 @@ def diff(file_a: str, file_b: str) -> dict:
         else:
             unchanged += 1
 
-    return {
+    result = {
         "ok": True,
         "file_a": file_a,
         "file_b": file_b,
@@ -61,6 +63,13 @@ def diff(file_a: str, file_b: str) -> dict:
         "removed_count": len(removed),
         "changed_count": len(changed),
     }
+    total = len(added) + len(removed) + len(changed) + unchanged
+    if total == unchanged:
+        result["proposal"] = "两个配置文件完全相同——无需合并/比较。"
+    elif changed:
+        result["proposal"] = f"{len(changed)}个key变更, {len(added)}个新增, {len(removed)}个删除。"
+        result["options"] = ["逐个应用到目标文件", "仅查看有差别的 key"]
+    return result
 
 
 def _load(p: Path) -> dict:

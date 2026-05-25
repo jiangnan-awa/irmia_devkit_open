@@ -78,7 +78,9 @@ def edit(filepath: str, old: str, new: str, replace_all: bool = False, occurrenc
     # 0.1 消歧：计数 old 出现次数
     old_count = content.count(old)
     if old_count == 0:
-        return {"ok": False, "error": f"未找到匹配文本，文件内容未修改"}
+        return {"ok": False, "error": f"未找到匹配文本，文件内容未修改",
+                "proposal": "old 文本在文件中未找到——检查是否包含完整且精确的文本片段（包括缩进和换行）。",
+                "options": ["检查缩进是否匹配", "用 file_preview 先预览", "确认 old 文本来自文件的准确复制"]}
     
     # ── 消歧与替换 ──
 
@@ -143,12 +145,25 @@ def edit(filepath: str, old: str, new: str, replace_all: bool = False, occurrenc
                 result["syntax_check"] = check_result
             else:
                 shutil.copy2(str(backup_path), filepath)
+                syntax_errors = check_result.get("errors", [])
+                hint = "已自动回滚。"
+                if syntax_errors:
+                    se = syntax_errors[0]
+                    msg = str(se.get("msg", ""))
+                    if "indent" in msg.lower():
+                        hint += " 缩进问题——将 old 参数中的缩进减少后重试 safe_edit。"
+                    elif "syntax" in msg.lower() or "invalid" in msg.lower():
+                        hint += f" 语法问题({msg})——检查 old 参数中括号/引号是否完整。"
+                    else:
+                        hint += f" 语法错误({msg})——分析错误原因后修正 old 参数重试。"
                 return {
                     **result,
                     "ok": False,
                     "rolled_back": True,
                     "error": f"语法检查失败，已自动回滚到备份: {backup_path}",
-                    "syntax_errors": check_result.get("errors", [])
+                    "syntax_errors": syntax_errors,
+                    "proposal": hint,
+                    "options": ["retry_edit", "show_backup_diff", "restore_backup"],
                 }
         else:
             result["syntax_ok"] = True

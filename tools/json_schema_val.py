@@ -31,7 +31,10 @@ def validate(data: str, schema: str) -> dict:
             for e in errors:
                 path = ".".join(str(p) for p in e.absolute_path) or "(root)"
                 error_list.append({"path": path, "message": e.message})
-            return {"ok": True, "valid": False, "errors": error_list, "count": len(error_list)}
+            return proposal_reply(True, f"Schema校验失败——{len(errors)}个字段不符合规范",
+                                  evidence={"first_error": error_list[0], "count": len(errors)},
+                                  options=["根据 errors 逐个修复 JSON", "更新 schema"],
+                                  valid=False, errors=error_list, count=len(errors))
         return {"ok": True, "valid": True, "count": 0}
     except ImportError:
         return {"ok": False, "error": "jsonschema 未安装，请运行: pip install jsonschema"}

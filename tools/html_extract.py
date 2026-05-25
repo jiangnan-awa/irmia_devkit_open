@@ -4,6 +4,8 @@ html_extract — HTML 内容提取。
 """
 from bs4 import BeautifulSoup
 
+from ._helpers import proposal_reply
+
 
 def extract(html: str, what: str = "text", selector: str = "") -> dict:
     """从 HTML 提取结构化内容。
@@ -63,6 +65,11 @@ def extract(html: str, what: str = "text", selector: str = "") -> dict:
             if not selector:
                 return {"ok": False, "error": "what='query' 需要 selector 参数"}
             elements = soup.select(selector)
+            if not elements:
+                return proposal_reply(True, f"CSS 选择器 '{selector}' 未匹配任何元素",
+                                      evidence={"selector": selector},
+                                      options=["简化选择器(去掉层级)", "尝试 what='text' 提取全文"],
+                                      data={"results": [], "count": 0})
             results = [el.get_text(strip=True)[:200] for el in elements]
             html_snippets = []
             for el in elements[:5]:
@@ -80,4 +87,7 @@ def extract(html: str, what: str = "text", selector: str = "") -> dict:
             return {"ok": False, "error": f"未知提取类型: {what}，可选 text/links/tables/query"}
 
     except Exception as e:
-        return {"ok": False, "error": f"HTML 解析失败: {e}"}
+        return proposal_reply(False, "HTML 解析失败——lxml 和 html.parser 均无法解析",
+                              error=f"HTML 解析失败: {e}",
+                              evidence={"html_preview": html[:200]},
+                              options=["检查输入是否为完整 HTML", "尝试手动提取纯文本", "可能非 HTML 格式"])

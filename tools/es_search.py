@@ -9,6 +9,7 @@ import shutil
 import subprocess
 from pathlib import Path
 from .config import get_config
+from ._helpers import proposal_reply
 
 
 def _get_es_path() -> str:
@@ -65,7 +66,11 @@ def search(
     """
     es_path = _get_es_path()
     if not Path(es_path).exists():
-        return {"ok": False, "error": f"es.exe 不存在: {es_path}"}
+        return proposal_reply(False, f"Everything (es.exe) 未找到: {es_path}",
+                              error=f"es.exe 不存在: {es_path}",
+                              evidence={"configured": get_config().get("es_path"), "fallback": es_path},
+                              options=["安装 Everything 并确保 es.exe 在 PATH 中", "配置 es_path", "回退到 dir_list"],
+                              next_call={"tool": "dir_list", "params": {"path": path or "."}})
 
     args = [es_path]
 
@@ -118,9 +123,17 @@ def search(
             errors="replace",
         )
     except subprocess.TimeoutExpired:
-        return {"ok": False, "error": "es.exe 搜索超时（15s）"}
+        return proposal_reply(False, "Everything 搜索超时 (15s)——尝试缩小搜索范围",
+                              error="es.exe 搜索超时（15s）",
+                              evidence={"query": query, "timeout": 15},
+                              options=["缩小 path 范围", "简化 query 通配符", "回退到 dir_list"],
+                              next_call={"tool": "dir_list", "params": {"path": path or "."}})
     except Exception as e:
-        return {"ok": False, "error": f"es.exe 执行失败: {e}"}
+        return proposal_reply(False, f"es.exe 执行失败",
+                              error=f"es.exe 执行失败: {e}",
+                              evidence={"query": query},
+                              options=["检查 query 语法", "回退到 dir_list"],
+                              next_call={"tool": "dir_list", "params": {"path": path or "."}})
 
     if proc.returncode != 0:
         return {"ok": False, "error": proc.stderr.strip() or f"es.exe 返回码 {proc.returncode}"}
@@ -154,4 +167,5 @@ def search(
         "count": len(items),
         "total_size": total_size,
         "items": items,
+        "proposal": f"搜索无结果 (query: {query})——尝试放宽条件或移除过滤" if len(items) == 0 else "",
     }

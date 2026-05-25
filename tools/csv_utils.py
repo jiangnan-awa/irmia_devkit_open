@@ -5,6 +5,8 @@ csv_utils — CSV/TSV 解析与生成。
 import csv
 import io
 
+from ._helpers import proposal_reply
+
 
 def parse(text: str, delimiter: str = "auto", has_header: bool = True) -> dict:
     """
@@ -24,10 +26,16 @@ def parse(text: str, delimiter: str = "auto", has_header: bool = True) -> dict:
         reader = csv.reader(io.StringIO(text), delimiter=delimiter)
         rows = list(reader)
     except Exception as e:
-        return {"ok": False, "error": f"CSV 解析失败: {e}"}
+        return proposal_reply(False, "CSV/TSV 解析失败——检查分隔符或是否含 malformed 引号",
+                              error=f"CSV 解析失败: {e}",
+                              evidence={"delimiter": delimiter},
+                              options=["指定 delimiter 如 '\\t' 或 ',' 试试", "用 text_filter 预处理"])
 
     if not rows:
-        return {"ok": True, "delimiter": delimiter, "headers": [], "rows": [], "count": 0}
+        return proposal_reply(True, "CSV 解析成功但 0 行数据——可能是空输入或只有表头",
+                              evidence={"delimiter": delimiter},
+                              options=["确认输入文本非空", "检查 has_header 是否正确"],
+                              headers=[], rows=[], count=0)
 
     headers = []
     data_start = 0
@@ -50,6 +58,7 @@ def parse(text: str, delimiter: str = "auto", has_header: bool = True) -> dict:
         "rows": data_rows[:200],
         "count": len(data_rows),
         "truncated": len(data_rows) > 200,
+        "proposal": f"CSV 解析成功，{len(data_rows)} 行数据{'，已截断至200行' if len(data_rows) > 200 else ''}" if len(data_rows) > 200 else "",
     }
 
 
@@ -62,7 +71,9 @@ def generate(rows: list[dict], delimiter: str = ",") -> dict:
         delimiter: 分隔符，默认逗号
     """
     if not rows:
-        return {"ok": False, "error": "rows 为空"}
+        return proposal_reply(False, "无法生成 CSV——输入 rows 为空列表",
+                              error="rows 为空",
+                              options=["检查上游数据源", "至少提供一行数据"])
 
     headers = list(rows[0].keys())
     output = io.StringIO()

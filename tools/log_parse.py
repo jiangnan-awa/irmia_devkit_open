@@ -5,6 +5,8 @@ log_parse — 日志解析器。
 import re
 import json
 
+from ._helpers import proposal_reply
+
 
 def parse(text: str, format: str = "auto", max_lines: int = 200) -> dict:
     """解析日志文本为结构化数据。
@@ -45,6 +47,8 @@ def parse(text: str, format: str = "auto", max_lines: int = 200) -> dict:
         "total_lines": min(len(lines), max_lines),
         "errors": errors,
         "entries": results,
+        "proposal": f"解析完成：{len(results)}条/{errors}条失败——格式={format}。{'尝试切换 format 参数' if errors > 0 else ''}" if errors > 0 else "",
+        "options": ["尝试其他 format (nginx/apache/syslog/jsonl)"] if errors > 0 else None,
     }
 
 

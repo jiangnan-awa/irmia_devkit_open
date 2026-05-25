@@ -4,6 +4,8 @@ json_query — jq 式 JSON 查询。
 """
 import json
 
+from ._helpers import proposal_reply
+
 
 def query(data: str, path: str) -> dict:
     """
@@ -23,13 +25,19 @@ def query(data: str, path: str) -> dict:
     try:
         obj = json.loads(data)
     except json.JSONDecodeError as e:
-        return {"ok": False, "error": f"JSON 解析失败: {e.msg} (pos {e.pos})"}
+        return proposal_reply(False, f"JSON 语法错误 (pos {e.pos}): {e.msg}",
+                              error=f"JSON 解析失败: {e.msg} (pos {e.pos})",
+                              evidence={"pos": e.pos, "msg": e.msg},
+                              options=["修正 JSON 语法", "查看 pos 附近的字符"])
 
     try:
         result = _resolve(obj, path)
         return {"ok": True, "path": path, "result": result}
     except (KeyError, IndexError, TypeError, ValueError) as e:
-        return {"ok": False, "error": f"路径 {path} 解析失败: {e}", "path": path}
+        return proposal_reply(False, f"路径 '{path}' 解析失败——对象结构不匹配路径",
+                              error=f"路径 {path} 解析失败: {e}",
+                              evidence={"path": path, "error_type": type(e).__name__},
+                              options=["检查路径中对象的实际类型(对象/数组)", "用 [*] 或 [0] 调整"])
 
 
 def _resolve(obj, path: str):

@@ -7,6 +7,8 @@ import ast
 import sys
 from pathlib import Path
 
+from ._helpers import proposal_reply
+
 
 def check(filepath: str) -> dict:
     """
@@ -47,16 +49,21 @@ def _check_python(p: Path) -> dict:
         ast.parse(source)
         return {"ok": True, "language": "python"}
     except SyntaxError as e:
-        return {
-            "ok": False,
-            "language": "python",
-            "errors": [{
-                "line": e.lineno,
-                "col": e.offset,
-                "msg": e.msg,
-                "text": e.text.strip() if e.text else ""
-            }]
-        }
+        hint = ""
+        msg = e.msg.lower() if e.msg else ""
+        if "indent" in msg:
+            hint = "缩进异常——检查 old 参数中的缩进是否与上下文一致。将缩进减少一级后重试 safe_edit。"
+        elif "syntax" in msg or "invalid" in msg:
+            hint = "语法错误——检查是否缺少冒号、括号未闭合、或关键字拼写错误。"
+        elif "eof" in msg:
+            hint = "文件末尾缺少闭合符号——检查是否有未闭合的引号、括号或三引号。"
+        else:
+            hint = f"第{e.lineno}行语法错误: {e.msg}"
+        return proposal_reply(False, hint,
+                              language="python",
+                              error=f"语法检查失败: {e.msg}",
+                              evidence={"line": e.lineno, "col": e.offset, "msg": e.msg, "text": e.text.strip() if e.text else ""},
+                              options=["修正后重试 safe_edit", "查看错误行上下文"])
     except Exception:
         # 回退到 py_compile
         try:

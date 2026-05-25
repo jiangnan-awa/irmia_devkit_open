@@ -5,6 +5,8 @@ git_smart — Git 操作封装。
 import subprocess
 from pathlib import Path
 
+from ._helpers import proposal_reply
+
 
 def _run_git(cwd: str, args: list[str], timeout: int = 15) -> dict:
     """执行 git 命令，返回结构化结果。"""
@@ -78,10 +80,17 @@ def commit(cwd: str, message: str) -> dict:
     
     changed = s.get("changed_count", 0)
     if changed > 10:
-        return {
-            "ok": False,
-            "error": f"未暂存文件过多 ({changed} 个)。请先用 git_status 和 git_diff 确认后分批提交。"
-        }
+        groups = {"Python": [], "Config": [], "Other": []}
+        for f_line in s.get("changes", []):
+            f_name = f_line.split()[-1] if len(f_line.split()) > 2 else f_line.strip()
+            if f_name.endswith((".py", ".nim", ".go")): groups["Python"].append(f_name)
+            elif f_name.endswith((".json", ".yaml", ".yml", ".toml", ".cfg", ".ini")): groups["Config"].append(f_name)
+            else: groups["Other"].append(f_name)
+        return proposal_reply(False,
+            f"{changed}个文件待提交——Python:{len(groups['Python'])} Config:{len(groups['Config'])} Other:{len(groups['Other'])}。建议分批。",
+            error=f"未暂存文件过多 ({changed} 个)。请先用 git_status 和 git_diff 确认后分批提交。",
+            evidence={"file_groups": {k: v for k, v in groups.items() if v}},
+            options=["commit_python_only", "show_all_files", "force_all"])
 
     files_to_stage = s.get("changes", [])
 

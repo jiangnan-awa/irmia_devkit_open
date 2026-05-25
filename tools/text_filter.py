@@ -4,6 +4,9 @@ head/tail/grep-like，处理已加载的文本，不依赖 shell。
 """
 
 
+from ._helpers import proposal_reply
+
+
 def filter_lines(
     text: str,
     action: str = "grep",
@@ -55,7 +58,10 @@ def filter_lines(
             try:
                 compiled = re.compile(pattern, flag)
             except re.error as e:
-                return {"ok": False, "error": f"正则语法错误: {e.msg}"}
+                return proposal_reply(False, f"正则语法错误 (pos {e.pos}): {e.msg}",
+                                      error=f"正则语法错误: {e.msg}",
+                                      evidence={"pattern": pattern, "pos": e.pos},
+                                      options=["修正正则语法，检查未闭合的括号/方括号", "切换到 regex=False 用 fnmatch 通配"])
             matched = [line for line in lines if compiled.search(line)]
         else:
             import fnmatch
@@ -70,15 +76,28 @@ def filter_lines(
             matched_set = set(matched)
             matched = [l for l in lines if l not in matched_set]
 
-        return {
+        proposal = ""
+        resp_options = None
+        if len(matched) == 0 and len(lines) > 0:
+            proposal = f"'{pattern}' 未匹配任何行——共 {len(lines)} 行文本"
+            resp_options = ["尝试 regex=True", "放宽 pattern 为通配", "设 case_sensitive=false", "检查输入文本前几行"]
+        elif len(matched) > 200:
+            proposal = f"结果截断 ({len(matched)}行→200行)"
+
+        r = {
             "ok": True,
             "action": action,
             "pattern": pattern,
             "regex": regex,
             "matched": len(matched),
             "total": len(lines),
-            "result": "\n".join(matched[:200]),
+            "result": "\n".join(matched[:200]) if matched else "",
             "truncated": len(matched) > 200,
         }
+        if proposal:
+            r["proposal"] = proposal
+        if resp_options:
+            r["options"] = resp_options
+        return r
 
     return {"ok": False, "error": f"未知 action: {action}，可选: grep/invert/head/tail/count"}

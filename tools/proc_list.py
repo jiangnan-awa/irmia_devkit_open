@@ -5,6 +5,8 @@ proc_list — 进程列表查询。
 import subprocess
 import os
 
+from ._helpers import proposal_reply
+
 
 def list_processes(filter_name: str | None = None) -> dict:
     """列出所有进程。可通过 filter_name 按名称模糊过滤。"""
@@ -60,9 +62,15 @@ def _list_windows(filter_name: str | None) -> dict:
             "processes": sorted(processes, key=lambda p: -p["memory_kb"]),
         }
     except FileNotFoundError:
-        return {"ok": False, "error": "tasklist 不可用"}
+        return proposal_reply(False, "tasklist 命令不可用",
+                              error="tasklist 不可用",
+                              options=["检查系统环境", "用 sys_snapshot 替代"],
+                              next_call={"tool": "sys_snapshot", "params": {}})
     except Exception as e:
-        return {"ok": False, "error": str(e)}
+        return proposal_reply(False, "tasklist 执行失败",
+                              error=str(e),
+                              options=["检查系统权限", "用 sys_snapshot 替代"],
+                              next_call={"tool": "sys_snapshot", "params": {}})
 
 
 def _list_posix(filter_name: str | None) -> dict:
@@ -103,6 +111,12 @@ def _list_posix(filter_name: str | None) -> dict:
             "processes": sorted(processes, key=lambda p: -p["memory_kb"]),
         }
     except FileNotFoundError:
-        return {"ok": False, "error": "ps 不可用"}
+        return proposal_reply(False, "ps 命令不可用",
+                              error="ps 不可用",
+                              options=["检查系统环境", "用 sys_snapshot 替代"],
+                              next_call={"tool": "sys_snapshot", "params": {}})
     except Exception as e:
-        return {"ok": False, "error": str(e)}
+        return proposal_reply(False, "ps 执行失败",
+                              error=str(e),
+                              options=["检查系统权限", "用 sys_snapshot 替代"],
+                              next_call={"tool": "sys_snapshot", "params": {}})
