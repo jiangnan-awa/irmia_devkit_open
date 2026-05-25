@@ -64,13 +64,21 @@ def edit(filepath: str, old: str, new: str, replace_all: bool = False, occurrenc
     skip_patch = False
 
     if old_count > 1 and not replace_all and occurrence == 0:
-        lines = content.split("\n")
         positions = []
         pos = 0
-        for i, line in enumerate(lines, 1):
-            local_pos = line.find(old)
-            if local_pos != -1:
-                positions.append({"line": i, "col": local_pos + 1, "preview": line.strip()[:80]})
+        while True:
+            idx = content.find(old, pos)
+            if idx == -1:
+                break
+            line_num = content[:idx].count("\n") + 1
+            line_start = content.rfind("\n", 0, idx) + 1
+            line_end = content.find("\n", idx)
+            if line_end == -1:
+                line_end = len(content)
+            preview = content[line_start:line_end].strip()[:80]
+            col = idx - line_start + 1
+            positions.append({"line": line_num, "col": col, "preview": preview})
+            pos = idx + len(old)
         return {
             "ok": False,
             "error": f"old 文本在文件中出现了 {old_count} 次，请指定要替换第几次出现",

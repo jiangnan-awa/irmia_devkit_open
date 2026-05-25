@@ -58,7 +58,11 @@ def extract(html: str, what: str = "text", selector: str = "") -> dict:
                 return {"ok": False, "error": "what='query' 需要 selector 参数"}
             elements = soup.select(selector)
             results = [el.get_text(strip=True)[:200] for el in elements]
-            html_snippets = [str(el)[:300] for el in elements[:5]]
+            html_snippets = []
+            for el in elements[:5]:
+                pretty = el.prettify()
+                first_line = pretty.split("\n")[0] if "\n" in pretty else pretty[:300]
+                html_snippets.append(first_line[:300])
             return {"ok": True, "data": {
                 "selector": selector,
                 "results": results,
