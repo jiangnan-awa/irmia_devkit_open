@@ -39,7 +39,7 @@ data/plugins/
 
 ## 工具组
 
-59 个工具按 9 组管理。在 `config.json` 中设 `tool_groups` 的组为 `false` 关闭整组，或用 `disabled_tools` 逗号分隔禁用单个工具。WebUI 面板同样支持。**修改后需重启 AstrBot**。
+60 个工具按 9 组管理。在 `config.json` 中设 `tool_groups` 的组为 `false` 关闭整组，或用 `disabled_tools` 逗号分隔禁用单个工具。WebUI 面板同样支持。**修改后需重启 AstrBot**。
 
 | 字段 | 说明 |
 |------|------|
@@ -56,15 +56,15 @@ data/plugins/
 | `syntax_check` (Nim) | Nim 编译器 | 跳过 (skipped=true) |
 | `syntax_check` (Go) | Go 编译器 | 跳过 |
 | `syntax_check` (JS/TS) | Node.js | 跳过 |
-| `svg_render` | `pip install cairosvg`（可选） | 返回安装提示 |
+| `lint_runner` | `pip install ruff` 或 `pylint` 或 `npm install -g eslint` | 返回安装提示 |
 | `json_schema_val` | `pip install jsonschema`（可选） | 返回安装提示 |
 | `config_diff` (YAML) | `pip install pyyaml`（可选） | 返回安装提示 |
 
 > 其余 40+ 个工具为纯 Python 标准库，零外部依赖。
 
-## 工具列表 (59 个)
+## 工具列表 (60 个)
 
-### 🔒 安全编辑链 (6)
+### 🔒 安全编辑链 (7)
 
 | 工具 | 用途 |
 |------|------|
@@ -73,7 +73,8 @@ data/plugins/
 | `safe_backups` | 列出所有备份文件 |
 | `file_patch` | 精确替换文本，用于非代码文件 |
 | `file_preview` | 预览替换效果 (dry-run diff) |
-| `syntax_check` | Python / Nim / Go / JS / TS 语法检查 |
+| `syntax_check` | Python / Nim / Go / JS / TS 语法检查（能不能跑） |
+| `lint_runner` | ruff/pylint/eslint 代码质量检查（写得好不好） |
 
 ### 🔀 Git & GitHub (11)
 
@@ -173,7 +174,7 @@ data/plugins/
 
 ## 版本
 
-**1.7.0** — project_init项目扫描 + git_changelog语义分组
+**1.8.0** — lint_runner代码质量检查 (ruff/pylint/eslint)
 
 ## 作者
 

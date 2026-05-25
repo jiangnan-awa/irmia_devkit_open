@@ -64,6 +64,7 @@ from .svg_render import render as _svg_render
 from .json_schema_val import validate as _json_schema_val
 from .project_init import scan as _project_init_scan
 from .git_changelog import changelog as _git_changelog
+from .lint_runner import run as _lint_run
 
 # ═══════════════════════════════════════════════════════════
 # Tool classes
@@ -1486,12 +1487,33 @@ class GitChangelogTool(FunctionTool):
         except Exception as e: return _err(f"git_changelog 失败: {e}")
 
 
+@dataclass
+class LintRunnerTool(FunctionTool):
+    name: str = "lint_runner"
+    description: str = (
+        "代码质量检查（ruff/pylint/eslint）。"
+        "与 syntax_check 配合使用：syntax_check 查能不能跑，lint_runner 查写得好不好。"
+        "linter=auto 自动检测已安装的 linter（ruff→pylint→eslint）。"
+    )
+    parameters: dict = field(default_factory=lambda: {
+        "type": "object",
+        "properties": {
+            "filepath": {"type": "string", "description": "要检查的文件路径"},
+            "linter": {"type": "string", "description": "linter: auto/ruff/pylint/eslint", "default": "auto"},
+        },
+        "required": ["filepath"]
+    })
+    async def call(self, context: ContextWrapper[AstrAgentContext], filepath: str, linter: str = "auto", **kwargs) -> ToolExecResult:
+        try: return _unwrap(await _run_sync(_lint_run, filepath, linter))
+        except Exception as e: return _err(f"lint_runner 失败: {e}")
+
+
 # ═══════════════════════════════════════════════════════════
 # Tool groups and registry
 # ═══════════════════════════════════════════════════════════
 
 TOOL_GROUPS: dict[str, list[str]] = {
-    "安全编辑链": ["safe_edit", "safe_rollback", "safe_backups", "file_patch", "file_preview", "syntax_check"],
+    "安全编辑链": ["safe_edit", "safe_rollback", "safe_backups", "file_patch", "file_preview", "syntax_check", "lint_runner"],
     "Git & GitHub": ["git_status", "git_diff", "git_log", "git_commit", "git_branch", "git_remote", "git_push", "gh_pr", "gh_issue", "gh_release", "gh_repo"],
     "文件系统": ["es_search", "dir_tree", "dir_list", "file_diff", "file_hash", "file_zip", "file_unzip", "disk_info", "file_watch", "config_diff"],
     "系统信息": ["port_check", "proc_list", "sys_snapshot"],
@@ -1505,6 +1527,7 @@ TOOL_GROUPS: dict[str, list[str]] = {
 _ALL_TOOLS = {
     "safe_edit": SafeEditTool, "safe_rollback": SafeRollbackTool, "safe_backups": SafeBackupsTool,
     "file_patch": FilePatchTool, "file_preview": FilePreviewTool, "syntax_check": SyntaxCheckTool,
+    "lint_runner": LintRunnerTool,
     "git_status": GitStatusTool, "git_diff": GitDiffTool, "git_log": GitLogTool,
     "git_commit": GitCommitTool, "git_branch": GitBranchTool, "git_remote": GitRemoteTool, "git_push": GitPushTool,
     "gh_pr": GhPrTool, "gh_issue": GhIssueTool, "gh_release": GhReleaseTool, "gh_repo": GhRepoTool,

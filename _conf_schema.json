@@ -3,7 +3,7 @@
     "description": "工具组开关（关闭整组禁用该组所有工具，需重启生效）",
     "type": "object",
     "items": {
-      "安全编辑链": { "type": "bool", "default": true, "description": "🔒 安全编辑链 — 自动备份、精确替换、语法检查" },
+      "安全编辑链": { "type": "bool", "default": true, "description": "🔒 安全编辑链 — 编辑/备份/语法/回滚/代码质量检查" },
       "Git & GitHub": { "type": "bool", "default": true, "description": "🔀 Git & GitHub — git操作+PR/Issue/Release/CI" },
       "文件系统": { "type": "bool", "default": true, "description": "📁 文件系统 — 搜索/浏览/哈希/压缩/磁盘" },
       "系统信息": { "type": "bool", "default": true, "description": "📊 系统信息 — 端口/进程/系统快照" },
