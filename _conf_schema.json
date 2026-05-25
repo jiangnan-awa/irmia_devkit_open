@@ -4,21 +4,7 @@
     "type": "object",
     "items": {
       "安全编辑链": { "type": "bool", "default": true },
-      "Git & GitHub": {
-        "type": "object",
-        "description": "Git 操作（含 GitHub CLI）",
-        "items": {
-          "_enabled": { "type": "bool", "default": true, "description": "启用本组" },
-          "git_status": { "type": "bool", "default": true, "description": "查看仓库状态" },
-          "git_diff": { "type": "bool", "default": true, "description": "查看差异" },
-          "git_log": { "type": "bool", "default": true, "description": "查看提交记录" },
-          "git_commit": { "type": "bool", "default": true, "description": "提交更改" },
-          "git_branch": { "type": "bool", "default": true, "description": "当前分支" },
-          "git_remote": { "type": "bool", "default": true, "description": "远程仓库URL" },
-          "git_push": { "type": "bool", "default": true, "description": "推送到远程" },
-          "gh_cli": { "type": "bool", "default": true, "description": "GitHub CLI" }
-        }
-      },
+      "Git & GitHub": { "type": "bool", "default": true },
       "文件系统": { "type": "bool", "default": true },
       "系统信息": { "type": "bool", "default": true },
       "网络": { "type": "bool", "default": true },

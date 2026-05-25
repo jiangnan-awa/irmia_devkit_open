@@ -1450,26 +1450,12 @@ class Main(star.Star):
             if paths.get("lock_dirs"):
                 _config["lock_dirs"] = [d.strip() for d in paths["lock_dirs"].split(",") if d.strip()]
                 changed = True
-            # tool_groups（含逐工具复选框）
+            # tool_groups / disabled_tools（顶层 key）
             web_groups = config.get("tool_groups", {})
             if web_groups and isinstance(web_groups, dict):
                 stored = _config.setdefault("tool_groups", {})
-                disabled = set(_config.setdefault("disabled_tools", []))
                 for g, v in web_groups.items():
-                    if isinstance(v, dict):
-                        # 新格式：{_enabled: bool, tool_name: bool, ...}
-                        stored[g] = v.get("_enabled", True)
-                        for tool_name, tool_on in v.items():
-                            if tool_name.startswith("_"):
-                                continue
-                            if tool_on:
-                                disabled.discard(tool_name)
-                            else:
-                                disabled.add(tool_name)
-                    else:
-                        # 旧格式：bool 值（组级开关）
-                        stored[g] = v
-                _config["disabled_tools"] = sorted(disabled)
+                    stored[g] = v
                 changed = True
             web_disabled = config.get("disabled_tools", "")
             if web_disabled:
