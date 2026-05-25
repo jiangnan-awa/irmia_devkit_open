@@ -6,6 +6,7 @@ from __future__ import annotations
 
 import json
 import os
+import copy
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
@@ -1430,7 +1431,7 @@ class Main(star.Star):
             except Exception:
                 logger.warning("配置文件 config.json 读取失败，使用默认值")
         else:
-            _config = dict(_DEFAULT_CONFIG)
+            _config = copy.deepcopy(_DEFAULT_CONFIG)
             try:
                 with open(config_path, "w", encoding="utf-8") as f:
                     json.dump(_config, f, ensure_ascii=False, indent=2)
