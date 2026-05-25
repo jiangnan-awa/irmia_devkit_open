@@ -3,7 +3,7 @@ name: dev-workflow
 description: >
   收到编码任务时强制走安全工作流。触发：写代码、改代码、修bug、重构、实现功能、修改文件。
   核心原则：先确认后执行、自动备份回滚、语法门禁。
-  可用工具：safe_edit、git_*、syntax_check、file_diff、es_search、gh_cli。
+  可用工具：safe_edit、git_*、syntax_check、lint_runner、file_diff、es_search、gh_pr、gh_issue。
 ---
 
 # 开发工作流
@@ -28,7 +28,7 @@ description: >
 
 - **需求模糊** → 先 brainstorming 探索方案，确认后再动
 - **需求清晰但复杂** → 先 writing-plans 拆任务，确认后再执行
-- **简单修改** → 直接 safe_edit + code-reviewer
+- **简单修改** → 直接 safe_edit
 - **审完** → 问是否修 Critical/High，修完自动 commit push
 
 不需要路由表，不需要流水线引擎。用判断力。
@@ -46,4 +46,4 @@ description: >
 - commit message 按 `fix:` / `feat:` / `refactor:` 规范
 - `git diff --cached` 自查无敏感内容
 - 大改动前备份到安全目录（如插件的 backups/ 目录）
-- 推送后如需创建 PR 或发布 Release → 用 `gh_cli`
+- 推送后如需创建 PR 或发布 Release → 用 `gh_pr` / `gh_release`

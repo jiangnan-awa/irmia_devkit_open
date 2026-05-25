@@ -29,11 +29,7 @@ def validate_url(url: str) -> dict | None:
         for net in _PRIVATE_NETS:
             if ip in net:
                 return {"ok": False, "error": f"禁止访问内网地址: {hostname}"}
-    except ValueError:
-        pass
-
-    # IPv4-mapped-IPv6: ::ffff:192.168.1.1 → 检查映射的 IPv4
-    try:
+        # IPv4-mapped-IPv6: ::ffff:192.168.1.1 → 检查映射的 IPv4
         ipv4 = ip.ipv4_mapped
         if ipv4:
             for net in _PRIVATE_NETS:

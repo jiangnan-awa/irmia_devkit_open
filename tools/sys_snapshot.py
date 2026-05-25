@@ -81,3 +81,15 @@ def _linux_info(info: dict) -> None:
         info["available_memory_mb"] = None
         info["process_count"] = None
         info["_linux_error"] = str(e)
+
+
+def _extract_mb(line: str) -> int | None:
+    """从 systeminfo 行提取内存 MB 数。"""
+    try:
+        parts = line.replace(",", "").split()
+        for i, p in enumerate(parts):
+            if "MB" in p:
+                return int(parts[i - 1]) if i > 0 else None
+        return None
+    except Exception:
+        return None
