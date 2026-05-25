@@ -37,6 +37,11 @@ def _check_python(p: Path) -> dict:
     """Python 语法检查：先用 ast.parse（无副作用），失败则用 py_compile。"""
     try:
         source = p.read_text(encoding="utf-8")
+    except UnicodeDecodeError:
+        try:
+            source = p.read_text(encoding="gbk")
+        except Exception:
+            source = p.read_text(encoding="utf-8", errors="replace")
         ast.parse(source)
         return {"ok": True, "language": "python"}
     except SyntaxError as e:

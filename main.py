@@ -4,7 +4,6 @@ astrbot_plugin_irmia_devkit — 弥亚开发工具箱
 """
 from __future__ import annotations
 
-import asyncio
 import json
 import os
 from dataclasses import dataclass, field
@@ -17,6 +16,9 @@ from astrbot.core.agent.tool import ToolExecResult
 from astrbot.core.astr_agent_context import AstrAgentContext
 
 from .tools import config as _tool_config
+
+# ── 共享辅助函数 ──
+from .tools._helpers import err_json as _err, unwrap as _unwrap, run_sync as _run_sync
 
 # ── 导入工具函数 ──
 
@@ -60,29 +62,6 @@ from .tools.gh_cli import (
     release_create as _gh_release_create, release_list as _gh_release_list,
     repo_view as _gh_repo_view, repo_create as _gh_repo_create, run_list as _gh_run_list, auth_status as _gh_auth_status,
 )
-
-
-def _err(error: str) -> str:
-    return json.dumps({"ok": False, "error": error}, ensure_ascii=False)
-
-
-# C7: 将同步阻塞调用包装为异步，防止事件循环卡死
-async def _run_sync(func, *args, **kwargs):
-    """在默认线程池中运行同步函数，避免阻塞 AstrBot 事件循环。"""
-    loop = asyncio.get_running_loop()
-    return await loop.run_in_executor(None, lambda: func(*args, **kwargs))
-
-
-# M14: 检测子函数返回的 {"ok": false} 并展开，防止嵌套 ok 误导 LLM
-def _unwrap(result: dict) -> str:
-    """M14: 检测嵌套 ok:false 并展开；成功则正常包装。"""
-    if not isinstance(result, dict):
-        return _err(f"工具返回了非预期类型: {type(result).__name__}")
-    if result.get("ok") is False:
-        return _err(result.get("error", "未知错误"))
-    return json.dumps({"ok": True, "data": result}, ensure_ascii=False)
-
-
 # ═══════════════════════════════════════════════════════════
 # Tool classes
 # ═══════════════════════════════════════════════════════════
@@ -792,85 +771,151 @@ class SysSnapshotTool(FunctionTool):
 
 
 @dataclass
-class EncodeTool(FunctionTool):
-    """编解码工具箱。"""
-    name: str = "encode_utils"
-    description: str = (
-        "编解码工具箱：base64/URL/hex 三种编解码。"
-        "action 可选: b64e(编码) / b64d(解码) / urle(URL编码) / urld(URL解码) / hexe(十六进制编码) / hexd(十六进制解码)。"
-        "b64e 可设 as_uri=True 生成 data: URI；b64d 可设 strip_uri=True 自动剥离前缀。"
-        "纯标准库。处理二进制字符串、构建 data URI、解码 URL 参数时使用。"
-    )
+class Base64EncodeTool(FunctionTool):
+    name: str = "base64_encode"
+    description: str = "将文本编码为 Base64。as_uri=True 生成 data: URI。"
     parameters: dict = field(default_factory=lambda: {
         "type": "object",
         "properties": {
-            "action": {"type": "string", "description": "操作: b64e / b64d / urle / urld / hexe / hexd"},
-            "data": {"type": "string", "description": "要编码/解码的数据"},
-            "as_uri": {"type": "boolean", "description": "b64e 时是否生成 data: URI，默认 false"},
-            "strip_uri": {"type": "boolean", "description": "b64d 时是否自动剥离 data: URI 前缀，默认 false"},
+            "data": {"type": "string", "description": "要编码的文本"},
+            "as_uri": {"type": "boolean", "description": "是否生成 data: URI", "default": False},
         },
-        "required": ["action", "data"]
+        "required": ["data"]
     })
-
-    async def call(self, context: ContextWrapper[AstrAgentContext], action: str, data: str, as_uri: bool = False, strip_uri: bool = False, **kwargs) -> ToolExecResult:
-        try:
-            actions = {
-                "b64e": lambda: b64_encode(data, as_uri),
-                "b64d": lambda: b64_decode(data, strip_uri),
-                "urle": lambda: url_encode(data),
-                "urld": lambda: url_decode(data),
-                "hexe": lambda: hex_encode(data),
-                "hexd": lambda: hex_decode(data),
-            }
-            if action not in actions:
-                return _err(f"未知 action: {action}，可选: {list(actions.keys())}")
-            return _unwrap(actions[action]())
-        except Exception as e:
-            return _err(f"encode_utils 失败: {e}")
+    async def call(self, context, data: str, as_uri: bool = False, **kwargs) -> ToolExecResult:
+        try: return _unwrap(b64_encode(data, as_uri))
+        except Exception as e: return _err(f"base64_encode 失败: {e}")
 
 
 @dataclass
-class TimeTool(FunctionTool):
-    """时间工具。"""
-    name: str = "time_utils"
-    description: str = (
-        "时间工具：当前时间、时间戳↔ISO互转、时间差计算。"
-        "action 可选: now(当前) / ts2iso(时间戳→ISO) / iso2ts(ISO→时间戳) / diff(差值)。"
-        "ts2iso 可设 ms=True 标识毫秒时间戳；diff 需要 iso1 和 iso2 两个参数。"
-        "纯 datetime 标准库。"
-    )
+class Base64DecodeTool(FunctionTool):
+    name: str = "base64_decode"
+    description: str = "将 Base64 解码为原始文本。strip_uri=True 自动剥离 data: URI 前缀。"
     parameters: dict = field(default_factory=lambda: {
         "type": "object",
         "properties": {
-            "action": {"type": "string", "description": "操作: now / ts2iso / iso2ts / diff"},
-            "ts": {"type": "integer", "description": "时间戳（用于 ts2iso）"},
-            "ms": {"type": "boolean", "description": "ts2iso 时标识毫秒时间戳，默认 false"},
-            "iso": {"type": "string", "description": "ISO 字符串（用于 iso2ts）"},
-            "iso1": {"type": "string", "description": "diff 的第一个 ISO 时间"},
-            "iso2": {"type": "string", "description": "diff 的第二个 ISO 时间"},
+            "data": {"type": "string", "description": "Base64 字符串"},
+            "strip_uri": {"type": "boolean", "description": "是否自动剥离 data: URI 前缀", "default": False},
         },
-        "required": ["action"]
+        "required": ["data"]
     })
+    async def call(self, context, data: str, strip_uri: bool = False, **kwargs) -> ToolExecResult:
+        try: return _unwrap(b64_decode(data, strip_uri))
+        except Exception as e: return _err(f"base64_decode 失败: {e}")
 
-    async def call(self, context: ContextWrapper[AstrAgentContext], action: str, ts: int = None, ms: bool = False, iso: str = "", iso1: str = "", iso2: str = "", **kwargs) -> ToolExecResult:
-        try:
-            if action == "now":
-                return _unwrap(_time_now())
-            elif action == "ts2iso":
-                if ts is None:
-                    return _err("ts2iso 需要 ts 参数")
-                return _unwrap(ts_to_iso(ts, ms))
-            elif action == "iso2ts":
-                if not iso:
-                    return _err("iso2ts 需要 iso 参数")
-                return _unwrap(iso_to_ts(iso))
-            elif action == "diff":
-                if not iso1 or not iso2:
-                    return _err("diff 需要 iso1 和 iso2 参数")
-                return _unwrap(time_diff(iso1, iso2))
-            return _err(f"未知 action: {action}，可选: now/ts2iso/iso2ts/diff")
-        except Exception as e:
-            return _err(f"time_utils 失败: {e}")
+
+@dataclass
+class UrlEncodeTool(FunctionTool):
+    name: str = "url_encode"
+    description: str = "对文本进行 URL 编码（百分号编码）。"
+    parameters: dict = field(default_factory=lambda: {
+        "type": "object",
+        "properties": {"data": {"type": "string", "description": "要编码的文本"}},
+        "required": ["data"]
+    })
+    async def call(self, context, data: str, **kwargs) -> ToolExecResult:
+        try: return _unwrap(url_encode(data))
+        except Exception as e: return _err(f"url_encode 失败: {e}")
+
+
+@dataclass
+class UrlDecodeTool(FunctionTool):
+    name: str = "url_decode"
+    description: str = "对 URL 编码的文本进行解码。"
+    parameters: dict = field(default_factory=lambda: {
+        "type": "object",
+        "properties": {"data": {"type": "string", "description": "URL 编码的文本"}},
+        "required": ["data"]
+    })
+    async def call(self, context, data: str, **kwargs) -> ToolExecResult:
+        try: return _unwrap(url_decode(data))
+        except Exception as e: return _err(f"url_decode 失败: {e}")
+
+
+@dataclass
+class HexEncodeTool(FunctionTool):
+    name: str = "hex_encode"
+    description: str = "将文本编码为十六进制字符串。"
+    parameters: dict = field(default_factory=lambda: {
+        "type": "object",
+        "properties": {"data": {"type": "string", "description": "要编码的文本"}},
+        "required": ["data"]
+    })
+    async def call(self, context, data: str, **kwargs) -> ToolExecResult:
+        try: return _unwrap(hex_encode(data))
+        except Exception as e: return _err(f"hex_encode 失败: {e}")
+
+
+@dataclass
+class HexDecodeTool(FunctionTool):
+    name: str = "hex_decode"
+    description: str = "将十六进制字符串解码为原始文本。"
+    parameters: dict = field(default_factory=lambda: {
+        "type": "object",
+        "properties": {"data": {"type": "string", "description": "十六进制字符串"}},
+        "required": ["data"]
+    })
+    async def call(self, context, data: str, **kwargs) -> ToolExecResult:
+        try: return _unwrap(hex_decode(data))
+        except Exception as e: return _err(f"hex_decode 失败: {e}")
+
+
+@dataclass
+class TimeNowTool(FunctionTool):
+    name: str = "time_now"
+    description: str = "获取当前时间：ISO 字符串 + Unix 时间戳（秒和毫秒）。"
+    parameters: dict = field(default_factory=lambda: {"type": "object", "properties": {}, "required": []})
+    async def call(self, context, **kwargs) -> ToolExecResult:
+        try: return _unwrap(_time_now())
+        except Exception as e: return _err(f"time_now 失败: {e}")
+
+
+@dataclass
+class TsToIsoTool(FunctionTool):
+    name: str = "ts_to_iso"
+    description: str = "Unix 时间戳 → ISO 时间字符串。ms=True 表示毫秒时间戳。"
+    parameters: dict = field(default_factory=lambda: {
+        "type": "object",
+        "properties": {
+            "ts": {"type": "integer", "description": "时间戳"},
+            "ms": {"type": "boolean", "description": "是否为毫秒时间戳", "default": False},
+        },
+        "required": ["ts"]
+    })
+    async def call(self, context, ts: int, ms: bool = False, **kwargs) -> ToolExecResult:
+        try: return _unwrap(ts_to_iso(ts, ms))
+        except Exception as e: return _err(f"ts_to_iso 失败: {e}")
+
+
+@dataclass
+class IsoToTsTool(FunctionTool):
+    name: str = "iso_to_ts"
+    description: str = "ISO 时间字符串 → Unix 时间戳。"
+    parameters: dict = field(default_factory=lambda: {
+        "type": "object",
+        "properties": {"iso": {"type": "string", "description": "ISO 时间字符串"}},
+        "required": ["iso"]
+    })
+    async def call(self, context, iso: str, **kwargs) -> ToolExecResult:
+        try: return _unwrap(iso_to_ts(iso))
+        except Exception as e: return _err(f"iso_to_ts 失败: {e}")
+
+
+@dataclass
+class TimeDiffTool(FunctionTool):
+    name: str = "time_diff"
+    description: str = "计算两个 ISO 时间的差值（秒/分/时）。"
+    parameters: dict = field(default_factory=lambda: {
+        "type": "object",
+        "properties": {
+            "iso1": {"type": "string", "description": "第一个 ISO 时间"},
+            "iso2": {"type": "string", "description": "第二个 ISO 时间"},
+        },
+        "required": ["iso1", "iso2"]
+    })
+    async def call(self, context, iso1: str, iso2: str, **kwargs) -> ToolExecResult:
+        try: return _unwrap(time_diff(iso1, iso2))
+        except Exception as e: return _err(f"time_diff 失败: {e}")
 
 
 @dataclass
@@ -1305,7 +1350,7 @@ class Main(star.Star):
                 except Exception:
                     pass
 
-        # 注册全部 41 个 LLM 工具
+        # 注册全部 49 个 LLM 工具
         context.add_llm_tools(
             SafeEditTool(),
             SafeRollbackTool(),
@@ -1334,8 +1379,16 @@ class Main(star.Star):
             FileZipTool(),
             FileUnzipTool(),
             SysSnapshotTool(),
-            EncodeTool(),
-            TimeTool(),
+            Base64EncodeTool(),
+            Base64DecodeTool(),
+            UrlEncodeTool(),
+            UrlDecodeTool(),
+            HexEncodeTool(),
+            HexDecodeTool(),
+            TimeNowTool(),
+            TsToIsoTool(),
+            IsoToTsTool(),
+            TimeDiffTool(),
             RegexTestTool(),
             RegexReplaceTool(),
             DirListTool(),
@@ -1349,4 +1402,4 @@ class Main(star.Star):
             MdStripTool(),
             GhCliTool(),
         )
-        logger.info("🔧 弥亚开发工具箱已就绪 — 41 个工具注册完毕")
+        logger.info("🔧 弥亚开发工具箱已就绪 — 49 个工具注册完毕")
