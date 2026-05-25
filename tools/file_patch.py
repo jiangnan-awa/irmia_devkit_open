@@ -6,7 +6,7 @@ file_patch — 精确文本替换工具。
 import difflib
 from pathlib import Path
 
-from ._file_utils import read_file
+from ._file_utils import read_file, read_file_with_encoding
 
 
 def patch(filepath: str, old: str, new: str, replace_all: bool = False) -> dict:
@@ -31,7 +31,7 @@ def patch(filepath: str, old: str, new: str, replace_all: bool = False) -> dict:
         return {"ok": False, "error": f"文件不存在: {filepath}"}
 
     try:
-        content = read_file(p)
+        content, encoding = read_file_with_encoding(p)
     except Exception as e:
         return {"ok": False, "error": f"无法读取文件: {e}"}
     
@@ -60,7 +60,7 @@ def patch(filepath: str, old: str, new: str, replace_all: bool = False) -> dict:
     new_content = content.replace(old, new) if replace_all else content.replace(old, new, 1)
     actual_replaced = 1 if not replace_all else count
     
-    p.write_text(new_content, encoding="utf-8")
+    p.write_text(new_content, encoding=encoding)
     
     return {
         "ok": True,

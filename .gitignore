@@ -4,3 +4,9 @@ __pycache__/
 *.pem
 *.key
 .env
+state/
+.vscode/
+.idea/
+*.egg-info/
+dist/
+build/

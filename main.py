@@ -61,12 +61,6 @@ from .tools.gh_cli import (
     repo_view as _gh_repo_view, repo_create as _gh_repo_create, run_list as _gh_run_list, auth_status as _gh_auth_status,
 )
 
-def _ok(data: Any = None) -> str:
-    result: dict[str, Any] = {"ok": True}
-    if data is not None:
-        result["data"] = data
-    return json.dumps(result, ensure_ascii=False)
-
 
 def _err(error: str) -> str:
     return json.dumps({"ok": False, "error": error}, ensure_ascii=False)

@@ -2,6 +2,8 @@
 
 AstrBot 插件 — 为 LLM Agent 提供安全、精确的代码开发工具集。
 
+**要求**: Python ≥ 3.10, AstrBot 任意版本。
+
 ## 安装
 
 将插件文件夹放入 AstrBot 的 `data/plugins/` 目录，重启 AstrBot 即可。
