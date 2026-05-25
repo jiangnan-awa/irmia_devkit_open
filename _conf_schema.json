@@ -1,4 +1,24 @@
 {
+  "tool_groups": {
+    "description": "工具组开关（关闭整组禁用该组所有工具，需重启生效）",
+    "type": "object",
+    "items": {
+      "安全编辑链": { "type": "boolean", "default": true },
+      "Git & GitHub": { "type": "boolean", "default": true },
+      "文件系统": { "type": "boolean", "default": true },
+      "系统信息": { "type": "boolean", "default": true },
+      "网络": { "type": "boolean", "default": true },
+      "文本处理": { "type": "boolean", "default": true },
+      "编码": { "type": "boolean", "default": true },
+      "时间": { "type": "boolean", "default": true },
+      "扩展": { "type": "boolean", "default": true }
+    }
+  },
+  "disabled_tools": {
+    "description": "单独禁用的工具名（逗号分隔，如 git_push,svg_render）",
+    "type": "string",
+    "default": ""
+  },
   "paths": {
     "description": "外部工具路径（留空 = 自动检测）",
     "type": "object",

@@ -1390,6 +1390,29 @@ class JsonSchemaValTool(FunctionTool):
 # Plugin entry
 # ═══════════════════════════════════════════════════════════
 
+TOOL_GROUPS: dict[str, list[str]] = {
+    "安全编辑链": ["safe_edit", "safe_rollback", "safe_backups", "file_patch", "file_preview", "syntax_check"],
+    "Git & GitHub": ["git_status", "git_diff", "git_log", "git_commit", "git_branch", "git_remote", "git_push", "gh_cli"],
+    "文件系统": ["es_search", "dir_tree", "dir_list", "file_diff", "file_hash", "file_zip", "file_unzip", "disk_info", "file_watch", "config_diff"],
+    "系统信息": ["port_check", "proc_list", "sys_snapshot"],
+    "网络": ["http_get", "http_post", "http_download"],
+    "文本处理": ["html_extract", "json_query", "text_filter", "diff_strings", "regex_test", "regex_replace", "csv_parse", "csv_gen", "md_strip", "log_parse"],
+    "编码": ["base64_encode", "base64_decode", "url_encode", "url_decode", "hex_encode", "hex_decode"],
+    "时间": ["time_now", "ts_to_iso", "iso_to_ts", "time_diff"],
+    "扩展": ["svg_render", "json_schema_val", "semver_compare", "uuid_gen"],
+}
+
+_DEFAULT_CONFIG = {
+    "tool_groups": {g: True for g in TOOL_GROUPS},
+    "disabled_tools": [],
+    "es_path": "",
+    "gh_path": "",
+    "state_dir": "",
+    "lock_dirs": [],
+    "backup_dir": "",
+}
+
+
 class Main(star.Star):
     """弥亚开发工具箱插件"""
 
@@ -1397,7 +1420,6 @@ class Main(star.Star):
         super().__init__(context)
         self.context = context
 
-        # A2: 加载配置并注入到工具模块
         plug_dir = os.path.dirname(os.path.abspath(__file__))
         config_path = os.path.join(plug_dir, "config.json")
         _config = {}
@@ -1408,24 +1430,18 @@ class Main(star.Star):
             except Exception:
                 logger.warning("配置文件 config.json 读取失败，使用默认值")
         else:
-            _config = {
-                "es_path": "",
-                "gh_path": "",
-                "state_dir": "",
-                "lock_dirs": [],
-                "backup_dir": "",
-            }
+            _config = dict(_DEFAULT_CONFIG)
             try:
                 with open(config_path, "w", encoding="utf-8") as f:
                     json.dump(_config, f, ensure_ascii=False, indent=2)
             except Exception:
                 pass
-        _tool_config.set_config(_config, plug_dir)
 
-        # AstrBot WebUI 配置（_conf_schema.json）优先于 config.json
+        # AstrBot WebUI 配置优先于 config.json
         if config:
-            paths = config.get("paths", {})
             changed = False
+            # paths 嵌套（工具路径）
+            paths = config.get("paths", {})
             for key in ("es_path", "gh_path", "state_dir", "backup_dir"):
                 if paths.get(key):
                     _config[key] = paths[key]
@@ -1433,69 +1449,59 @@ class Main(star.Star):
             if paths.get("lock_dirs"):
                 _config["lock_dirs"] = [d.strip() for d in paths["lock_dirs"].split(",") if d.strip()]
                 changed = True
+            # tool_groups / disabled_tools（顶层 key）
+            web_groups = config.get("tool_groups", {})
+            if web_groups and isinstance(web_groups, dict):
+                stored = _config.setdefault("tool_groups", {})
+                for g, v in web_groups.items():
+                    stored[g] = v
+                changed = True
+            web_disabled = config.get("disabled_tools", "")
+            if web_disabled:
+                _config["disabled_tools"] = [t.strip() for t in web_disabled.split(",") if t.strip()]
+                changed = True
             if changed:
-                _tool_config.set_config(_config, plug_dir)
                 try:
                     with open(config_path, "w", encoding="utf-8") as f:
                         json.dump(_config, f, ensure_ascii=False, indent=2)
                 except Exception:
                     pass
 
-        # 注册全部 55 个 LLM 工具
-        context.add_llm_tools(
-            SafeEditTool(),
-            SafeRollbackTool(),
-            SafeBackupsTool(),
-            FilePatchTool(),
-            FilePreviewTool(),
-            SyntaxCheckTool(),
-            GitStatusTool(),
-            GitDiffTool(),
-            GitLogTool(),
-            GitCommitTool(),
-            GitBranchTool(),
-            GitRemoteTool(),
-            GitPushTool(),
-            EsSearchTool(),
-            HttpGetTool(),
-            HttpPostTool(),
-            HttpDownloadTool(),
-            HtmlExtractTool(),
-            DirTreeTool(),
-            DiskInfoTool(),
-            PortCheckTool(),
-            FileDiffTool(),
-            ProcListTool(),
-            FileHashTool(),
-            FileZipTool(),
-            FileUnzipTool(),
-            SysSnapshotTool(),
-            Base64EncodeTool(),
-            Base64DecodeTool(),
-            UrlEncodeTool(),
-            UrlDecodeTool(),
-            HexEncodeTool(),
-            HexDecodeTool(),
-            TimeNowTool(),
-            TsToIsoTool(),
-            IsoToTsTool(),
-            TimeDiffTool(),
-            RegexTestTool(),
-            RegexReplaceTool(),
-            DirListTool(),
-            JsonQueryTool(),
-            TextFilterTool(),
-            DiffStringsTool(),
-            CsvParseTool(),
-            CsvGenTool(),
-            UuidGenTool(),
-            SemverTool(),
-            MdStripTool(),
-            GhCliTool(),
-            LogParseTool(),
-            FileWatchTool(),
-            ConfigDiffTool(),
-            SvgRenderTool(),
-            JsonSchemaValTool(),
-        )
-        logger.info("🔧 弥亚开发工具箱已就绪 — 55 个工具注册完毕")
+        _tool_config.set_config(_config, plug_dir)
+
+        # 过滤已启用的工具
+        tool_groups = _config.get("tool_groups", {})
+        disabled = _config.get("disabled_tools", [])
+        enabled = set()
+        for group, tool_names in TOOL_GROUPS.items():
+            if tool_groups.get(group, True):
+                enabled.update(tool_names)
+        for t in disabled:
+            enabled.discard(t)
+
+        # 工具注册表 (name → class)
+        _ALL_TOOLS = {
+            "safe_edit": SafeEditTool, "safe_rollback": SafeRollbackTool, "safe_backups": SafeBackupsTool,
+            "file_patch": FilePatchTool, "file_preview": FilePreviewTool, "syntax_check": SyntaxCheckTool,
+            "git_status": GitStatusTool, "git_diff": GitDiffTool, "git_log": GitLogTool,
+            "git_commit": GitCommitTool, "git_branch": GitBranchTool, "git_remote": GitRemoteTool, "git_push": GitPushTool,
+            "gh_cli": GhCliTool,
+            "es_search": EsSearchTool, "dir_tree": DirTreeTool, "dir_list": DirListTool,
+            "file_diff": FileDiffTool, "file_hash": FileHashTool, "file_zip": FileZipTool, "file_unzip": FileUnzipTool,
+            "disk_info": DiskInfoTool, "file_watch": FileWatchTool, "config_diff": ConfigDiffTool,
+            "port_check": PortCheckTool, "proc_list": ProcListTool, "sys_snapshot": SysSnapshotTool,
+            "http_get": HttpGetTool, "http_post": HttpPostTool, "http_download": HttpDownloadTool,
+            "html_extract": HtmlExtractTool, "json_query": JsonQueryTool, "text_filter": TextFilterTool,
+            "diff_strings": DiffStringsTool, "regex_test": RegexTestTool, "regex_replace": RegexReplaceTool,
+            "csv_parse": CsvParseTool, "csv_gen": CsvGenTool, "md_strip": MdStripTool, "log_parse": LogParseTool,
+            "base64_encode": Base64EncodeTool, "base64_decode": Base64DecodeTool,
+            "url_encode": UrlEncodeTool, "url_decode": UrlDecodeTool,
+            "hex_encode": HexEncodeTool, "hex_decode": HexDecodeTool,
+            "time_now": TimeNowTool, "ts_to_iso": TsToIsoTool, "iso_to_ts": IsoToTsTool, "time_diff": TimeDiffTool,
+            "svg_render": SvgRenderTool, "json_schema_val": JsonSchemaValTool,
+            "semver_compare": SemverTool, "uuid_gen": UuidGenTool,
+        }
+
+        tools = [_ALL_TOOLS[name]() for name in enabled if name in _ALL_TOOLS]
+        context.add_llm_tools(*tools)
+        logger.info(f"🔧 弥亚开发工具箱已就绪 — {len(tools)} 个工具注册完毕")

@@ -1,5 +1,17 @@
 {
   "_comment": "弥亚开发工具箱配置。空值 = 自动检测。",
+  "tool_groups": {
+    "安全编辑链": true,
+    "Git & GitHub": true,
+    "文件系统": true,
+    "系统信息": true,
+    "网络": true,
+    "文本处理": true,
+    "编码": true,
+    "时间": true,
+    "扩展": true
+  },
+  "disabled_tools": [],
   "es_path": "",
   "gh_path": "",
   "state_dir": "",
