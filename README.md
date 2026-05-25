@@ -189,6 +189,15 @@ data/plugins/
 |------|----------|------|
 | `dev-workflow` | 收到编码/改代码/修bug/重构任务 | 强制走安全编辑 + 语法检查 + git 自检流程 |
 
+## 测试
+
+```bash
+pip install pytest
+python -m pytest tests/ -v
+```
+
+当前覆盖：SSRF 防护、safe_edit 安全链、Zip-slip 防护、SQL 注入拦截、正则回溯拒绝、helpers 协议工厂、git commit 守卫。51 用例。
+
 ## 版本
 
 **2.2.0** — 统一交互协议 — 工具失败/歧义时返回 `{proposal, evidence, options, next_call}` 结构化提案

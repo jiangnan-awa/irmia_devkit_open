@@ -10,3 +10,5 @@ state/
 *.egg-info/
 dist/
 build/
+wo/
+.pytest_cache/
