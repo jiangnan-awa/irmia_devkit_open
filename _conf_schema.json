@@ -34,12 +34,12 @@
         "default": ""
       },
       "state_dir": {
-        "description": "异步任务状态文件目录",
+        "description": "（已弃用）异步任务状态文件目录，保留仅为向后兼容",
         "type": "string",
         "default": ""
       },
       "lock_dirs": {
-        "description": "文件锁检测目录（逗号分隔）",
+        "description": "（已弃用）文件锁检测目录，保留仅为向后兼容",
         "type": "string",
         "default": ""
       },

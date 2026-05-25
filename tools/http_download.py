@@ -8,7 +8,11 @@ import os
 import time
 from pathlib import Path
 
-from ._http_utils import validate_url
+from ._http_utils import validate_url, SafeRedirectHandler
+
+
+def _make_opener():
+    return urllib.request.build_opener(SafeRedirectHandler()), SafeRedirectHandler
 from ._file_utils import human_size
 
 # C4: 下载沙箱根目录
@@ -60,7 +64,8 @@ def download(url: str, path: str, overwrite: bool = False, timeout: int = 60) ->
     start = time.time()
     try:
         req = urllib.request.Request(url, headers={"User-Agent": "IrmiaDevKit/1.6"})
-        with urllib.request.urlopen(req, timeout=timeout) as resp:
+        opener = _make_opener()
+        with opener.open(req, timeout=timeout) as resp:
             size = int(resp.headers.get("Content-Length", 0))
             # H5: 下载大小上限
             if size > _MAX_DOWNLOAD_SIZE:

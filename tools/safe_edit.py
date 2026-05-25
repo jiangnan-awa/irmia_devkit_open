@@ -6,11 +6,18 @@ import shutil
 from datetime import datetime
 from pathlib import Path
 
-# 同一包内引用
+from .config import get_config
 from .file_patch import patch
 from .syntax_check import check as syntax_check
 
-BACKUP_DIR = Path.home() / ".irmia" / "backups"
+
+def _backup_dir() -> Path:
+    """读取配置的备份目录，未配置则使用默认值。"""
+    config = get_config()
+    custom = config.get("backup_dir", "")
+    if custom:
+        return Path(custom)
+    return Path.home() / ".irmia" / "backups"
 
 
 def _collect_positions(content: str, old: str) -> list[int]:
@@ -96,8 +103,8 @@ def edit(filepath: str, old: str, new: str, replace_all: bool = False, occurrenc
     
     # 1. 备份（在任何修改之前）
     ts = datetime.now().strftime("%Y%m%d_%H%M%S")
-    backup_path = BACKUP_DIR / f"{p.name}.{ts}.bak"
-    BACKUP_DIR.mkdir(parents=True, exist_ok=True)
+    backup_path = _backup_dir() / f"{p.name}.{ts}.bak"
+    _backup_dir().mkdir(parents=True, exist_ok=True)
     shutil.copy2(filepath, str(backup_path))
     
     result = {
@@ -155,9 +162,9 @@ def edit(filepath: str, old: str, new: str, replace_all: bool = False, occurrenc
 
 def list_backups(filepath: str = None) -> dict:
     """列出备份文件。"""
-    BACKUP_DIR.mkdir(parents=True, exist_ok=True)
+    _backup_dir().mkdir(parents=True, exist_ok=True)
     backups = []
-    for b in sorted(BACKUP_DIR.glob("*.bak"), reverse=True):
+    for b in sorted(_backup_dir().glob("*.bak"), reverse=True):
         stat = b.stat()
         backups.append({
             "file": b.name,
@@ -180,13 +187,13 @@ def rollback(filepath: str, backup_name: str = None) -> dict:
     p = Path(filepath)
     
     if backup_name:
-        backup_path = BACKUP_DIR / Path(backup_name).name  # 只取文件名防路径穿越
+        backup_path = _backup_dir() / Path(backup_name).name  # 只取文件名防路径穿越
         if not backup_path.exists():
             return {"ok": False, "error": f"备份不存在: {backup_name}"}
     else:
         # 找最近的备份
         pattern = f"{p.name}.*.bak"
-        candidates = sorted(BACKUP_DIR.glob(pattern), reverse=True)
+        candidates = sorted(_backup_dir().glob(pattern), reverse=True)
         if not candidates:
             return {"ok": False, "error": f"没有找到 {p.name} 的备份"}
         backup_path = candidates[0]

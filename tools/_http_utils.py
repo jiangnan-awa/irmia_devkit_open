@@ -4,6 +4,7 @@ _http_utils — HTTP 安全校验共享代码。
 """
 import ipaddress
 import socket
+import urllib.request
 from urllib.parse import urlparse
 
 _PRIVATE_NETS = [
@@ -51,3 +52,15 @@ def validate_url(url: str) -> dict | None:
     except socket.gaierror:
         pass
     return None
+
+
+class SafeRedirectHandler(urllib.request.HTTPRedirectHandler):
+    """每次 HTTP 重定向前重新走 SSRF 校验，防止 302→127.0.0.1 绕过。"""
+
+    def redirect_request(self, req, fp, code, msg, headers, newurl):
+        err = validate_url(newurl)
+        if err:
+            raise urllib.error.URLError(f"重定向目标被拦截: {err['error']}")
+        # urllib 默认 follow redirect——这里截获并重新校验后，交回父类继续
+        return super().redirect_request(req, fp, code, msg, headers, newurl)
+

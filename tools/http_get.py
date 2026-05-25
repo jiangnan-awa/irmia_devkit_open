@@ -8,7 +8,7 @@ import urllib.error
 import json
 from typing import Any
 
-from ._http_utils import validate_url
+from ._http_utils import validate_url, SafeRedirectHandler
 
 
 def _validate_url(url: str) -> dict | None:
@@ -31,6 +31,10 @@ def _add_ua(req, headers: dict | None):
         req.add_header("User-Agent", "IrmiaDevKit/1.6")
 
 
+def _make_opener():
+    return urllib.request.build_opener(SafeRedirectHandler())
+
+
 def get(url: str, headers: dict | None = None, timeout: int = 10) -> dict:
     """HTTP GET 请求。"""
     err = _validate_url(url)
@@ -40,7 +44,8 @@ def get(url: str, headers: dict | None = None, timeout: int = 10) -> dict:
     try:
         req = urllib.request.Request(url, headers=headers or {})
         _add_ua(req, headers)
-        with urllib.request.urlopen(req, timeout=timeout) as resp:
+        opener = _make_opener()
+        with opener.open(req, timeout=timeout) as resp:
             return _build_response(resp)
     except urllib.error.HTTPError as e:
         body = ""
@@ -73,7 +78,8 @@ def post(url: str, data: Any = None, headers: dict | None = None, timeout: int =
 
         req = urllib.request.Request(url, data=data, headers=headers or {})
         _add_ua(req, headers)
-        with urllib.request.urlopen(req, timeout=timeout) as resp:
+        opener = _make_opener()
+        with opener.open(req, timeout=timeout) as resp:
             return _build_response(resp)
     except urllib.error.HTTPError as e:
         body = ""
