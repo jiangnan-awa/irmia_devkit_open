@@ -14,6 +14,7 @@ from astrbot.core.agent.tool import ToolExecResult
 from astrbot.core.astr_agent_context import AstrAgentContext
 
 from ._helpers import err_json as _err, unwrap as _unwrap, run_sync as _run_sync
+from . import tool_stats as _tool_stats
 
 # ── 导入工具函数 ──
 
@@ -65,6 +66,9 @@ from .json_schema_val import validate as _json_schema_val
 from .project_init import scan as _project_init_scan
 from .git_changelog import changelog as _git_changelog
 from .lint_runner import run as _lint_run
+from .tool_stats import snapshot as _tool_stats_snap
+from .db_query import query as _db_query
+from .dep_scan import scan as _dep_scan
 
 # ═══════════════════════════════════════════════════════════
 # Tool classes
@@ -94,6 +98,7 @@ class SafeEditTool(FunctionTool):
     })
 
     async def call(self, context: ContextWrapper[AstrAgentContext], filepath: str, old: str, new: str, replace_all: bool = False, occurrence: int = 0, **kwargs) -> ToolExecResult:
+        _tool_stats.record(self.name)
         try:
             result = await _run_sync(_safe_edit, filepath, old, new, replace_all, occurrence)
             return _unwrap(result)
@@ -116,6 +121,7 @@ class SafeRollbackTool(FunctionTool):
     })
 
     async def call(self, context: ContextWrapper[AstrAgentContext], filepath: str, backup_name: str = "", **kwargs) -> ToolExecResult:
+        _tool_stats.record(self.name)
         try:
             result = await _run_sync(_rollback, filepath, backup_name or None)
             return _unwrap(result)
@@ -137,6 +143,7 @@ class SafeBackupsTool(FunctionTool):
     })
 
     async def call(self, context: ContextWrapper[AstrAgentContext], filepath: str = "", **kwargs) -> ToolExecResult:
+        _tool_stats.record(self.name)
         try:
             result = await _run_sync(_list_backups, filepath or None)
             return _unwrap(result)
@@ -165,6 +172,7 @@ class FilePatchTool(FunctionTool):
     })
 
     async def call(self, context: ContextWrapper[AstrAgentContext], filepath: str, old: str, new: str, replace_all: bool = False, **kwargs) -> ToolExecResult:
+        _tool_stats.record(self.name)
         try:
             result = await _run_sync(_file_patch, filepath, old, new, replace_all)
             return _unwrap(result)
@@ -189,6 +197,7 @@ class FilePreviewTool(FunctionTool):
     })
 
     async def call(self, context: ContextWrapper[AstrAgentContext], filepath: str, old: str, new: str, replace_all: bool = False, **kwargs) -> ToolExecResult:
+        _tool_stats.record(self.name)
         try:
             result = await _run_sync(_file_preview, filepath, old, new, replace_all)
             return _unwrap(result)
@@ -214,6 +223,7 @@ class SyntaxCheckTool(FunctionTool):
     })
 
     async def call(self, context: ContextWrapper[AstrAgentContext], filepath: str, **kwargs) -> ToolExecResult:
+        _tool_stats.record(self.name)
         try:
             result = await _run_sync(_syntax_check, filepath)
             return _unwrap(result)
@@ -238,6 +248,7 @@ class GitStatusTool(FunctionTool):
     })
 
     async def call(self, context: ContextWrapper[AstrAgentContext], cwd: str, **kwargs) -> ToolExecResult:
+        _tool_stats.record(self.name)
         try:
             result = await _run_sync(_git_status, cwd)
             return _unwrap(result)
@@ -261,6 +272,7 @@ class GitDiffTool(FunctionTool):
     })
 
     async def call(self, context: ContextWrapper[AstrAgentContext], cwd: str, staged: bool = False, filepath: str = "", **kwargs) -> ToolExecResult:
+        _tool_stats.record(self.name)
         try:
             result = await _run_sync(_git_diff, cwd, staged, filepath or None)
             return _unwrap(result)
@@ -283,6 +295,7 @@ class GitLogTool(FunctionTool):
     })
 
     async def call(self, context: ContextWrapper[AstrAgentContext], cwd: str, count: int = 5, **kwargs) -> ToolExecResult:
+        _tool_stats.record(self.name)
         try:
             result = await _run_sync(_git_log, cwd, count)
             return _unwrap(result)
@@ -305,6 +318,7 @@ class GitCommitTool(FunctionTool):
     })
 
     async def call(self, context: ContextWrapper[AstrAgentContext], cwd: str, message: str, **kwargs) -> ToolExecResult:
+        _tool_stats.record(self.name)
         try:
             result = await _run_sync(_git_commit, cwd, message)
             return _unwrap(result)
@@ -326,6 +340,7 @@ class GitBranchTool(FunctionTool):
     })
 
     async def call(self, context: ContextWrapper[AstrAgentContext], cwd: str, **kwargs) -> ToolExecResult:
+        _tool_stats.record(self.name)
         try:
             result = await _run_sync(_git_branch, cwd)
             return _unwrap(result)
@@ -347,6 +362,7 @@ class GitRemoteTool(FunctionTool):
     })
 
     async def call(self, context: ContextWrapper[AstrAgentContext], cwd: str, **kwargs) -> ToolExecResult:
+        _tool_stats.record(self.name)
         try:
             result = await _run_sync(_git_remote, cwd)
             return _unwrap(result)
@@ -444,6 +460,7 @@ class HttpGetTool(FunctionTool):
     })
 
     async def call(self, context: ContextWrapper[AstrAgentContext], url: str, headers: dict = None, **kwargs) -> ToolExecResult:
+        _tool_stats.record(self.name)
         try:
             result = await _run_sync(_http_get, url, headers)
             return _unwrap(result)
@@ -470,6 +487,7 @@ class HttpPostTool(FunctionTool):
     })
 
     async def call(self, context: ContextWrapper[AstrAgentContext], url: str, data: str = "", headers: dict = None, **kwargs) -> ToolExecResult:
+        _tool_stats.record(self.name)
         try:
             body = data
             if data:
@@ -585,6 +603,7 @@ class DiskInfoTool(FunctionTool):
     })
 
     async def call(self, context: ContextWrapper[AstrAgentContext], **kwargs) -> ToolExecResult:
+        _tool_stats.record(self.name)
         try:
             result = await _run_sync(_disk_info)
             return _unwrap(result)
@@ -611,6 +630,7 @@ class PortCheckTool(FunctionTool):
     })
 
     async def call(self, context: ContextWrapper[AstrAgentContext], host: str = "127.0.0.1", ports: list = None, **kwargs) -> ToolExecResult:
+        _tool_stats.record(self.name)
         try:
             if not ports:
                 return _err("请提供 ports 参数")
@@ -643,6 +663,7 @@ class FileDiffTool(FunctionTool):
     })
 
     async def call(self, context: ContextWrapper[AstrAgentContext], file_a: str, file_b: str, **kwargs) -> ToolExecResult:
+        _tool_stats.record(self.name)
         try:
             result = await _run_sync(_file_diff, file_a, file_b)
             return _unwrap(result)
@@ -668,6 +689,7 @@ class ProcListTool(FunctionTool):
     })
 
     async def call(self, context: ContextWrapper[AstrAgentContext], filter_name: str = "", **kwargs) -> ToolExecResult:
+        _tool_stats.record(self.name)
         try:
             result = await _run_sync(_proc_list, filter_name or None)
             return _unwrap(result)
@@ -694,6 +716,7 @@ class FileHashTool(FunctionTool):
     })
 
     async def call(self, context: ContextWrapper[AstrAgentContext], filepath: str, algo: str = "sha256", **kwargs) -> ToolExecResult:
+        _tool_stats.record(self.name)
         try:
             result = await _run_sync(_file_hash, filepath, algo)
             return _unwrap(result)
@@ -719,6 +742,7 @@ class FileZipTool(FunctionTool):
     })
 
     async def call(self, context: ContextWrapper[AstrAgentContext], files: list, output: str, **kwargs) -> ToolExecResult:
+        _tool_stats.record(self.name)
         try:
             result = await _run_sync(_file_zip, files, output)
             return _unwrap(result)
@@ -744,6 +768,7 @@ class FileUnzipTool(FunctionTool):
     })
 
     async def call(self, context: ContextWrapper[AstrAgentContext], zip_file: str, output_dir: str, **kwargs) -> ToolExecResult:
+        _tool_stats.record(self.name)
         try:
             result = await _run_sync(_file_unzip, zip_file, output_dir)
             return _unwrap(result)
@@ -766,6 +791,7 @@ class SysSnapshotTool(FunctionTool):
     })
 
     async def call(self, context: ContextWrapper[AstrAgentContext], **kwargs) -> ToolExecResult:
+        _tool_stats.record(self.name)
         try:
             result = await _run_sync(_sys_snapshot)
             return _unwrap(result)
@@ -786,6 +812,7 @@ class Base64EncodeTool(FunctionTool):
         "required": ["data"]
     })
     async def call(self, context: ContextWrapper[AstrAgentContext], data: str, as_uri: bool = False, **kwargs) -> ToolExecResult:
+        _tool_stats.record(self.name)
         try: return _unwrap(b64_encode(data, as_uri))
         except Exception as e: return _err(f"base64_encode 失败: {e}")
 
@@ -803,6 +830,7 @@ class Base64DecodeTool(FunctionTool):
         "required": ["data"]
     })
     async def call(self, context: ContextWrapper[AstrAgentContext], data: str, strip_uri: bool = False, **kwargs) -> ToolExecResult:
+        _tool_stats.record(self.name)
         try: return _unwrap(b64_decode(data, strip_uri))
         except Exception as e: return _err(f"base64_decode 失败: {e}")
 
@@ -817,6 +845,7 @@ class UrlEncodeTool(FunctionTool):
         "required": ["data"]
     })
     async def call(self, context: ContextWrapper[AstrAgentContext], data: str, **kwargs) -> ToolExecResult:
+        _tool_stats.record(self.name)
         try: return _unwrap(url_encode(data))
         except Exception as e: return _err(f"url_encode 失败: {e}")
 
@@ -831,6 +860,7 @@ class UrlDecodeTool(FunctionTool):
         "required": ["data"]
     })
     async def call(self, context: ContextWrapper[AstrAgentContext], data: str, **kwargs) -> ToolExecResult:
+        _tool_stats.record(self.name)
         try: return _unwrap(url_decode(data))
         except Exception as e: return _err(f"url_decode 失败: {e}")
 
@@ -845,6 +875,7 @@ class HexEncodeTool(FunctionTool):
         "required": ["data"]
     })
     async def call(self, context: ContextWrapper[AstrAgentContext], data: str, **kwargs) -> ToolExecResult:
+        _tool_stats.record(self.name)
         try: return _unwrap(hex_encode(data))
         except Exception as e: return _err(f"hex_encode 失败: {e}")
 
@@ -859,6 +890,7 @@ class HexDecodeTool(FunctionTool):
         "required": ["data"]
     })
     async def call(self, context: ContextWrapper[AstrAgentContext], data: str, **kwargs) -> ToolExecResult:
+        _tool_stats.record(self.name)
         try: return _unwrap(hex_decode(data))
         except Exception as e: return _err(f"hex_decode 失败: {e}")
 
@@ -869,6 +901,7 @@ class TimeNowTool(FunctionTool):
     description: str = "获取当前时间：ISO 字符串 + Unix 时间戳（秒和毫秒）。"
     parameters: dict = field(default_factory=lambda: {"type": "object", "properties": {}, "required": []})
     async def call(self, context: ContextWrapper[AstrAgentContext], **kwargs) -> ToolExecResult:
+        _tool_stats.record(self.name)
         try: return _unwrap(_time_now())
         except Exception as e: return _err(f"time_now 失败: {e}")
 
@@ -886,6 +919,7 @@ class TsToIsoTool(FunctionTool):
         "required": ["ts"]
     })
     async def call(self, context: ContextWrapper[AstrAgentContext], ts: int, ms: bool = False, **kwargs) -> ToolExecResult:
+        _tool_stats.record(self.name)
         try: return _unwrap(ts_to_iso(ts, ms))
         except Exception as e: return _err(f"ts_to_iso 失败: {e}")
 
@@ -900,6 +934,7 @@ class IsoToTsTool(FunctionTool):
         "required": ["iso"]
     })
     async def call(self, context: ContextWrapper[AstrAgentContext], iso: str, **kwargs) -> ToolExecResult:
+        _tool_stats.record(self.name)
         try: return _unwrap(iso_to_ts(iso))
         except Exception as e: return _err(f"iso_to_ts 失败: {e}")
 
@@ -917,6 +952,7 @@ class TimeDiffTool(FunctionTool):
         "required": ["iso1", "iso2"]
     })
     async def call(self, context: ContextWrapper[AstrAgentContext], iso1: str, iso2: str, **kwargs) -> ToolExecResult:
+        _tool_stats.record(self.name)
         try: return _unwrap(time_diff(iso1, iso2))
         except Exception as e: return _err(f"time_diff 失败: {e}")
 
@@ -941,6 +977,7 @@ class RegexTestTool(FunctionTool):
     })
 
     async def call(self, context: ContextWrapper[AstrAgentContext], pattern: str, text: str, flags: str = "", **kwargs) -> ToolExecResult:
+        _tool_stats.record(self.name)
         try:
             return _unwrap(_regex_test(pattern, text, flags))
         except Exception as e:
@@ -969,6 +1006,7 @@ class RegexReplaceTool(FunctionTool):
     })
 
     async def call(self, context: ContextWrapper[AstrAgentContext], pattern: str, replacement: str, text: str, flags: str = "", **kwargs) -> ToolExecResult:
+        _tool_stats.record(self.name)
         try:
             return _unwrap(_regex_replace(pattern, replacement, text, flags))
         except Exception as e:
@@ -996,6 +1034,7 @@ class DirListTool(FunctionTool):
     })
 
     async def call(self, context: ContextWrapper[AstrAgentContext], path: str, pattern: str = "*", max_depth: int = 1, show_hidden: bool = False, **kwargs) -> ToolExecResult:
+        _tool_stats.record(self.name)
         try:
             return _unwrap(_list_dir(path, pattern, max_depth, show_hidden))
         except Exception as e:
@@ -1021,6 +1060,7 @@ class JsonQueryTool(FunctionTool):
     })
 
     async def call(self, context: ContextWrapper[AstrAgentContext], data: str, path: str, **kwargs) -> ToolExecResult:
+        _tool_stats.record(self.name)
         try:
             return _unwrap(_json_query(data, path))
         except Exception as e:
@@ -1050,6 +1090,7 @@ class TextFilterTool(FunctionTool):
     })
 
     async def call(self, context: ContextWrapper[AstrAgentContext], action: str, text: str, pattern: str = "", n: int = 10, case_sensitive: bool = False, regex: bool = False, **kwargs) -> ToolExecResult:
+        _tool_stats.record(self.name)
         try:
             return _unwrap(_text_filter(text, action, pattern, n, case_sensitive, regex))
         except Exception as e:
@@ -1076,6 +1117,7 @@ class DiffStringsTool(FunctionTool):
     })
 
     async def call(self, context: ContextWrapper[AstrAgentContext], a: str, b: str, context_lines: int = 3, **kwargs) -> ToolExecResult:
+        _tool_stats.record(self.name)
         try:
             return _unwrap(_diff_strings(a, b, context_lines))
         except Exception as e:
@@ -1102,6 +1144,7 @@ class CsvParseTool(FunctionTool):
     })
 
     async def call(self, context: ContextWrapper[AstrAgentContext], text: str, delimiter: str = "auto", has_header: bool = True, **kwargs) -> ToolExecResult:
+        _tool_stats.record(self.name)
         try:
             return _unwrap(_csv_parse(text, delimiter, has_header))
         except Exception as e:
@@ -1126,6 +1169,7 @@ class CsvGenTool(FunctionTool):
     })
 
     async def call(self, context: ContextWrapper[AstrAgentContext], rows: str, delimiter: str = ",", **kwargs) -> ToolExecResult:
+        _tool_stats.record(self.name)
         try:
             parsed = json.loads(rows)
             return _unwrap(_csv_gen(parsed, delimiter))
@@ -1151,6 +1195,7 @@ class UuidGenTool(FunctionTool):
     })
 
     async def call(self, context: ContextWrapper[AstrAgentContext], kind: str = "uuid4", length: int = 16, **kwargs) -> ToolExecResult:
+        _tool_stats.record(self.name)
         try:
             return _unwrap(_uuid_gen(kind, length))
         except Exception as e:
@@ -1175,6 +1220,7 @@ class SemverTool(FunctionTool):
     })
 
     async def call(self, context: ContextWrapper[AstrAgentContext], v1: str, v2: str, **kwargs) -> ToolExecResult:
+        _tool_stats.record(self.name)
         try:
             return _unwrap(_semver_compare(v1, v2))
         except Exception as e:
@@ -1198,6 +1244,7 @@ class MdStripTool(FunctionTool):
     })
 
     async def call(self, context: ContextWrapper[AstrAgentContext], text: str, **kwargs) -> ToolExecResult:
+        _tool_stats.record(self.name)
         try:
             return _unwrap(_md_strip(text))
         except Exception as e:
@@ -1381,6 +1428,7 @@ class LogParseTool(FunctionTool):
         "required": ["text"]
     })
     async def call(self, context: ContextWrapper[AstrAgentContext], text: str, format: str = "auto", **kwargs) -> ToolExecResult:
+        _tool_stats.record(self.name)
         try: return _unwrap(await _run_sync(_log_parse, text, format))
         except Exception as e: return _err(f"log_parse 失败: {e}")
 
@@ -1399,6 +1447,7 @@ class FileWatchTool(FunctionTool):
         "required": ["path"]
     })
     async def call(self, context: ContextWrapper[AstrAgentContext], path: str, duration_s: int = 10, interval_s: float = 1.0, **kwargs) -> ToolExecResult:
+        _tool_stats.record(self.name)
         try: return _unwrap(await _run_sync(_file_watch, path, duration_s, interval_s))
         except Exception as e: return _err(f"file_watch 失败: {e}")
 
@@ -1416,6 +1465,7 @@ class ConfigDiffTool(FunctionTool):
         "required": ["file_a", "file_b"]
     })
     async def call(self, context: ContextWrapper[AstrAgentContext], file_a: str, file_b: str, **kwargs) -> ToolExecResult:
+        _tool_stats.record(self.name)
         try: return _unwrap(await _run_sync(_config_diff, file_a, file_b))
         except Exception as e: return _err(f"config_diff 失败: {e}")
 
@@ -1433,6 +1483,7 @@ class SvgRenderTool(FunctionTool):
         "required": ["svg_path"]
     })
     async def call(self, context: ContextWrapper[AstrAgentContext], svg_path: str, output_path: str = "", **kwargs) -> ToolExecResult:
+        _tool_stats.record(self.name)
         try: return _unwrap(await _run_sync(_svg_render, svg_path, output_path))
         except Exception as e: return _err(f"svg_render 失败: {e}")
 
@@ -1450,6 +1501,7 @@ class JsonSchemaValTool(FunctionTool):
         "required": ["data", "schema"]
     })
     async def call(self, context: ContextWrapper[AstrAgentContext], data: str, schema: str, **kwargs) -> ToolExecResult:
+        _tool_stats.record(self.name)
         try: return _unwrap(await _run_sync(_json_schema_val, data, schema))
         except Exception as e: return _err(f"json_schema_val 失败: {e}")
 
@@ -1466,6 +1518,7 @@ class ProjectInitTool(FunctionTool):
         "required": []
     })
     async def call(self, context: ContextWrapper[AstrAgentContext], project_dir: str = ".", **kwargs) -> ToolExecResult:
+        _tool_stats.record(self.name)
         try: return _unwrap(await _run_sync(_project_init_scan, project_dir))
         except Exception as e: return _err(f"project_init 失败: {e}")
 
@@ -1483,6 +1536,7 @@ class GitChangelogTool(FunctionTool):
         "required": ["cwd"]
     })
     async def call(self, context: ContextWrapper[AstrAgentContext], cwd: str, count: int = 30, **kwargs) -> ToolExecResult:
+        _tool_stats.record(self.name)
         try: return _unwrap(await _run_sync(_git_changelog, cwd, count))
         except Exception as e: return _err(f"git_changelog 失败: {e}")
 
@@ -1504,8 +1558,56 @@ class LintRunnerTool(FunctionTool):
         "required": ["filepath"]
     })
     async def call(self, context: ContextWrapper[AstrAgentContext], filepath: str, linter: str = "auto", **kwargs) -> ToolExecResult:
+        _tool_stats.record(self.name)
         try: return _unwrap(await _run_sync(_lint_run, filepath, linter))
         except Exception as e: return _err(f"lint_runner 失败: {e}")
+
+
+@dataclass
+class ToolStatsTool(FunctionTool):
+    name: str = "tool_stats"
+    description: str = "查看工具调用统计：每个工具的调用次数和总调用数。纯内存计数器。"
+    parameters: dict = field(default_factory=lambda: {"type": "object", "properties": {}, "required": []})
+    async def call(self, context: ContextWrapper[AstrAgentContext], **kwargs) -> ToolExecResult:
+        _tool_stats.record(self.name)
+        try: return _unwrap(_tool_stats_snap())
+        except Exception as e: return _err(f"tool_stats 失败: {e}")
+
+
+@dataclass
+class DbQueryTool(FunctionTool):
+    name: str = "db_query"
+    description: str = "只读查询 SQLite 数据库，不修改数据。参数化防注入，仅允许 SELECT/PRAGMA。"
+    parameters: dict = field(default_factory=lambda: {
+        "type": "object",
+        "properties": {
+            "db_path": {"type": "string", "description": "SQLite 数据库文件路径"},
+            "sql": {"type": "string", "description": "SELECT 或 PRAGMA 查询语句"},
+            "params": {"type": "array", "description": "查询参数列表，如 [42, \"active\"]"},
+        },
+        "required": ["db_path", "sql"]
+    })
+    async def call(self, context: ContextWrapper[AstrAgentContext], db_path: str, sql: str, params: list = None, **kwargs) -> ToolExecResult:
+        _tool_stats.record(self.name)
+        try: return _unwrap(await _run_sync(_db_query, db_path, sql, params))
+        except Exception as e: return _err(f"db_query 失败: {e}")
+
+
+@dataclass
+class DepScanTool(FunctionTool):
+    name: str = "dep_scan"
+    description: str = "扫描 Python 项目 import 依赖图，检测循环引用。含超时保护。"
+    parameters: dict = field(default_factory=lambda: {
+        "type": "object",
+        "properties": {
+            "project_dir": {"type": "string", "description": "项目根目录，默认当前目录"},
+        },
+        "required": []
+    })
+    async def call(self, context: ContextWrapper[AstrAgentContext], project_dir: str = ".", **kwargs) -> ToolExecResult:
+        _tool_stats.record(self.name)
+        try: return _unwrap(await _run_sync(_dep_scan, project_dir))
+        except Exception as e: return _err(f"dep_scan 失败: {e}")
 
 
 # ═══════════════════════════════════════════════════════════
@@ -1516,12 +1618,12 @@ TOOL_GROUPS: dict[str, list[str]] = {
     "安全编辑链": ["safe_edit", "safe_rollback", "safe_backups", "file_patch", "file_preview", "syntax_check", "lint_runner"],
     "Git & GitHub": ["git_status", "git_diff", "git_log", "git_commit", "git_branch", "git_remote", "git_push", "gh_pr", "gh_issue", "gh_release", "gh_repo"],
     "文件系统": ["es_search", "dir_tree", "dir_list", "file_diff", "file_hash", "file_zip", "file_unzip", "disk_info", "file_watch", "config_diff"],
-    "系统信息": ["port_check", "proc_list", "sys_snapshot"],
+    "系统信息": ["port_check", "proc_list", "sys_snapshot", "tool_stats"],
     "网络": ["http_get", "http_post", "http_download"],
     "文本处理": ["html_extract", "json_query", "text_filter", "diff_strings", "regex_test", "regex_replace", "csv_parse", "csv_gen", "md_strip", "log_parse"],
     "编码": ["base64_encode", "base64_decode", "url_encode", "url_decode", "hex_encode", "hex_decode"],
     "时间": ["time_now", "ts_to_iso", "iso_to_ts", "time_diff"],
-    "扩展": ["svg_render", "json_schema_val", "semver_compare", "uuid_gen", "project_init", "git_changelog"],
+    "扩展": ["svg_render", "json_schema_val", "semver_compare", "uuid_gen", "project_init", "git_changelog", "db_query", "dep_scan"],
 }
 
 _ALL_TOOLS = {
@@ -1535,6 +1637,7 @@ _ALL_TOOLS = {
     "file_diff": FileDiffTool, "file_hash": FileHashTool, "file_zip": FileZipTool, "file_unzip": FileUnzipTool,
     "disk_info": DiskInfoTool, "file_watch": FileWatchTool, "config_diff": ConfigDiffTool,
     "port_check": PortCheckTool, "proc_list": ProcListTool, "sys_snapshot": SysSnapshotTool,
+    "tool_stats": ToolStatsTool,
     "http_get": HttpGetTool, "http_post": HttpPostTool, "http_download": HttpDownloadTool,
     "html_extract": HtmlExtractTool, "json_query": JsonQueryTool, "text_filter": TextFilterTool,
     "diff_strings": DiffStringsTool, "regex_test": RegexTestTool, "regex_replace": RegexReplaceTool,
@@ -1546,4 +1649,5 @@ _ALL_TOOLS = {
     "svg_render": SvgRenderTool, "json_schema_val": JsonSchemaValTool,
     "semver_compare": SemverTool, "uuid_gen": UuidGenTool,
     "project_init": ProjectInitTool, "git_changelog": GitChangelogTool,
+    "db_query": DbQueryTool, "dep_scan": DepScanTool,
 }

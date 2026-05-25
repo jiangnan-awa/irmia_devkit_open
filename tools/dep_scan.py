@@ -1,0 +1,105 @@
+"""
+dep_scan — 依赖分析。
+扫描 Python import，构建依赖图，检测循环引用。含超时保护。
+"""
+import ast
+import time
+from pathlib import Path
+
+
+def scan(project_dir: str = ".", timeout: int = 10) -> dict:
+    """扫描 Python 项目 import 依赖图，检测循环引用。
+
+    Args:
+        project_dir: 项目根目录
+        timeout: 超时秒数，默认 10
+    """
+    root = Path(project_dir).resolve()
+    if not root.is_dir():
+        return {"ok": False, "error": f"不是有效目录: {project_dir}"}
+
+    dep_graph: dict[str, set[str]] = {}
+    deadline = time.time() + timeout
+    scanned = 0
+    for f in root.rglob("*.py"):
+        if "__pycache__" in str(f) or ".git" in str(f):
+            continue
+        scanned += 1
+        if time.time() > deadline:
+            cycles = _find_cycles(dep_graph)
+            return {
+                "ok": True,
+                "root": str(root),
+                "files_scanned": len(dep_graph),
+                "dependencies": {k: sorted(v) for k, v in dep_graph.items()},
+                "cycles": cycles,
+                "has_cycles": len(cycles) > 0,
+                "partial": True,
+                "note": f"超时 ({timeout}s)，已扫描 {len(dep_graph)}/{scanned} 文件",
+            }
+        try:
+            deps = _extract_imports(f)
+            if deps:
+                dep_graph[f.name] = deps
+        except Exception:
+            pass
+
+    cycles = _find_cycles(dep_graph)
+
+    return {
+        "ok": True,
+        "root": str(root),
+        "files_scanned": len(dep_graph),
+        "dependencies": {k: sorted(v) for k, v in dep_graph.items()},
+        "cycles": cycles,
+        "has_cycles": len(cycles) > 0,
+    }
+
+
+def _extract_imports(filepath: Path) -> set[str]:
+    imports = set()
+    try:
+        tree = ast.parse(filepath.read_text(encoding="utf-8"))
+    except (SyntaxError, UnicodeDecodeError):
+        return imports
+
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Import):
+            for alias in node.names:
+                imports.add(alias.name.split(".")[0])
+        elif isinstance(node, ast.ImportFrom):
+            if node.module:
+                imports.add(node.module.split(".")[0])
+    return imports
+
+
+def _find_cycles(graph: dict[str, set[str]]) -> list[list[str]]:
+    cycles = []
+    visited = set()
+    stack = []
+
+    def dfs(node: str):
+        if node in stack:
+            idx = stack.index(node)
+            cycles.append(stack[idx:] + [node])
+            return
+        if node in visited:
+            return
+        visited.add(node)
+        stack.append(node)
+        for neighbor in graph.get(node, set()):
+            dfs(neighbor)
+        stack.pop()
+
+    for node in graph:
+        stack.clear()
+        dfs(node)
+
+    seen = set()
+    unique = []
+    for c in cycles:
+        key = tuple(sorted(c))
+        if key not in seen:
+            seen.add(key)
+            unique.append(c)
+    return unique

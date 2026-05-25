@@ -39,7 +39,7 @@ data/plugins/
 
 ## 工具组
 
-60 个工具按 9 组管理。在 `config.json` 中设 `tool_groups` 的组为 `false` 关闭整组，或用 `disabled_tools` 逗号分隔禁用单个工具。WebUI 面板同样支持。**修改后需重启 AstrBot**。
+63 个工具按 9 组管理。在 `config.json` 中设 `tool_groups` 的组为 `false` 关闭整组，或用 `disabled_tools` 逗号分隔禁用单个工具。WebUI 面板同样支持。**修改后需重启 AstrBot**。
 
 | 字段 | 说明 |
 |------|------|
@@ -62,7 +62,7 @@ data/plugins/
 
 > 其余 40+ 个工具为纯 Python 标准库，零外部依赖。
 
-## 工具列表 (60 个)
+## 工具列表 (63 个)
 
 ### 🔒 安全编辑链 (7)
 
@@ -107,13 +107,14 @@ data/plugins/
 | `file_watch` | 目录文件变化监控 |
 | `config_diff` | JSON/YAML 配置文件 key 级差异比较 |
 
-### 📊 系统信息 (3)
+### 📊 系统信息 (4)
 
 | 工具 | 用途 |
 |------|------|
 | `port_check` | 端口检测 / 批量扫描 |
 | `proc_list` | 进程列表（Windows/Linux） |
 | `sys_snapshot` | 系统快照（CPU/内存/进程数/开机时间） |
+| `tool_stats` | 工具调用统计（次数/总数） |
 
 ### 🌐 网络 (3)
 
@@ -155,7 +156,7 @@ data/plugins/
 | `iso_to_ts` | ISO 字符串→时间戳 |
 | `time_diff` | 两个 ISO 时间的差值 |
 
-### 🧩 扩展 (6)
+### 🧩 扩展 (8)
 
 | 工具 | 用途 |
 |------|------|
@@ -165,6 +166,8 @@ data/plugins/
 | `json_schema_val` | JSON Schema 校验（可选 jsonschema） |
 | `project_init` | 扫描项目：detect 语言/框架/依赖/目录结构 |
 | `git_changelog` | git log→分类 changelog（fix/feat/refactor/docs） |
+| `db_query` | SQLite 只读查询（参数化防注入） |
+| `dep_scan` | Python import 依赖图 + 循环引用检测 |
 
 ### 🧠 Skill
 
@@ -174,7 +177,7 @@ data/plugins/
 
 ## 版本
 
-**1.8.0** — lint_runner代码质量检查 (ruff/pylint/eslint)
+**2.0.0** — tool_stats统计 + db_query只读查询 + dep_scan依赖分析
 
 ## 作者
 
