@@ -6,6 +6,8 @@ file_diff — 文件差异比较。
 import difflib
 from pathlib import Path
 
+from ._file_utils import read_file
+
 # C5: 文件大小上限 50MB，防止 OOM
 _MAX_FILE_SIZE = 50 * 1024 * 1024
 
@@ -25,20 +27,14 @@ def compare(file_a: str, file_b: str) -> dict:
         return {"ok": False, "error": f"文件过大（上限 {_MAX_FILE_SIZE//1024//1024}MB），请使用外部 diff 工具"}
 
     try:
-        a_text = pa.read_text(encoding="utf-8")
-    except UnicodeDecodeError:
-        try:
-            a_text = pa.read_text(encoding="gbk")
-        except Exception as e:
-            return {"ok": False, "error": f"无法读取 {file_a}: {e}"}
+        a_text = read_file(pa)
+    except Exception as e:
+        return {"ok": False, "error": f"无法读取 {file_a}: {e}"}
 
     try:
-        b_text = pb.read_text(encoding="utf-8")
-    except UnicodeDecodeError:
-        try:
-            b_text = pb.read_text(encoding="gbk")
-        except Exception as e:
-            return {"ok": False, "error": f"无法读取 {file_b}: {e}"}
+        b_text = read_file(pb)
+    except Exception as e:
+        return {"ok": False, "error": f"无法读取 {file_b}: {e}"}
 
     lines_a = a_text.splitlines()
     lines_b = b_text.splitlines()

@@ -4,6 +4,8 @@ dir_tree — 目录树可视化。
 """
 import os
 
+from ._file_utils import human_size
+
 
 def tree(path: str, max_depth: int = 3, show_hidden: bool = False,
          pattern: str = "", max_items: int = 100) -> dict:
@@ -68,7 +70,7 @@ def tree(path: str, max_depth: int = 3, show_hidden: bool = False,
                 stats["files"] += 1
                 try:
                     size = entry.stat().st_size
-                    lines.append(f"{prefix}{connector}{entry.name} ({_size_fmt(size)})")
+                    lines.append(f"{prefix}{connector}{entry.name} ({human_size(size)})")
                 except OSError:
                     lines.append(f"{prefix}{connector}{entry.name}")
 
@@ -82,11 +84,3 @@ def tree(path: str, max_depth: int = 3, show_hidden: bool = False,
         "tree": "\n".join(lines),
         "stats": stats,
     }
-
-
-def _size_fmt(n: int) -> str:
-    for unit in ["B", "KB", "MB", "GB"]:
-        if n < 1024:
-            return f"{n} {unit}"
-        n //= 1024
-    return f"{n} TB"

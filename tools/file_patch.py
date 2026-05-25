@@ -6,6 +6,8 @@ file_patch — 精确文本替换工具。
 import difflib
 from pathlib import Path
 
+from ._file_utils import read_file
+
 
 def patch(filepath: str, old: str, new: str, replace_all: bool = False) -> dict:
     """
@@ -27,14 +29,11 @@ def patch(filepath: str, old: str, new: str, replace_all: bool = False) -> dict:
     p = Path(filepath)
     if not p.exists():
         return {"ok": False, "error": f"文件不存在: {filepath}"}
-    
+
     try:
-        content = p.read_text(encoding="utf-8")
-    except UnicodeDecodeError:
-        try:
-            content = p.read_text(encoding="gbk")
-        except Exception as e:
-            return {"ok": False, "error": f"无法读取文件: {e}"}
+        content = read_file(p)
+    except Exception as e:
+        return {"ok": False, "error": f"无法读取文件: {e}"}
     
     if old not in content:
         # 尝试给出最接近的匹配
@@ -77,14 +76,11 @@ def preview(filepath: str, old: str, new: str, replace_all: bool = False) -> dic
     p = Path(filepath)
     if not p.exists():
         return {"ok": False, "error": f"文件不存在: {filepath}"}
-    
+
     try:
-        content = p.read_text(encoding="utf-8")
-    except UnicodeDecodeError:
-        try:
-            content = p.read_text(encoding="gbk")
-        except Exception as e:
-            return {"ok": False, "error": f"无法读取文件: {e}"}
+        content = read_file(p)
+    except Exception as e:
+        return {"ok": False, "error": f"无法读取文件: {e}"}
     
     if old not in content:
         return {"ok": False, "error": "旧文本在文件中未找到"}

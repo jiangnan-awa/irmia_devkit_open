@@ -13,6 +13,19 @@ from .syntax_check import check as syntax_check
 BACKUP_DIR = Path.home() / ".irmia" / "backups"
 
 
+def _collect_positions(content: str, old: str) -> list[int]:
+    """收集 old 在 content 中所有非重叠匹配的起始索引。"""
+    positions = []
+    pos = 0
+    while True:
+        idx = content.find(old, pos)
+        if idx == -1:
+            break
+        positions.append(idx)
+        pos = idx + len(old)
+    return positions
+
+
 def edit(filepath: str, old: str, new: str, replace_all: bool = False, occurrence: int = 0) -> dict:
     """
     安全编辑文件：自动备份→替换→语法检查→通过保留/失败回滚。
@@ -35,8 +48,8 @@ def edit(filepath: str, old: str, new: str, replace_all: bool = False, occurrenc
     if not old:
         return {"ok": False, "error": "old 参数不能为空字符串，空替换会损毁文件"}
 
-    filepath = str(Path(filepath).resolve())
-    p = Path(filepath)
+    p = Path(filepath).resolve()
+    filepath = str(p)
     
     if not p.exists():
         return {"ok": False, "error": f"文件不存在: {filepath}"}
@@ -61,15 +74,10 @@ def edit(filepath: str, old: str, new: str, replace_all: bool = False, occurrenc
         return {"ok": False, "error": f"未找到匹配文本，文件内容未修改"}
     
     # ── 消歧与替换 ──
-    skip_patch = False
 
     if old_count > 1 and not replace_all and occurrence == 0:
         positions = []
-        pos = 0
-        while True:
-            idx = content.find(old, pos)
-            if idx == -1:
-                break
+        for idx in _collect_positions(content, old):
             line_num = content[:idx].count("\n") + 1
             line_start = content.rfind("\n", 0, idx) + 1
             line_end = content.find("\n", idx)
@@ -78,7 +86,6 @@ def edit(filepath: str, old: str, new: str, replace_all: bool = False, occurrenc
             preview = content[line_start:line_end].strip()[:80]
             col = idx - line_start + 1
             positions.append({"line": line_num, "col": col, "preview": preview})
-            pos = idx + len(old)
         return {
             "ok": False,
             "error": f"old 文本在文件中出现了 {old_count} 次，请指定要替换第几次出现",
@@ -103,17 +110,8 @@ def edit(filepath: str, old: str, new: str, replace_all: bool = False, occurrenc
     if occurrence > 0 and not replace_all:
         if occurrence > old_count:
             return {"ok": False, "error": f"occurrence={occurrence} 超过匹配总数 {old_count}"}
-        # C1 修复: 先收集所有非重叠匹配位置，再取第 N 个
-        positions = []
-        pos = 0
-        while True:
-            idx = content.find(old, pos)
-            if idx == -1:
-                break
-            positions.append(idx)
-            pos = idx + len(old)
-        target_idx = occurrence - 1
-        idx = positions[target_idx]
+        positions = _collect_positions(content, old)
+        idx = positions[occurrence - 1]
         content = content[:idx] + new + content[idx + len(old):]
         with open(filepath, "w", encoding=encoding, newline="") as f:
             f.write(content)
