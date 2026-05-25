@@ -43,8 +43,12 @@ def _detect_language(root: Path, ctx: dict):
         (".java", "java"), (".rb", "ruby"), (".php", "php"),
     ]
     scored = {}
+    count = 0
     for f in root.rglob("*"):
         if f.is_file():
+            count += 1
+            if count > 2000:
+                break
             for ext, lang in detectors:
                 if f.suffix == ext:
                     scored[lang] = scored.get(lang, 0) + 1
