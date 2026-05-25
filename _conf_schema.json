@@ -8,11 +8,6 @@
         "type": "string",
         "default": ""
       },
-      "opencode_path": {
-        "description": "OpenCode CLI 路径",
-        "type": "string",
-        "default": ""
-      },
       "gh_path": {
         "description": "GitHub CLI (gh.exe) 路径",
         "type": "string",
