@@ -387,6 +387,7 @@ class GitPushTool(FunctionTool):
 
     async def call(self, context: ContextWrapper[AstrAgentContext], cwd: str,
                    remote: str = "origin", branch: str = "", **kwargs) -> ToolExecResult:
+        _tool_stats.record(self.name)
         try:
             result = await _run_sync(_git_push, cwd, remote, branch)
             return _unwrap(result)
@@ -424,6 +425,7 @@ class EsSearchTool(FunctionTool):
                    regex: bool = False, case_sensitive: bool = False,
                    whole_word: bool = False, file_type: str = "all",
                    sort_by: str = "", ext: str = "", **kwargs) -> ToolExecResult:
+        _tool_stats.record(self.name)
         try:
             result = await _run_sync(_es_search,
                 query=query,
@@ -524,6 +526,7 @@ class HttpDownloadTool(FunctionTool):
 
     async def call(self, context: ContextWrapper[AstrAgentContext], url: str, path: str,
                    overwrite: bool = False, timeout: int = 60, **kwargs) -> ToolExecResult:
+        _tool_stats.record(self.name)
         try:
             result = await _run_sync(_http_download, url, path, overwrite, timeout)
             return _unwrap(result)
@@ -552,6 +555,7 @@ class HtmlExtractTool(FunctionTool):
 
     async def call(self, context: ContextWrapper[AstrAgentContext], html: str, what: str,
                    selector: str = "", **kwargs) -> ToolExecResult:
+        _tool_stats.record(self.name)
         try:
             result = await _run_sync(_html_extract, html, what, selector)
             return _unwrap(result)
@@ -581,6 +585,7 @@ class DirTreeTool(FunctionTool):
 
     async def call(self, context: ContextWrapper[AstrAgentContext], path: str,
                    max_depth: int = 3, show_hidden: bool = False, pattern: str = "", **kwargs) -> ToolExecResult:
+        _tool_stats.record(self.name)
         try:
             result = await _run_sync(_dir_tree, path, max_depth, show_hidden, pattern)
             return _unwrap(result)
@@ -1279,6 +1284,7 @@ class GhPrTool(FunctionTool):
                    cwd: str = "", title: str = "", body: str = "",
                    number: int = 0, state: str = "open", limit: int = 10,
                    base: str = "master", head: str = "", strategy: str = "squash", **kwargs) -> ToolExecResult:
+        _tool_stats.record(self.name)
         try:
             match action:
                 case "create":
@@ -1322,6 +1328,7 @@ class GhIssueTool(FunctionTool):
                    cwd: str = "", title: str = "", body: str = "",
                    number: int = 0, state: str = "open", limit: int = 10,
                    labels: str = "", **kwargs) -> ToolExecResult:
+        _tool_stats.record(self.name)
         try:
             match action:
                 case "create":
@@ -1362,6 +1369,7 @@ class GhReleaseTool(FunctionTool):
     async def call(self, context: ContextWrapper[AstrAgentContext], action: str,
                    cwd: str = "", tag: str = "", notes: str = "",
                    generate_notes: bool = True, limit: int = 5, **kwargs) -> ToolExecResult:
+        _tool_stats.record(self.name)
         try:
             match action:
                 case "create":
@@ -1398,6 +1406,7 @@ class GhRepoTool(FunctionTool):
     async def call(self, context: ContextWrapper[AstrAgentContext], action: str,
                    cwd: str = "", title: str = "", owner_repo: str = "",
                    public: bool = False, limit: int = 5, **kwargs) -> ToolExecResult:
+        _tool_stats.record(self.name)
         try:
             match action:
                 case "create":
