@@ -22,6 +22,11 @@ def extract(html: str, what: str = "text", selector: str = "") -> dict:
     """
     try:
         soup = BeautifulSoup(html, "lxml")
+    except Exception:
+        try:
+            soup = BeautifulSoup(html, "html.parser")
+        except Exception as e:
+            return {"ok": False, "error": f"HTML 解析器初始化失败: {e}"}
 
         if what == "text":
             # 移除 script/style

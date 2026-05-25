@@ -1,6 +1,6 @@
 """
 sys_snapshot — 系统快照。
-CPU/内存/磁盘/进程数/开机时长，纯标准库。
+CPU/内存/进程数/开机时长。Windows: systeminfo+tasklist | Linux: /proc。
 """
 import os
 import platform
@@ -10,7 +10,6 @@ from datetime import datetime
 
 def snapshot() -> dict:
     """获取系统整体状态快照。"""
-
     info = {
         "hostname": platform.node(),
         "platform": platform.platform(),
@@ -18,13 +17,20 @@ def snapshot() -> dict:
         "time": datetime.now().isoformat(),
     }
 
-    # CPU 核心数
     try:
         info["cpu_cores"] = os.cpu_count()
     except Exception:
         info["cpu_cores"] = None
 
-    # 内存（通过 systeminfo 提取）
+    if os.name == "nt":
+        _windows_info(info)
+    else:
+        _linux_info(info)
+
+    return {"ok": True, "info": info}
+
+
+def _windows_info(info: dict) -> None:
     try:
         result = subprocess.run(
             ["systeminfo"],
@@ -32,17 +38,16 @@ def snapshot() -> dict:
         )
         for line in result.stdout.split("\n"):
             line = line.strip()
-            if "物理内存总量" in line:
+            if "物理内存总量" in line or "Total Physical Memory" in line:
                 info["total_memory_mb"] = _extract_mb(line)
-            if "可用的物理内存" in line:
+            if "可用的物理内存" in line or "Available Physical Memory" in line:
                 info["available_memory_mb"] = _extract_mb(line)
-            if "系统启动时间" in line:
+            if "系统启动时间" in line or "System Boot Time" in line:
                 info["boot_time"] = line.split(":", 1)[-1].strip()
     except Exception:
         info["total_memory_mb"] = None
         info["available_memory_mb"] = None
 
-    # 进程数
     try:
         result = subprocess.run(
             ["tasklist", "/FO", "CSV", "/NH"],
@@ -52,16 +57,24 @@ def snapshot() -> dict:
     except Exception:
         info["process_count"] = None
 
-    return {"ok": True, "info": info}
 
-
-def _extract_mb(line: str) -> int | None:
-    """从 systeminfo 行提取内存 MB 数。"""
+def _linux_info(info: dict) -> None:
     try:
-        parts = line.replace(",", "").split()
-        for i, p in enumerate(parts):
-            if "MB" in p:
-                return int(parts[i - 1]) if i > 0 else None
-        return None
+        with open("/proc/meminfo", "r") as f:
+            for line in f:
+                if line.startswith("MemTotal:"):
+                    info["total_memory_mb"] = int(line.split()[1]) // 1024
+                elif line.startswith("MemAvailable:"):
+                    info["available_memory_mb"] = int(line.split()[1]) // 1024
+
+        with open("/proc/uptime", "r") as f:
+            uptime_s = float(f.read().split()[0])
+            info["boot_time"] = str(datetime.now() - datetime.timedelta(seconds=uptime_s))
+
+        info["process_count"] = sum(
+            1 for d in os.listdir("/proc") if d.isdigit()
+        )
     except Exception:
-        return None
+        info["total_memory_mb"] = None
+        info["available_memory_mb"] = None
+        info["process_count"] = None
