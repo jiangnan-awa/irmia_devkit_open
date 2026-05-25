@@ -24,12 +24,11 @@ def query(db_path: str, sql: str, params: list = None) -> dict:
 
     params = params or []
     try:
-        conn = sqlite3.connect(f"file:{p.resolve()}?mode=ro", uri=True)
-        conn.row_factory = sqlite3.Row
-        cur = conn.execute(sql, params)
-        columns = [d[0] for d in cur.description] if cur.description else []
-        rows = [dict(r) for r in cur.fetchall()]
-        conn.close()
+        with sqlite3.connect(f"file:{p.resolve()}?mode=ro", uri=True) as conn:
+            conn.row_factory = sqlite3.Row
+            cur = conn.execute(sql, params)
+            columns = [d[0] for d in cur.description] if cur.description else []
+            rows = [dict(r) for r in cur.fetchall()]
         return {
             "ok": True,
             "columns": columns,
