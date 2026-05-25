@@ -52,23 +52,33 @@ def _run_gh(args: list[str], cwd: str = None, timeout: int = 20) -> dict:
         return {"ok": False, "error": str(e)}
 
 
+def _with_body_file(body: str, args: list[str], flag: str = "--body-file") -> str | None:
+    """如果 body 非空，写入临时文件并追加 flag + 路径到 args，返回文件路径用于后续清理。"""
+    if not body:
+        return None
+    f = tempfile.NamedTemporaryFile(mode="w", suffix=".md", delete=False, encoding="utf-8")
+    f.write(body)
+    f.close()
+    args.extend([flag, f.name])
+    return f.name
+
+
+def _cleanup(path: str | None) -> None:
+    if path:
+        try:
+            os.unlink(path)
+        except OSError:
+            pass
+
+
 def pr_create(cwd: str, title: str, body: str = "", base: str = "master", head: str = "") -> dict:
     """创建 Pull Request。"""
     args = ["pr", "create", "--title", title, "--base", base]
-    body_file = None
-    if body:
-        body_file = tempfile.NamedTemporaryFile(mode="w", suffix=".md", delete=False, encoding="utf-8")
-        body_file.write(body)
-        body_file.close()
-        args.extend(["--body-file", body_file.name])
+    tmp = _with_body_file(body, args)
     if head:
         args.extend(["--head", head])
     result = _run_gh(args, cwd=cwd, timeout=30)
-    if body_file:
-        try:
-            os.unlink(body_file.name)
-        except OSError:
-            pass
+    _cleanup(tmp)
     return result
 
 
@@ -109,21 +119,12 @@ def pr_merge(cwd: str, number: int = None, strategy: str = "squash") -> dict:
 def issue_create(cwd: str, title: str, body: str = "", labels: list[str] = None) -> dict:
     """创建 Issue。"""
     args = ["issue", "create", "--title", title]
-    body_file = None
-    if body:
-        body_file = tempfile.NamedTemporaryFile(mode="w", suffix=".md", delete=False, encoding="utf-8")
-        body_file.write(body)
-        body_file.close()
-        args.extend(["--body-file", body_file.name])
+    tmp = _with_body_file(body, args)
     if labels:
         for label in labels:
             args.extend(["--label", label])
     result = _run_gh(args, cwd=cwd, timeout=30)
-    if body_file:
-        try:
-            os.unlink(body_file.name)
-        except OSError:
-            pass
+    _cleanup(tmp)
     return result
 
 
@@ -153,18 +154,9 @@ def release_create(cwd: str, tag: str, notes: str = "", generate_notes: bool = T
     args = ["release", "create", tag]
     if generate_notes:
         args.append("--generate-notes")
-    notes_file = None
-    if notes:
-        notes_file = tempfile.NamedTemporaryFile(mode="w", suffix=".md", delete=False, encoding="utf-8")
-        notes_file.write(notes)
-        notes_file.close()
-        args.extend(["--notes-file", notes_file.name])
+    tmp = _with_body_file(notes, args, "--notes-file")
     result = _run_gh(args, cwd=cwd, timeout=30)
-    if notes_file:
-        try:
-            os.unlink(notes_file.name)
-        except OSError:
-            pass
+    _cleanup(tmp)
     return result
 
 

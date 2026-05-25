@@ -126,13 +126,11 @@ def push(cwd: str, remote: str = "origin", branch: str = "") -> dict:
             return {"ok": False, "error": f"无法获取当前分支: {b.get('error')}"}
         branch = b["branch"]
     
-    # 检查是否有未推送的 commit
+    # 检查是否有未推送的 commit（远程分支不存在时跳过，由后续 push 自己报错）
     r_check = _run_git(cwd, ["log", f"origin/{branch}..HEAD", "--oneline"])
-    if r_check["ok"] and not r_check["stdout"].strip():
-        return {"ok": False, "error": "没有未推送的提交——所有 commit 已在远程"}
-    # 远程分支不存在（新仓库首次推送）→ 允许推送
-    if not r_check["ok"] and "unknown revision" in r_check.get("stderr", ""):
-        pass
+    if r_check["ok"]:
+        if not r_check["stdout"].strip():
+            return {"ok": False, "error": "没有未推送的提交——所有 commit 已在远程"}
     
     args = ["push", remote, branch]
     return _run_git(cwd, args, timeout=30)
