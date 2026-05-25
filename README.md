@@ -51,7 +51,7 @@ data/plugins/
 
 > 其余 30+ 个工具为纯 Python 标准库，零外部依赖。
 
-## 工具列表 (41 个)
+## 工具列表 (55 个)
 
 ### 🔒 安全编辑链
 
@@ -93,14 +93,16 @@ data/plugins/
 | `file_hash` | MD5 / SHA1 / SHA256 计算 |
 | `file_zip` | ZIP 打包 |
 | `file_unzip` | ZIP 解压（含 Zip-slip 防护） |
-| `disk_info` | 所有磁盘分区使用情况 |
+| `disk_info` | 所有磁盘分区使用情况（Windows/Linux） |
+| `file_watch` | 目录文件变化监控 |
+| `config_diff` | JSON/YAML 配置文件 key 级差异比较 |
 
 ### 💻 系统信息
 
 | 工具 | 用途 |
 |------|------|
 | `port_check` | 端口检测 / 批量扫描 |
-| `proc_list` | 进程列表（按内存降序，支持名称过滤） |
+| `proc_list` | 进程列表（Windows/Linux） |
 | `sys_snapshot` | 系统快照（CPU/内存/进程数/开机时间） |
 
 ### 🌐 网络
@@ -116,23 +118,31 @@ data/plugins/
 | 工具 | 用途 |
 |------|------|
 | `html_extract` | HTML → 纯文本 / 链接 / 表格 / CSS 选择器 |
-| `json_query` | jq 式 JSON 路径查询（`[*]` / `[N]` / `[-1]`） |
+| `json_query` | jq 式 JSON 路径查询 |
 | `text_filter` | 行过滤（grep / head / tail / count / invert） |
 | `diff_strings` | 字符串 unified diff |
-| `regex_test` | 正则匹配测试（返回位置 + 分组） |
+| `regex_test` | 正则匹配测试 |
 | `regex_replace` | 正则替换（支持 `\1` 反向引用） |
 | `csv_parse` | CSV / TSV → 结构化数据 |
 | `csv_gen` | 结构化数据 → CSV / TSV |
 | `md_strip` | Markdown → 纯文本 |
+| `log_parse` | Nginx/Apache/syslog/JSON Lines 日志解析 |
 
 ### 🔧 实用工具
 
 | 工具 | 用途 |
 |------|------|
-| `encode_utils` | Base64 / URL / Hex 编解码 |
-| `time_utils` | 时间戳 ↔ ISO 转换、时间差 |
+| `base64_encode` / `_decode` | Base64 编解码 |
+| `url_encode` / `_decode` | URL 编解码 |
+| `hex_encode` / `_decode` | 十六进制编解码 |
+| `time_now` | 当前时间（ISO + 时间戳） |
+| `ts_to_iso` | 时间戳→ISO 字符串 |
+| `iso_to_ts` | ISO 字符串→时间戳 |
+| `time_diff` | 两个 ISO 时间的差值 |
 | `semver_compare` | 语义版本号比较 |
 | `uuid_gen` | UUID4 / hex / token 生成（密码学安全） |
+| `svg_render` | SVG→PNG 渲染（可选 cairosvg） |
+| `json_schema_val` | JSON Schema 校验（可选 jsonschema） |
 
 ### 🧠 Skill
 
@@ -142,7 +152,7 @@ data/plugins/
 
 ## 版本
 
-**1.2.0** — 配置系统 + 安全修复 + 路径脱敏
+**1.5.0** — 跨平台支持 + 工具拆分 + 新增 5 工具
 
 ## 作者
 

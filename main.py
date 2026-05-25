@@ -62,6 +62,11 @@ from .tools.gh_cli import (
     release_create as _gh_release_create, release_list as _gh_release_list,
     repo_view as _gh_repo_view, repo_create as _gh_repo_create, run_list as _gh_run_list, auth_status as _gh_auth_status,
 )
+from .tools.log_parse import parse as _log_parse
+from .tools.file_watch import watch as _file_watch
+from .tools.config_diff import diff as _config_diff
+from .tools.svg_render import render as _svg_render
+from .tools.json_schema_val import validate as _json_schema_val
 # ═══════════════════════════════════════════════════════════
 # Tool classes
 # ═══════════════════════════════════════════════════════════
@@ -1294,6 +1299,92 @@ class GhCliTool(FunctionTool):
             return _err(f"gh_cli.{action} 失败: {e}")
 
 
+@dataclass
+class LogParseTool(FunctionTool):
+    name: str = "log_parse"
+    description: str = "解析日志文本为结构化数据。支持 Nginx/Apache 访问日志、syslog、JSON Lines。format=auto 自动检测。"
+    parameters: dict = field(default_factory=lambda: {
+        "type": "object",
+        "properties": {
+            "text": {"type": "string", "description": "日志文本"},
+            "format": {"type": "string", "description": "auto / nginx / apache / syslog / jsonl", "default": "auto"},
+        },
+        "required": ["text"]
+    })
+    async def call(self, context, text: str, format: str = "auto", **kwargs) -> ToolExecResult:
+        try: return _unwrap(await _run_sync(_log_parse, text, format))
+        except Exception as e: return _err(f"log_parse 失败: {e}")
+
+
+@dataclass
+class FileWatchTool(FunctionTool):
+    name: str = "file_watch"
+    description: str = "监控目录/文件变化（轮询 mtime/size）。duration_s 监控时长(默认10s)，interval_s 轮询间隔(默认1s)。"
+    parameters: dict = field(default_factory=lambda: {
+        "type": "object",
+        "properties": {
+            "path": {"type": "string", "description": "目录或文件路径"},
+            "duration_s": {"type": "integer", "description": "监控时长（秒），默认 10"},
+            "interval_s": {"type": "number", "description": "轮询间隔（秒），默认 1.0"},
+        },
+        "required": ["path"]
+    })
+    async def call(self, context, path: str, duration_s: int = 10, interval_s: float = 1.0, **kwargs) -> ToolExecResult:
+        try: return _unwrap(await _run_sync(_file_watch, path, duration_s, interval_s))
+        except Exception as e: return _err(f"file_watch 失败: {e}")
+
+
+@dataclass
+class ConfigDiffTool(FunctionTool):
+    name: str = "config_diff"
+    description: str = "比较两个 JSON/YAML 配置文件的结构化差异（按 key 比较，非逐行 diff）。"
+    parameters: dict = field(default_factory=lambda: {
+        "type": "object",
+        "properties": {
+            "file_a": {"type": "string", "description": "第一个配置文件路径"},
+            "file_b": {"type": "string", "description": "第二个配置文件路径"},
+        },
+        "required": ["file_a", "file_b"]
+    })
+    async def call(self, context, file_a: str, file_b: str, **kwargs) -> ToolExecResult:
+        try: return _unwrap(await _run_sync(_config_diff, file_a, file_b))
+        except Exception as e: return _err(f"config_diff 失败: {e}")
+
+
+@dataclass
+class SvgRenderTool(FunctionTool):
+    name: str = "svg_render"
+    description: str = "将 SVG 文件渲染为 PNG。需要 cairosvg (pip install cairosvg)。"
+    parameters: dict = field(default_factory=lambda: {
+        "type": "object",
+        "properties": {
+            "svg_path": {"type": "string", "description": "SVG 文件路径"},
+            "output_path": {"type": "string", "description": "输出 PNG 路径，默认同名"},
+        },
+        "required": ["svg_path"]
+    })
+    async def call(self, context, svg_path: str, output_path: str = "", **kwargs) -> ToolExecResult:
+        try: return _unwrap(await _run_sync(_svg_render, svg_path, output_path))
+        except Exception as e: return _err(f"svg_render 失败: {e}")
+
+
+@dataclass
+class JsonSchemaValTool(FunctionTool):
+    name: str = "json_schema_val"
+    description: str = "根据 JSON Schema 校验 JSON 数据。需要 jsonschema (pip install jsonschema)。"
+    parameters: dict = field(default_factory=lambda: {
+        "type": "object",
+        "properties": {
+            "data": {"type": "string", "description": "JSON 字符串（待校验数据）"},
+            "schema": {"type": "string", "description": "JSON 字符串（Schema 定义）"},
+        },
+        "required": ["data", "schema"]
+    })
+    async def call(self, context, data: str, schema: str, **kwargs) -> ToolExecResult:
+        try: return _unwrap(await _run_sync(_json_schema_val, data, schema))
+        except Exception as e: return _err(f"json_schema_val 失败: {e}")
+
+
 
 # ═══════════════════════════════════════════════════════════
 # Plugin entry
@@ -1350,7 +1441,7 @@ class Main(star.Star):
                 except Exception:
                     pass
 
-        # 注册全部 49 个 LLM 工具
+        # 注册全部 55 个 LLM 工具
         context.add_llm_tools(
             SafeEditTool(),
             SafeRollbackTool(),
@@ -1401,5 +1492,10 @@ class Main(star.Star):
             SemverTool(),
             MdStripTool(),
             GhCliTool(),
+            LogParseTool(),
+            FileWatchTool(),
+            ConfigDiffTool(),
+            SvgRenderTool(),
+            JsonSchemaValTool(),
         )
-        logger.info("🔧 弥亚开发工具箱已就绪 — 49 个工具注册完毕")
+        logger.info("🔧 弥亚开发工具箱已就绪 — 55 个工具注册完毕")
