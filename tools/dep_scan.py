@@ -6,8 +6,6 @@ import ast
 import time
 from pathlib import Path
 
-from ._helpers import proposal_reply
-
 
 def scan(project_dir: str = ".", timeout: int = 10) -> dict:
     """扫描 Python 项目 import 依赖图，检测循环引用。

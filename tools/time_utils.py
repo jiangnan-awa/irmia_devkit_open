@@ -2,7 +2,7 @@
 time_utils — 时间工具。
 时间戳/ISO互转、当前时间、时差计算。纯 datetime 标准库。
 """
-from datetime import datetime, timezone, timedelta
+from datetime import datetime
 
 
 def now() -> dict:

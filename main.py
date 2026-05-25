@@ -58,7 +58,11 @@ class Main(star.Star):
                     _config[key] = paths[key]
                     changed = True
             if paths.get("lock_dirs"):
-                _config["lock_dirs"] = [d.strip() for d in paths["lock_dirs"].split(",") if d.strip()]
+                raw = paths["lock_dirs"]
+                if isinstance(raw, str):
+                    _config["lock_dirs"] = [d.strip() for d in raw.split(",") if d.strip()]
+                elif isinstance(raw, list):
+                    _config["lock_dirs"] = raw
                 changed = True
             # tool_groups / disabled_tools（顶层 key）
             web_groups = config.get("tool_groups", {})

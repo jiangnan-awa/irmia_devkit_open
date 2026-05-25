@@ -4,6 +4,8 @@ jsonschema 为可选依赖，未安装时返回错误提示。
 """
 import json
 
+from ._helpers import proposal_reply
+
 
 def validate(data: str, schema: str) -> dict:
     """根据 JSON Schema 校验 JSON 数据。

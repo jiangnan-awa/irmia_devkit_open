@@ -7,8 +7,6 @@ import json
 import shutil
 from pathlib import Path
 
-from ._helpers import proposal_reply
-
 
 def run(filepath: str, linter: str = "auto") -> dict:
     """对文件运行 linter，返回结构化 issues。

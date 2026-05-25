@@ -2,8 +2,6 @@
 project_init — 项目结构扫描与上下文生成。
 扫描项目根目录，detect 语言/框架/依赖，生成结构化 JSON 给 LLM。
 """
-import os
-import json
 import re
 from pathlib import Path
 
