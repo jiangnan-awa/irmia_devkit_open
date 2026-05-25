@@ -6,6 +6,7 @@ import subprocess
 import json
 import os
 import shutil
+import tempfile
 
 from .config import get_config
 
@@ -54,11 +55,21 @@ def _run_gh(args: list[str], cwd: str = None, timeout: int = 20) -> dict:
 def pr_create(cwd: str, title: str, body: str = "", base: str = "master", head: str = "") -> dict:
     """创建 Pull Request。"""
     args = ["pr", "create", "--title", title, "--base", base]
+    body_file = None
     if body:
-        args.extend(["--body", body])
+        body_file = tempfile.NamedTemporaryFile(mode="w", suffix=".md", delete=False, encoding="utf-8")
+        body_file.write(body)
+        body_file.close()
+        args.extend(["--body-file", body_file.name])
     if head:
         args.extend(["--head", head])
-    return _run_gh(args, cwd=cwd, timeout=30)
+    result = _run_gh(args, cwd=cwd, timeout=30)
+    if body_file:
+        try:
+            os.unlink(body_file.name)
+        except OSError:
+            pass
+    return result
 
 
 def pr_list(cwd: str, state: str = "open", limit: int = 10) -> dict:
@@ -98,12 +109,22 @@ def pr_merge(cwd: str, number: int = None, strategy: str = "squash") -> dict:
 def issue_create(cwd: str, title: str, body: str = "", labels: list[str] = None) -> dict:
     """创建 Issue。"""
     args = ["issue", "create", "--title", title]
+    body_file = None
     if body:
-        args.extend(["--body", body])
+        body_file = tempfile.NamedTemporaryFile(mode="w", suffix=".md", delete=False, encoding="utf-8")
+        body_file.write(body)
+        body_file.close()
+        args.extend(["--body-file", body_file.name])
     if labels:
         for label in labels:
             args.extend(["--label", label])
-    return _run_gh(args, cwd=cwd, timeout=30)
+    result = _run_gh(args, cwd=cwd, timeout=30)
+    if body_file:
+        try:
+            os.unlink(body_file.name)
+        except OSError:
+            pass
+    return result
 
 
 def issue_list(cwd: str, state: str = "open", limit: int = 10, labels: str = "") -> dict:
@@ -132,9 +153,19 @@ def release_create(cwd: str, tag: str, notes: str = "", generate_notes: bool = T
     args = ["release", "create", tag]
     if generate_notes:
         args.append("--generate-notes")
+    notes_file = None
     if notes:
-        args.extend(["--notes", notes])
-    return _run_gh(args, cwd=cwd, timeout=30)
+        notes_file = tempfile.NamedTemporaryFile(mode="w", suffix=".md", delete=False, encoding="utf-8")
+        notes_file.write(notes)
+        notes_file.close()
+        args.extend(["--notes-file", notes_file.name])
+    result = _run_gh(args, cwd=cwd, timeout=30)
+    if notes_file:
+        try:
+            os.unlink(notes_file.name)
+        except OSError:
+            pass
+    return result
 
 
 def release_list(cwd: str, limit: int = 5) -> dict:

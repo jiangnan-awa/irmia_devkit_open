@@ -130,6 +130,9 @@ def push(cwd: str, remote: str = "origin", branch: str = "") -> dict:
     r_check = _run_git(cwd, ["log", f"origin/{branch}..HEAD", "--oneline"])
     if r_check["ok"] and not r_check["stdout"].strip():
         return {"ok": False, "error": "没有未推送的提交——所有 commit 已在远程"}
+    # 远程分支不存在（新仓库首次推送）→ 允许推送
+    if not r_check["ok"] and "unknown revision" in r_check.get("stderr", ""):
+        pass
     
     args = ["push", remote, branch]
     return _run_git(cwd, args, timeout=30)
