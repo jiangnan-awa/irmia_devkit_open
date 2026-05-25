@@ -74,6 +74,8 @@ from .dep_scan import scan as _dep_scan
 # Tool classes
 # ═══════════════════════════════════════════════════════════
 
+
+# ══ 安全编辑链 (7) ══
 @dataclass
 class SafeEditTool(FunctionTool):
     """安全编辑：自动备份→精确替换→语法检查→通过保留/失败回滚。"""
@@ -231,6 +233,8 @@ class SyntaxCheckTool(FunctionTool):
             return _err(f"syntax_check 失败: {e}")
 
 
+
+# ══ Git & GitHub (11) ══
 @dataclass
 class GitStatusTool(FunctionTool):
     """Git 状态。"""
@@ -395,6 +399,8 @@ class GitPushTool(FunctionTool):
             return _err(f"git_push 失败: {e}")
 
 
+
+# ══ 文件系统 (10) ══
 @dataclass
 class EsSearchTool(FunctionTool):
     """Everything 文件名极速搜索。"""
@@ -443,6 +449,8 @@ class EsSearchTool(FunctionTool):
             return _err(f"es_search 失败: {e}")
 
 
+
+# ══ 网络 (3) ══
 @dataclass
 class HttpGetTool(FunctionTool):
     """HTTP GET 请求。"""
@@ -534,6 +542,8 @@ class HttpDownloadTool(FunctionTool):
             return _err(f"http_download 失败: {e}")
 
 
+
+# ══ 文本处理 (10) ══
 @dataclass
 class HtmlExtractTool(FunctionTool):
     """HTML 内容提取。"""
@@ -616,6 +626,8 @@ class DiskInfoTool(FunctionTool):
             return _err(f"disk_info 失败: {e}")
 
 
+
+# ══ 系统信息 (4) ══
 @dataclass
 class PortCheckTool(FunctionTool):
     """端口检测。"""
@@ -804,6 +816,8 @@ class SysSnapshotTool(FunctionTool):
             return _err(f"sys_snapshot 失败: {e}")
 
 
+
+# ══ 编码 (6) ══
 @dataclass
 class Base64EncodeTool(FunctionTool):
     name: str = "base64_encode"
@@ -900,6 +914,8 @@ class HexDecodeTool(FunctionTool):
         except Exception as e: return _err(f"hex_decode 失败: {e}")
 
 
+
+# ══ 时间 (4) ══
 @dataclass
 class TimeNowTool(FunctionTool):
     name: str = "time_now"
@@ -1182,6 +1198,8 @@ class CsvGenTool(FunctionTool):
             return _err(f"csv_gen 失败: {e}")
 
 
+
+# ══ 扩展 (8) ══
 @dataclass
 class UuidGenTool(FunctionTool):
     """UUID/随机字符串生成。"""

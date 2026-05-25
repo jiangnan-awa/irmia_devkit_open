@@ -64,6 +64,8 @@ data/plugins/
 
 ## 工具列表 (63 个)
 
+> 快速查找: `safe_edit` / `git_commit` / `es_search` / `http_get` / `log_parse` / `base64_encode` / `time_now` / `project_init` / `lint_runner` / `db_query` ...
+
 ### 🔒 安全编辑链 (7)
 
 | 工具 | 用途 |
