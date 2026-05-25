@@ -1475,10 +1475,6 @@ class Main(star.Star):
             if web_disabled:
                 _config["disabled_tools"] = [t.strip() for t in web_disabled.split(",") if t.strip()]
                 changed = True
-            web_disabled = config.get("disabled_tools", "")
-            if web_disabled:
-                _config["disabled_tools"] = [t.strip() for t in web_disabled.split(",") if t.strip()]
-                changed = True
             if changed:
                 try:
                     with open(config_path, "w", encoding="utf-8") as f:
