@@ -3,15 +3,15 @@
     "description": "工具组开关（关闭整组禁用该组所有工具，需重启生效）",
     "type": "object",
     "items": {
-      "安全编辑链": { "type": "bool", "default": true },
-      "Git & GitHub": { "type": "bool", "default": true },
-      "文件系统": { "type": "bool", "default": true },
-      "系统信息": { "type": "bool", "default": true },
-      "网络": { "type": "bool", "default": true },
-      "文本处理": { "type": "bool", "default": true },
-      "编码": { "type": "bool", "default": true },
-      "时间": { "type": "bool", "default": true },
-      "扩展": { "type": "bool", "default": true }
+      "安全编辑链": { "type": "bool", "default": true, "description": "🔒 安全编辑链 — 自动备份、精确替换、语法检查" },
+      "Git & GitHub": { "type": "bool", "default": true, "description": "🔀 Git & GitHub — 状态/差异/提交/分支/推送/CLI" },
+      "文件系统": { "type": "bool", "default": true, "description": "📁 文件系统 — 搜索/浏览/哈希/压缩/磁盘" },
+      "系统信息": { "type": "bool", "default": true, "description": "📊 系统信息 — 端口/进程/系统快照" },
+      "网络": { "type": "bool", "default": true, "description": "🌐 网络 — HTTP GET/POST/下载" },
+      "文本处理": { "type": "bool", "default": true, "description": "📝 文本处理 — HTML/JSON/CSV/正则/日志" },
+      "编码": { "type": "bool", "default": true, "description": "🔤 编码 — Base64/URL/Hex 编解码" },
+      "时间": { "type": "bool", "default": true, "description": "⏱ 时间 — 时间戳/ISO互转/时间差" },
+      "扩展": { "type": "bool", "default": true, "description": "🧩 扩展 — SVG/Schema/版本/UUID" }
     }
   },
   "disabled_tools": {
