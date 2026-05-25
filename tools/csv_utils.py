@@ -51,15 +51,17 @@ def parse(text: str, delimiter: str = "auto", has_header: bool = True) -> dict:
             row_data[key] = val.strip()
         data_rows.append(row_data)
 
-    return {
+    r = {
         "ok": True,
         "delimiter": "tab" if delimiter == "\t" else "comma",
         "headers": headers,
         "rows": data_rows[:200],
         "count": len(data_rows),
         "truncated": len(data_rows) > 200,
-        "proposal": f"CSV 解析成功，{len(data_rows)} 行数据{'，已截断至200行' if len(data_rows) > 200 else ''}" if len(data_rows) > 200 else "",
     }
+    if len(data_rows) > 200:
+        r["proposal"] = f"CSV 解析成功，{len(data_rows)} 行数据，已截断至200行"
+    return r
 
 
 def generate(rows: list[dict], delimiter: str = ",") -> dict:

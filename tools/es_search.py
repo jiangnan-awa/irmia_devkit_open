@@ -162,10 +162,12 @@ def search(
             "date_modified": date_mod,
         })
 
-    return {
+    r = {
         "ok": True,
         "count": len(items),
         "total_size": total_size,
         "items": items,
-        "proposal": f"搜索无结果 (query: {query})——尝试放宽条件或移除过滤" if len(items) == 0 else "",
     }
+    if len(items) == 0:
+        r["proposal"] = f"搜索无结果 (query: {query})——尝试放宽条件或移除过滤"
+    return r

@@ -40,16 +40,18 @@ def parse(text: str, format: str = "auto", max_lines: int = 200) -> dict:
         except Exception:
             errors += 1
 
-    return {
+    r = {
         "ok": True,
         "format": format,
         "parsed": len(results),
         "total_lines": min(len(lines), max_lines),
         "errors": errors,
         "entries": results,
-        "proposal": f"解析完成：{len(results)}条/{errors}条失败——格式={format}。{'尝试切换 format 参数' if errors > 0 else ''}" if errors > 0 else "",
-        "options": ["尝试其他 format (nginx/apache/syslog/jsonl)"] if errors > 0 else None,
     }
+    if errors > 0:
+        r["proposal"] = f"解析完成：{len(results)}条成功/{errors}条失败——格式={format}。尝试切换 format 参数。"
+        r["options"] = ["尝试其他 format (nginx/apache/syslog/jsonl)"]
+    return r
 
 
 _NGINX_RE = re.compile(

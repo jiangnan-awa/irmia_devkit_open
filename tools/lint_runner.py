@@ -60,11 +60,11 @@ def _run_ruff(p: Path) -> dict:
         if r.returncode == 0:
             return {"ok": True, "linter": "ruff", "issues": [], "count": 0}
         issues = json.loads(r.stdout) if r.stdout.strip() else []
-        return {
-            "ok": True, "linter": "ruff", "issues": issues, "count": len(issues),
-            "proposal": f"ruff发现{len(issues)}个问题" if issues else "",
-            "options": ["逐个修复", "确认是否有意为之"] if issues else None,
-        }
+        r = {"ok": True, "linter": "ruff", "issues": issues, "count": len(issues)}
+        if issues:
+            r["proposal"] = f"ruff发现{len(issues)}个问题"
+            r["options"] = ["逐个修复", "确认是否有意为之"]
+        return r
     except json.JSONDecodeError:
         return {"ok": True, "linter": "ruff", "raw": r.stdout.strip()[:2000], "count": 0}
     except subprocess.TimeoutExpired:
@@ -82,11 +82,11 @@ def _run_pylint(p: Path) -> dict:
             capture_output=True, text=True, timeout=60
         )
         issues = json.loads(r.stdout) if r.stdout.strip() else []
-        return {
-            "ok": True, "linter": "pylint", "issues": issues, "count": len(issues),
-            "proposal": f"pylint发现{len(issues)}个问题" if issues else "",
-            "options": ["逐个修复", "确认是否有意为之"] if issues else None,
-        }
+        r = {"ok": True, "linter": "pylint", "issues": issues, "count": len(issues)}
+        if issues:
+            r["proposal"] = f"pylint发现{len(issues)}个问题"
+            r["options"] = ["逐个修复", "确认是否有意为之"]
+        return r
     except json.JSONDecodeError:
         return {"ok": True, "linter": "pylint", "raw": r.stdout.strip()[:2000], "count": 0}
     except subprocess.TimeoutExpired:
@@ -106,11 +106,11 @@ def _run_eslint(p: Path) -> dict:
         result = json.loads(r.stdout) if r.stdout.strip() else []
         if isinstance(result, list) and len(result) > 0:
             messages = result[0].get("messages", [])
-            return {
-                "ok": True, "linter": "eslint", "issues": messages, "count": len(messages),
-                "proposal": f"eslint发现{len(messages)}个问题" if messages else "",
-                "options": ["逐个修复", "确认是否有意为之"] if messages else None,
-            }
+            r = {"ok": True, "linter": "eslint", "issues": messages, "count": len(messages)}
+            if messages:
+                r["proposal"] = f"eslint发现{len(messages)}个问题"
+                r["options"] = ["逐个修复", "确认是否有意为之"]
+            return r
         return {"ok": True, "linter": "eslint", "issues": [], "count": 0}
     except json.JSONDecodeError:
         return {"ok": True, "linter": "eslint", "raw": r.stdout.strip()[:2000], "count": 0}
