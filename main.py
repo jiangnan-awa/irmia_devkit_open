@@ -1209,95 +1209,167 @@ class MdStripTool(FunctionTool):
 
 
 @dataclass
-class GhCliTool(FunctionTool):
-    """GitHub CLI 工具箱 — PR、Issue、Release、CI 全流程。"""
-    name: str = "gh_cli"
+class GhPrTool(FunctionTool):
+    """GitHub Pull Request 操作。"""
+    name: str = "gh_pr"
     description: str = (
-        "GitHub CLI 封装。直接操作 GitHub，无需浏览器。\n"
-        "支持操作: repo_create(创建仓库+推送) / pr_create(创建PR) / pr_list(列出PR) / pr_merge(合并PR) / pr_view(查看PR) / "
-        "issue_create(创建Issue) / issue_list(列出Issue) / issue_close(关闭Issue) / "
-        "release_create(发布Release) / release_list(列出Release) / "
-        "repo_view(仓库信息) / run_list(CI状态) / auth_status(认证检查)\n"
-        "参数: action(必填), cwd(仓库路径,选填), 及各操作特有参数"
+        "GitHub Pull Request 管理。action: create(创建) / list(列出) / merge(合并) / view(查看)。"
+        "create 需 title+body+base+head；list 支持 state+limit；merge 需 number+strategy；view 需 number。"
     )
     parameters: dict = field(default_factory=lambda: {
         "type": "object",
         "properties": {
-            "action": {
-                "type": "string",
-                "description": "操作: repo_create / pr_create / pr_list / pr_merge / pr_view / issue_create / issue_list / issue_close / release_create / release_list / repo_view / run_list / auth_status",
-                "enum": ["repo_create", "pr_create", "pr_list", "pr_merge", "pr_view", "issue_create", "issue_list", "issue_close", "release_create", "release_list", "repo_view", "run_list", "auth_status"]
-            },
+            "action": {"type": "string", "description": "操作: create / list / merge / view", "enum": ["create", "list", "merge", "view"]},
             "cwd": {"type": "string", "description": "仓库路径，默认当前工作目录"},
-            "title": {"type": "string", "description": "PR/Issue 标题（pr_create/issue_create 时必填）"},
-            "body": {"type": "string", "description": "PR/Issue 正文（pr_create/issue_create 时可选）"},
-            "tag": {"type": "string", "description": "Release 标签，如 v1.2.3（release_create 时必填）"},
-            "number": {"type": "integer", "description": "PR/Issue 编号（pr_view/pr_merge/issue_close 时使用）"},
-            "state": {"type": "string", "description": "筛选状态: open/closed/merged（pr_list/issue_list 时默认 open）"},
-            "limit": {"type": "integer", "description": "返回数量上限（pr_list/issue_list/release_list/run_list 时默认 10）"},
-            "labels": {"type": "string", "description": "Issue 标签，逗号分隔（issue_create/issue_list 时可选）"},
-            "generate_notes": {"type": "boolean", "description": "自动生成 release notes（release_create 时默认 true）"},
-            # L4-L5: 补全缺失参数
-            "public": {"type": "boolean", "description": "repo_create 时是否创建公开仓库（默认 false=私有）"},
-            "base": {"type": "string", "description": "pr_create 时的目标分支，默认 master"},
-            "head": {"type": "string", "description": "pr_create 时的源分支，默认当前分支"},
-            "strategy": {"type": "string", "description": "pr_merge 合并策略: squash/rebase/merge，默认 squash"},
-            "owner_repo": {"type": "string", "description": "repo_view 时指定仓库，格式 owner/repo，默认当前仓库"},
+            "title": {"type": "string", "description": "PR 标题（create 时必填）"},
+            "body": {"type": "string", "description": "PR 正文（create 时可选）"},
+            "number": {"type": "integer", "description": "PR 编号（merge/view 时使用）"},
+            "state": {"type": "string", "description": "list 时筛选: open/closed/merged"},
+            "limit": {"type": "integer", "description": "list 时返回数量上限"},
+            "base": {"type": "string", "description": "create 时目标分支，默认 master"},
+            "head": {"type": "string", "description": "create 时源分支，默认当前分支"},
+            "strategy": {"type": "string", "description": "merge 时合并策略: squash/rebase/merge"},
         },
         "required": ["action"]
     })
-
     async def call(self, context: ContextWrapper[AstrAgentContext], action: str,
-                   cwd: str = "", title: str = "", body: str = "", tag: str = "",
+                   cwd: str = "", title: str = "", body: str = "",
                    number: int = 0, state: str = "open", limit: int = 10,
-                   labels: str = "", generate_notes: bool = True,
-                   public: bool = False, base: str = "master", head: str = "",
-                   strategy: str = "squash", owner_repo: str = "", **kwargs) -> ToolExecResult:
+                   base: str = "master", head: str = "", strategy: str = "squash", **kwargs) -> ToolExecResult:
         try:
-            result = None
             match action:
-                case "pr_create":
-                    if not title:
-                        return _err("pr_create 需要 title 参数")
+                case "create":
+                    if not title: return _err("gh_pr create 需要 title 参数")
                     result = await _run_sync(_gh_pr_create, cwd or "", title, body, base, head)
-                case "pr_list":
+                case "list":
                     result = await _run_sync(_gh_pr_list, cwd or "", state, limit)
-                case "pr_merge":
+                case "merge":
                     result = await _run_sync(_gh_pr_merge, cwd or "", number if number else None, strategy)
-                case "pr_view":
+                case "view":
                     result = await _run_sync(_gh_pr_view, cwd or "", number if number else None)
-                case "issue_create":
-                    if not title:
-                        return _err("issue_create 需要 title 参数")
-                    lbls = [l.strip() for l in labels.split(",")] if labels else None
-                    result = await _run_sync(_gh_issue_create, cwd or "", title, body, lbls)
-                case "issue_list":
-                    result = await _run_sync(_gh_issue_list, cwd or "", state, limit, labels)
-                case "issue_close":
-                    if not number:
-                        return _err("issue_close 需要 number 参数")
-                    result = await _run_sync(_gh_issue_close, cwd or "", number)
-                case "release_create":
-                    if not tag:
-                        return _err("release_create 需要 tag 参数")
-                    result = await _run_sync(_gh_release_create, cwd or "", tag, body, generate_notes)
-                case "release_list":
-                    result = await _run_sync(_gh_release_list, cwd or "", limit)
-                case "repo_view":
-                    result = await _run_sync(_gh_repo_view, cwd or "", owner_repo)
-                case "repo_create":
-                    if not title:
-                        return _err("repo_create 需要 title 参数（仓库名）")
-                    result = await _run_sync(_gh_repo_create, title, not public, cwd or "", True)
-                case "run_list":
-                    result = await _run_sync(_gh_run_list, cwd or "", limit)
-                case "auth_status":
-                    result = await _run_sync(_gh_auth_status)
-                case _:
-                    return _err(f"未知操作: {action}")
+                case _: return _err(f"未知操作: {action}")
             return _unwrap(result)
         except Exception as e:
-            return _err(f"gh_cli.{action} 失败: {e}")
+            return _err(f"gh_pr.{action} 失败: {e}")
+
+
+@dataclass
+class GhIssueTool(FunctionTool):
+    """GitHub Issue 操作。"""
+    name: str = "gh_issue"
+    description: str = (
+        "GitHub Issue 管理。action: create(创建) / list(列出) / close(关闭)。"
+        "create 需 title+body+labels；list 支持 state+limit+labels；close 需 number。"
+    )
+    parameters: dict = field(default_factory=lambda: {
+        "type": "object",
+        "properties": {
+            "action": {"type": "string", "description": "操作: create / list / close", "enum": ["create", "list", "close"]},
+            "cwd": {"type": "string", "description": "仓库路径，默认当前工作目录"},
+            "title": {"type": "string", "description": "Issue 标题（create 时必填）"},
+            "body": {"type": "string", "description": "Issue 正文（create 时可选）"},
+            "number": {"type": "integer", "description": "Issue 编号（close 时使用）"},
+            "state": {"type": "string", "description": "list 时筛选: open/closed"},
+            "limit": {"type": "integer", "description": "list 时返回数量上限"},
+            "labels": {"type": "string", "description": "标签，逗号分隔（create/list 时可选）"},
+        },
+        "required": ["action"]
+    })
+    async def call(self, context: ContextWrapper[AstrAgentContext], action: str,
+                   cwd: str = "", title: str = "", body: str = "",
+                   number: int = 0, state: str = "open", limit: int = 10,
+                   labels: str = "", **kwargs) -> ToolExecResult:
+        try:
+            match action:
+                case "create":
+                    if not title: return _err("gh_issue create 需要 title 参数")
+                    lbls = [l.strip() for l in labels.split(",")] if labels else None
+                    result = await _run_sync(_gh_issue_create, cwd or "", title, body, lbls)
+                case "list":
+                    result = await _run_sync(_gh_issue_list, cwd or "", state, limit, labels)
+                case "close":
+                    if not number: return _err("gh_issue close 需要 number 参数")
+                    result = await _run_sync(_gh_issue_close, cwd or "", number)
+                case _: return _err(f"未知操作: {action}")
+            return _unwrap(result)
+        except Exception as e:
+            return _err(f"gh_issue.{action} 失败: {e}")
+
+
+@dataclass
+class GhReleaseTool(FunctionTool):
+    """GitHub Release 操作。"""
+    name: str = "gh_release"
+    description: str = (
+        "GitHub Release 管理。action: create(创建发布) / list(列出发布)。"
+        "create 需 tag+notes+generate_notes；list 支持 limit。"
+    )
+    parameters: dict = field(default_factory=lambda: {
+        "type": "object",
+        "properties": {
+            "action": {"type": "string", "description": "操作: create / list", "enum": ["create", "list"]},
+            "cwd": {"type": "string", "description": "仓库路径，默认当前工作目录"},
+            "tag": {"type": "string", "description": "Release 标签，如 v1.2.3（create 时必填）"},
+            "notes": {"type": "string", "description": "Release 说明（create 时可选）"},
+            "generate_notes": {"type": "boolean", "description": "自动生成 release notes（create 时默认 true）"},
+            "limit": {"type": "integer", "description": "list 时返回数量上限"},
+        },
+        "required": ["action"]
+    })
+    async def call(self, context: ContextWrapper[AstrAgentContext], action: str,
+                   cwd: str = "", tag: str = "", notes: str = "",
+                   generate_notes: bool = True, limit: int = 5, **kwargs) -> ToolExecResult:
+        try:
+            match action:
+                case "create":
+                    if not tag: return _err("gh_release create 需要 tag 参数")
+                    result = await _run_sync(_gh_release_create, cwd or "", tag, notes, generate_notes)
+                case "list":
+                    result = await _run_sync(_gh_release_list, cwd or "", limit)
+                case _: return _err(f"未知操作: {action}")
+            return _unwrap(result)
+        except Exception as e:
+            return _err(f"gh_release.{action} 失败: {e}")
+
+
+@dataclass
+class GhRepoTool(FunctionTool):
+    """GitHub 仓库与 CI 操作。"""
+    name: str = "gh_repo"
+    description: str = (
+        "GitHub 仓库管理。action: create(创建仓库+推送) / view(查看仓库信息) / runs(查看CI) / auth(认证检查)。"
+        "create 需 title(仓库名)+public；view 支持 owner_repo；runs 支持 limit。"
+    )
+    parameters: dict = field(default_factory=lambda: {
+        "type": "object",
+        "properties": {
+            "action": {"type": "string", "description": "操作: create / view / runs / auth", "enum": ["create", "view", "runs", "auth"]},
+            "cwd": {"type": "string", "description": "仓库路径，默认当前工作目录"},
+            "title": {"type": "string", "description": "仓库名（create 时必填）"},
+            "owner_repo": {"type": "string", "description": "仓库，格式 owner/repo（view 时可选）"},
+            "public": {"type": "boolean", "description": "create 时是否公开仓库"},
+            "limit": {"type": "integer", "description": "runs 时返回数量上限"},
+        },
+        "required": ["action"]
+    })
+    async def call(self, context: ContextWrapper[AstrAgentContext], action: str,
+                   cwd: str = "", title: str = "", owner_repo: str = "",
+                   public: bool = False, limit: int = 5, **kwargs) -> ToolExecResult:
+        try:
+            match action:
+                case "create":
+                    if not title: return _err("gh_repo create 需要 title 参数（仓库名）")
+                    result = await _run_sync(_gh_repo_create, title, not public, cwd or "", True)
+                case "view":
+                    result = await _run_sync(_gh_repo_view, cwd or "", owner_repo)
+                case "runs":
+                    result = await _run_sync(_gh_run_list, cwd or "", limit)
+                case "auth":
+                    result = await _run_sync(_gh_auth_status)
+                case _: return _err(f"未知操作: {action}")
+            return _unwrap(result)
+        except Exception as e:
+            return _err(f"gh_repo.{action} 失败: {e}")
 
 
 @dataclass
@@ -1393,7 +1465,7 @@ class JsonSchemaValTool(FunctionTool):
 
 TOOL_GROUPS: dict[str, list[str]] = {
     "安全编辑链": ["safe_edit", "safe_rollback", "safe_backups", "file_patch", "file_preview", "syntax_check"],
-    "Git & GitHub": ["git_status", "git_diff", "git_log", "git_commit", "git_branch", "git_remote", "git_push", "gh_cli"],
+    "Git & GitHub": ["git_status", "git_diff", "git_log", "git_commit", "git_branch", "git_remote", "git_push", "gh_pr", "gh_issue", "gh_release", "gh_repo"],
     "文件系统": ["es_search", "dir_tree", "dir_list", "file_diff", "file_hash", "file_zip", "file_unzip", "disk_info", "file_watch", "config_diff"],
     "系统信息": ["port_check", "proc_list", "sys_snapshot"],
     "网络": ["http_get", "http_post", "http_download"],
@@ -1486,7 +1558,7 @@ class Main(star.Star):
             "file_patch": FilePatchTool, "file_preview": FilePreviewTool, "syntax_check": SyntaxCheckTool,
             "git_status": GitStatusTool, "git_diff": GitDiffTool, "git_log": GitLogTool,
             "git_commit": GitCommitTool, "git_branch": GitBranchTool, "git_remote": GitRemoteTool, "git_push": GitPushTool,
-            "gh_cli": GhCliTool,
+            "gh_pr": GhPrTool, "gh_issue": GhIssueTool, "gh_release": GhReleaseTool, "gh_repo": GhRepoTool,
             "es_search": EsSearchTool, "dir_tree": DirTreeTool, "dir_list": DirListTool,
             "file_diff": FileDiffTool, "file_hash": FileHashTool, "file_zip": FileZipTool, "file_unzip": FileUnzipTool,
             "disk_info": DiskInfoTool, "file_watch": FileWatchTool, "config_diff": ConfigDiffTool,
