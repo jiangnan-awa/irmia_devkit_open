@@ -77,9 +77,10 @@ def pr_create(cwd: str, title: str, body: str = "", base: str = "master", head: 
     tmp = _with_body_file(body, args)
     if head:
         args.extend(["--head", head])
-    result = _run_gh(args, cwd=cwd, timeout=30)
-    _cleanup(tmp)
-    return result
+    try:
+        return _run_gh(args, cwd=cwd, timeout=30)
+    finally:
+        _cleanup(tmp)
 
 
 def pr_list(cwd: str, state: str = "open", limit: int = 10) -> dict:
@@ -123,9 +124,10 @@ def issue_create(cwd: str, title: str, body: str = "", labels: list[str] = None)
     if labels:
         for label in labels:
             args.extend(["--label", label])
-    result = _run_gh(args, cwd=cwd, timeout=30)
-    _cleanup(tmp)
-    return result
+    try:
+        return _run_gh(args, cwd=cwd, timeout=30)
+    finally:
+        _cleanup(tmp)
 
 
 def issue_list(cwd: str, state: str = "open", limit: int = 10, labels: str = "") -> dict:
@@ -155,9 +157,10 @@ def release_create(cwd: str, tag: str, notes: str = "", generate_notes: bool = T
     if generate_notes:
         args.append("--generate-notes")
     tmp = _with_body_file(notes, args, "--notes-file")
-    result = _run_gh(args, cwd=cwd, timeout=30)
-    _cleanup(tmp)
-    return result
+    try:
+        return _run_gh(args, cwd=cwd, timeout=30)
+    finally:
+        _cleanup(tmp)
 
 
 def release_list(cwd: str, limit: int = 5) -> dict:

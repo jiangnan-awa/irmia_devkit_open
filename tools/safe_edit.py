@@ -102,7 +102,7 @@ def edit(filepath: str, old: str, new: str, replace_all: bool = False, occurrenc
         }
     
     # 1. 备份（在任何修改之前）
-    ts = datetime.now().strftime("%Y%m%d_%H%M%S")
+    ts = datetime.now().strftime("%Y%m%d_%H%M%S_%f")
     backup_path = _backup_dir() / f"{p.name}.{ts}.bak"
     _backup_dir().mkdir(parents=True, exist_ok=True)
     shutil.copy2(filepath, str(backup_path))
