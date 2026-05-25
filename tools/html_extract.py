@@ -28,6 +28,7 @@ def extract(html: str, what: str = "text", selector: str = "") -> dict:
         except Exception as e:
             return {"ok": False, "error": f"HTML 解析器初始化失败: {e}"}
 
+    try:
         if what == "text":
             # 移除 script/style
             for tag in soup(["script", "style", "nav", "footer", "header"]):

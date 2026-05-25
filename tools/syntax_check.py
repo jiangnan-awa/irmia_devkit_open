@@ -42,6 +42,8 @@ def _check_python(p: Path) -> dict:
             source = p.read_text(encoding="gbk")
         except Exception:
             source = p.read_text(encoding="utf-8", errors="replace")
+
+    try:
         ast.parse(source)
         return {"ok": True, "language": "python"}
     except SyntaxError as e:
@@ -96,7 +98,6 @@ def _check_go(p: Path) -> dict:
             capture_output=True, text=True, timeout=15
         )
         stderr = result.stderr.strip()
-        # gofmt -e 向 stderr 输出语法错误，stdout 输出格式化结果
         if result.returncode == 0 and not stderr:
             return {"ok": True, "language": "go"}
         return {"ok": False, "language": "go", "errors": [{"msg": stderr}]}
