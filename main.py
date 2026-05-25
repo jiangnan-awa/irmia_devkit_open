@@ -1,0 +1,1404 @@
+"""
+astrbot_plugin_irmia_devkit — 弥亚开发工具箱
+为弥亚提供安全、精确的代码开发工具：safe_edit、git_smart、syntax_check、file_patch。
+"""
+from __future__ import annotations
+
+import asyncio
+import json
+import os
+from dataclasses import dataclass, field
+from pathlib import Path
+from typing import Any
+
+from astrbot.api import FunctionTool, logger, star
+from astrbot.core.agent.run_context import ContextWrapper
+from astrbot.core.agent.tool import ToolExecResult
+from astrbot.core.astr_agent_context import AstrAgentContext
+
+from .tools import config as _tool_config
+
+# ── 导入工具函数 ──
+
+from .tools.file_patch import patch as _file_patch, preview as _file_preview
+from .tools.git_smart import (
+    status as _git_status, diff as _git_diff, log as _git_log,
+    commit as _git_commit, current_branch as _git_branch, remote_url as _git_remote,
+    push as _git_push,
+)
+from .tools.syntax_check import check as _syntax_check
+from .tools.safe_edit import edit as _safe_edit, list_backups as _list_backups, rollback as _rollback
+from .tools.es_search import search as _es_search
+from .tools.http_get import get as _http_get, post as _http_post
+from .tools.http_download import download as _http_download
+from .tools.html_extract import extract as _html_extract
+from .tools.dir_tree import tree as _dir_tree
+from .tools.disk_info import info as _disk_info
+from .tools.port_check import check as _port_check, scan as _port_scan
+from .tools.file_diff import compare as _file_diff
+from .tools.proc_list import list_processes as _proc_list
+from .tools.file_hash import compute as _file_hash
+from .tools.file_zip import compress as _file_zip, extract as _file_unzip
+from .tools.sys_snapshot import snapshot as _sys_snapshot
+from .tools.encode_utils import (
+    b64_encode, b64_decode, url_encode, url_decode, hex_encode, hex_decode
+)
+from .tools.time_utils import now as _time_now, ts_to_iso, iso_to_ts, time_diff
+from .tools.regex_tester import test as _regex_test, replace as _regex_replace
+from .tools.dir_list import list_dir as _list_dir
+from .tools.json_query import query as _json_query
+from .tools.text_filter import filter_lines as _text_filter
+from .tools.diff_strings import diff as _diff_strings
+from .tools.csv_utils import parse as _csv_parse, generate as _csv_gen
+from .tools.uuid_gen import gen as _uuid_gen
+from .tools.semver import compare as _semver_compare
+from .tools.md_strip import strip as _md_strip
+from .tools.gh_cli import (
+    pr_create as _gh_pr_create, pr_list as _gh_pr_list, pr_merge as _gh_pr_merge,
+    pr_view as _gh_pr_view,
+    issue_create as _gh_issue_create, issue_list as _gh_issue_list, issue_close as _gh_issue_close,
+    release_create as _gh_release_create, release_list as _gh_release_list,
+    repo_view as _gh_repo_view, repo_create as _gh_repo_create, run_list as _gh_run_list, auth_status as _gh_auth_status,
+)
+from .tools.opencode import run as _opencode_run
+
+
+def _ok(data: Any = None) -> str:
+    result: dict[str, Any] = {"ok": True}
+    if data is not None:
+        result["data"] = data
+    return json.dumps(result, ensure_ascii=False)
+
+
+def _err(error: str) -> str:
+    return json.dumps({"ok": False, "error": error}, ensure_ascii=False)
+
+
+# C7: 将同步阻塞调用包装为异步，防止事件循环卡死
+async def _run_sync(func, *args, **kwargs):
+    """在默认线程池中运行同步函数，避免阻塞 AstrBot 事件循环。"""
+    loop = asyncio.get_running_loop()
+    return await loop.run_in_executor(None, lambda: func(*args, **kwargs))
+
+
+# M14: 检测子函数返回的 {"ok": false} 并展开，防止嵌套 ok 误导 LLM
+def _unwrap(result: dict) -> str:
+    """M14: 检测嵌套 ok:false 并展开；成功则正常包装。"""
+    if not isinstance(result, dict):
+        return _err(f"工具返回了非预期类型: {type(result).__name__}")
+    if result.get("ok") is False:
+        return _err(result.get("error", "未知错误"))
+    return json.dumps({"ok": True, "data": result}, ensure_ascii=False)
+
+
+# ═══════════════════════════════════════════════════════════
+# Tool classes
+# ═══════════════════════════════════════════════════════════
+
+@dataclass
+class SafeEditTool(FunctionTool):
+    """安全编辑：自动备份→精确替换→语法检查→通过保留/失败回滚。"""
+    name: str = "safe_edit"
+    description: str = (
+        "【改代码文件唯一选择】安全编辑：自动备份→精确替换→语法检查→"
+        "通过保留/失败自动回滚。支持 .py/.nim/.go/.js/.ts（语法检查）+ 其他扩展名（跳过语法检查）。"
+        "不要用 file_write 改已有代码，不要用 astrbot_file_edit_tool 改代码（它无备份无语法检查）。"
+        "非代码文件（.md/.txt/.json）可以用 file_patch 或 safe_edit，两者均可。"
+        "当 old 文本在文件中多处匹配时，工具会报错并列出所有位置——用 occurrence=N 指定第几次出现继续。"
+    )
+    parameters: dict = field(default_factory=lambda: {
+        "type": "object",
+        "properties": {
+            "filepath": {"type": "string", "description": "文件路径"},
+            "old": {"type": "string", "description": "要被替换的旧文本（精确匹配，包括缩进）"},
+            "new": {"type": "string", "description": "替换后的新文本"},
+            "replace_all": {"type": "boolean", "description": "是否替换所有匹配项，默认 false", "default": False},
+            "occurrence": {"type": "integer", "description": "替换第 N 次出现（1-based）。当多处匹配时用于消歧", "default": 0}
+        },
+        "required": ["filepath", "old", "new"]
+    })
+
+    async def call(self, context: ContextWrapper[AstrAgentContext], filepath: str, old: str, new: str, replace_all: bool = False, occurrence: int = 0, **kwargs) -> ToolExecResult:
+        try:
+            result = await _run_sync(_safe_edit, filepath, old, new, replace_all, occurrence)
+            return _unwrap(result)
+        except Exception as e:
+            return _err(f"safe_edit 失败: {e}")
+
+
+@dataclass
+class SafeRollbackTool(FunctionTool):
+    """回滚文件到备份。"""
+    name: str = "safe_rollback"
+    description: str = "回滚文件到之前的备份。不指定 backup_name 则回滚到最近一次备份。safe_edit 失败时已自动回滚，此工具用于手动回滚（如改完后不满意想恢复）。"
+    parameters: dict = field(default_factory=lambda: {
+        "type": "object",
+        "properties": {
+            "filepath": {"type": "string", "description": "要回滚的文件路径"},
+            "backup_name": {"type": "string", "description": "指定备份文件名，可选"}
+        },
+        "required": ["filepath"]
+    })
+
+    async def call(self, context: ContextWrapper[AstrAgentContext], filepath: str, backup_name: str = "", **kwargs) -> ToolExecResult:
+        try:
+            result = await _run_sync(_rollback, filepath, backup_name or None)
+            return _unwrap(result)
+        except Exception as e:
+            return _err(f"回滚失败: {e}")
+
+
+@dataclass
+class SafeBackupsTool(FunctionTool):
+    """查看备份列表。"""
+    name: str = "safe_backups"
+    description: str = "列出所有备份文件或指定文件的备份。改代码前可先查看有哪些备份；回滚前可确认备份存在。"
+    parameters: dict = field(default_factory=lambda: {
+        "type": "object",
+        "properties": {
+            "filepath": {"type": "string", "description": "要查询备份的文件路径，不传则列出全部"}
+        },
+        "required": []
+    })
+
+    async def call(self, context: ContextWrapper[AstrAgentContext], filepath: str = "", **kwargs) -> ToolExecResult:
+        try:
+            result = await _run_sync(_list_backups, filepath or None)
+            return _unwrap(result)
+        except Exception as e:
+            return _err(f"查询备份失败: {e}")
+
+
+@dataclass
+class FilePatchTool(FunctionTool):
+    """精确文本替换。"""
+    name: str = "file_patch"
+    description: str = (
+        "精确替换文件中的文本。用于非代码文件（.md/.txt/.json/.yaml）。"
+        "【优于 astrbot_file_edit_tool】找不到旧文本时会提示最接近的匹配行，帮助定位问题。"
+        "代码文件请用 safe_edit（自动备份+语法检查+失败回滚）。"
+    )
+    parameters: dict = field(default_factory=lambda: {
+        "type": "object",
+        "properties": {
+            "filepath": {"type": "string", "description": "文件路径"},
+            "old": {"type": "string", "description": "要被替换的旧文本（精确匹配）"},
+            "new": {"type": "string", "description": "替换后的新文本"},
+            "replace_all": {"type": "boolean", "description": "是否替换所有匹配项", "default": False}
+        },
+        "required": ["filepath", "old", "new"]
+    })
+
+    async def call(self, context: ContextWrapper[AstrAgentContext], filepath: str, old: str, new: str, replace_all: bool = False, **kwargs) -> ToolExecResult:
+        try:
+            result = await _run_sync(_file_patch, filepath, old, new, replace_all)
+            return _unwrap(result)
+        except Exception as e:
+            return _err(f"file_patch 失败: {e}")
+
+
+@dataclass
+class FilePreviewTool(FunctionTool):
+    """预览替换效果。"""
+    name: str = "file_preview"
+    description: str = "预览 file_patch 的替换效果，不实际修改文件，返回 unified diff。用于不确定替换效果时（如旧文本可能有多个相似匹配），确认无误后再用 file_patch 实际修改。"
+    parameters: dict = field(default_factory=lambda: {
+        "type": "object",
+        "properties": {
+            "filepath": {"type": "string", "description": "文件路径"},
+            "old": {"type": "string", "description": "要被替换的旧文本"},
+            "new": {"type": "string", "description": "替换后的新文本"},
+            "replace_all": {"type": "boolean", "description": "是否预览全部替换", "default": False}
+        },
+        "required": ["filepath", "old", "new"]
+    })
+
+    async def call(self, context: ContextWrapper[AstrAgentContext], filepath: str, old: str, new: str, replace_all: bool = False, **kwargs) -> ToolExecResult:
+        try:
+            result = await _run_sync(_file_preview, filepath, old, new, replace_all)
+            return _unwrap(result)
+        except Exception as e:
+            return _err(f"preview 失败: {e}")
+
+
+@dataclass
+class SyntaxCheckTool(FunctionTool):
+    """语法检查。"""
+    name: str = "syntax_check"
+    description: str = (
+        "检查代码文件语法。支持 Python/Nim/Go/JS/TS。"
+        "safe_edit 内部会自动调用它，所以通常不需要手动调。"
+        "仅在用 file_patch 手动改完代码后，才需要手动调此工具验证。"
+    )
+    parameters: dict = field(default_factory=lambda: {
+        "type": "object",
+        "properties": {
+            "filepath": {"type": "string", "description": "要检查的文件路径"}
+        },
+        "required": ["filepath"]
+    })
+
+    async def call(self, context: ContextWrapper[AstrAgentContext], filepath: str, **kwargs) -> ToolExecResult:
+        try:
+            result = await _run_sync(_syntax_check, filepath)
+            return _unwrap(result)
+        except Exception as e:
+            return _err(f"syntax_check 失败: {e}")
+
+
+@dataclass
+class GitStatusTool(FunctionTool):
+    """Git 状态。"""
+    name: str = "git_status"
+    description: str = (
+        "查看 Git 仓库状态。修改代码前必调用，确认工作区是否干净。"
+        "返回 changed_count 和 changes 列表。想看具体差异请用 git_diff。"
+    )
+    parameters: dict = field(default_factory=lambda: {
+        "type": "object",
+        "properties": {
+            "cwd": {"type": "string", "description": "Git 仓库路径"}
+        },
+        "required": ["cwd"]
+    })
+
+    async def call(self, context: ContextWrapper[AstrAgentContext], cwd: str, **kwargs) -> ToolExecResult:
+        try:
+            result = await _run_sync(_git_status, cwd)
+            return _unwrap(result)
+        except Exception as e:
+            return _err(f"git_status 失败: {e}")
+
+
+@dataclass
+class GitDiffTool(FunctionTool):
+    """Git diff。"""
+    name: str = "git_diff"
+    description: str = "查看 Git 差异。改完代码后先用 staged=false 看工作区改动；提交前必须用 staged=true 自查要提交的内容。"
+    parameters: dict = field(default_factory=lambda: {
+        "type": "object",
+        "properties": {
+            "cwd": {"type": "string", "description": "Git 仓库路径"},
+            "staged": {"type": "boolean", "description": "是否只看已暂存的更改", "default": False},
+            "filepath": {"type": "string", "description": "只看指定文件，可选"}
+        },
+        "required": ["cwd"]
+    })
+
+    async def call(self, context: ContextWrapper[AstrAgentContext], cwd: str, staged: bool = False, filepath: str = "", **kwargs) -> ToolExecResult:
+        try:
+            result = await _run_sync(_git_diff, cwd, staged, filepath or None)
+            return _unwrap(result)
+        except Exception as e:
+            return _err(f"git_diff 失败: {e}")
+
+
+@dataclass
+class GitLogTool(FunctionTool):
+    """Git log。"""
+    name: str = "git_log"
+    description: str = "查看 Git 最近提交记录。提交前确认历史干净、回滚后确认恢复到哪个版本时使用。"
+    parameters: dict = field(default_factory=lambda: {
+        "type": "object",
+        "properties": {
+            "cwd": {"type": "string", "description": "Git 仓库路径"},
+            "count": {"type": "integer", "description": "最近几条，默认 5", "default": 5}
+        },
+        "required": ["cwd"]
+    })
+
+    async def call(self, context: ContextWrapper[AstrAgentContext], cwd: str, count: int = 5, **kwargs) -> ToolExecResult:
+        try:
+            result = await _run_sync(_git_log, cwd, count)
+            return _unwrap(result)
+        except Exception as e:
+            return _err(f"git_log 失败: {e}")
+
+
+@dataclass
+class GitCommitTool(FunctionTool):
+    """Git commit。"""
+    name: str = "git_commit"
+    description: str = "提交所有更改。提交前请先调 git_diff(staged=true) 自查，确认改动正确后再提交。建议 message 格式: fix:/feat:/refactor: + 中文简述。"
+    parameters: dict = field(default_factory=lambda: {
+        "type": "object",
+        "properties": {
+            "cwd": {"type": "string", "description": "Git 仓库路径"},
+            "message": {"type": "string", "description": "提交信息（简洁描述）"}
+        },
+        "required": ["cwd", "message"]
+    })
+
+    async def call(self, context: ContextWrapper[AstrAgentContext], cwd: str, message: str, **kwargs) -> ToolExecResult:
+        try:
+            result = await _run_sync(_git_commit, cwd, message)
+            return _unwrap(result)
+        except Exception as e:
+            return _err(f"git_commit 失败: {e}")
+
+
+@dataclass
+class GitBranchTool(FunctionTool):
+    """Git branch。"""
+    name: str = "git_branch"
+    description: str = "获取当前 Git 分支名。提交前确认不在错误分支上（如误在 master 而非 feature 分支开发）。"
+    parameters: dict = field(default_factory=lambda: {
+        "type": "object",
+        "properties": {
+            "cwd": {"type": "string", "description": "Git 仓库路径"}
+        },
+        "required": ["cwd"]
+    })
+
+    async def call(self, context: ContextWrapper[AstrAgentContext], cwd: str, **kwargs) -> ToolExecResult:
+        try:
+            result = await _run_sync(_git_branch, cwd)
+            return _unwrap(result)
+        except Exception as e:
+            return _err(f"git_branch 失败: {e}")
+
+
+@dataclass
+class GitRemoteTool(FunctionTool):
+    """Git remote URL。"""
+    name: str = "git_remote"
+    description: str = "获取远程仓库 URL。首次推送前确认 remote 指向正确仓库（如 irmia2026/xxx 而非别人 fork）。"
+    parameters: dict = field(default_factory=lambda: {
+        "type": "object",
+        "properties": {
+            "cwd": {"type": "string", "description": "Git 仓库路径"}
+        },
+        "required": ["cwd"]
+    })
+
+    async def call(self, context: ContextWrapper[AstrAgentContext], cwd: str, **kwargs) -> ToolExecResult:
+        try:
+            result = await _run_sync(_git_remote, cwd)
+            return _unwrap(result)
+        except Exception as e:
+            return _err(f"git_remote 失败: {e}")
+
+
+@dataclass
+class GitPushTool(FunctionTool):
+    """Git push。"""
+    name: str = "git_push"
+    description: str = "推送到远程仓库。自动获取当前分支，推送到 origin。推送前请先用 git_status + git_diff 自查。"
+    parameters: dict = field(default_factory=lambda: {
+        "type": "object",
+        "properties": {
+            "cwd": {"type": "string", "description": "Git 仓库路径"},
+            "remote": {"type": "string", "description": "远程名称，默认 origin"},
+            "branch": {"type": "string", "description": "分支名，留空自动获取当前分支"}
+        },
+        "required": ["cwd"]
+    })
+
+    async def call(self, context: ContextWrapper[AstrAgentContext], cwd: str,
+                   remote: str = "origin", branch: str = "", **kwargs) -> ToolExecResult:
+        try:
+            result = await _run_sync(_git_push, cwd, remote, branch)
+            return _unwrap(result)
+        except Exception as e:
+            return _err(f"git_push 失败: {e}")
+
+
+@dataclass
+class EsSearchTool(FunctionTool):
+    """Everything 文件名极速搜索。"""
+    name: str = "es_search"
+    description: str = (
+        "Everything 文件名搜索。毫秒级索引搜索，比 os.walk/dir 快 50-500 倍。"
+        "用于全盘搜索文件/文件夹：找某个文件在哪、列出某目录下所有 .py 文件、统计文件数量等。"
+        "query 支持通配符（*.py）和 Everything 搜索语法（ext:、folder:、size:>1mb 等）。"
+    )
+    parameters: dict = field(default_factory=lambda: {
+        "type": "object",
+        "properties": {
+            "query": {"type": "string", "description": "搜索关键词。支持通配符如 *.py，以及 ext: folder: size:>1mb 等语法"},
+            "path": {"type": "string", "description": "限定搜索目录路径。不传则全盘搜索"},
+            "max_results": {"type": "integer", "description": "最大结果数，默认 100。设 0 仅统计数量不返回列表", "default": 100},
+            "regex": {"type": "boolean", "description": "使用正则表达式搜索", "default": False},
+            "case_sensitive": {"type": "boolean", "description": "区分大小写", "default": False},
+            "whole_word": {"type": "boolean", "description": "全词匹配", "default": False},
+            "file_type": {"type": "string", "description": "文件类型过滤: file（仅文件）/ folder（仅文件夹）/ all（默认）", "default": "all"},
+            "sort_by": {"type": "string", "description": "排序字段: name/path/size/date_modified/date_created/ext", "default": ""},
+            "ext": {"type": "string", "description": "文件扩展名过滤，如 py / xlsx / exe", "default": ""},
+        },
+        "required": ["query"]
+    })
+
+    async def call(self, context: ContextWrapper[AstrAgentContext],
+                   query: str, path: str = "", max_results: int = 100,
+                   regex: bool = False, case_sensitive: bool = False,
+                   whole_word: bool = False, file_type: str = "all",
+                   sort_by: str = "", ext: str = "", **kwargs) -> ToolExecResult:
+        try:
+            result = await _run_sync(_es_search,
+                query=query,
+                path=path or None,
+                max_results=max_results,
+                regex=regex,
+                case_sensitive=case_sensitive,
+                whole_word=whole_word,
+                file_type=file_type,
+                sort_by=sort_by or None,
+                ext=ext or None,
+            )
+            return _unwrap(result)
+        except Exception as e:
+            return _err(f"es_search 失败: {e}")
+
+
+@dataclass
+class HttpGetTool(FunctionTool):
+    """HTTP GET 请求。"""
+    name: str = "http_get"
+    description: str = (
+        "轻量 HTTP GET 请求。纯 Python 标准库，10s 超时，返回 status + body + size。"
+        "用于取 raw GitHub 内容、调用简单 API、下载文本等场景。"
+        "比 curl 更适合 LLM 解析输出。body 超过 5000 字符自动截断。"
+    )
+    parameters: dict = field(default_factory=lambda: {
+        "type": "object",
+        "properties": {
+            "url": {"type": "string", "description": "请求 URL"},
+            "headers": {"type": "object", "description": "自定义请求头，可选"}
+        },
+        "required": ["url"]
+    })
+
+    async def call(self, context: ContextWrapper[AstrAgentContext], url: str, headers: dict = None, **kwargs) -> ToolExecResult:
+        try:
+            result = await _run_sync(_http_get, url, headers)
+            return _unwrap(result)
+        except Exception as e:
+            return _err(f"http_get 失败: {e}")
+
+
+@dataclass
+class HttpPostTool(FunctionTool):
+    """HTTP POST 请求。"""
+    name: str = "http_post"
+    description: str = (
+        "轻量 HTTP POST 请求。纯 Python 标准库，10s 超时。"
+        "data 可以为 dict（自动 JSON 编码）或 str。body 超过 5000 字符自动截断。"
+    )
+    parameters: dict = field(default_factory=lambda: {
+        "type": "object",
+        "properties": {
+            "url": {"type": "string", "description": "请求 URL"},
+            "data": {"type": "string", "description": "POST body，dict 自动 JSON 编码，str 原样发送"},
+            "headers": {"type": "object", "description": "自定义请求头，可选"}
+        },
+        "required": ["url"]
+    })
+
+    async def call(self, context: ContextWrapper[AstrAgentContext], url: str, data: str = "", headers: dict = None, **kwargs) -> ToolExecResult:
+        try:
+            # 尝试解析为 JSON dict，非 dict 的解析结果（如数字、字符串）当原始文本处理
+            body = data
+            if data:
+                try:
+                    parsed = json.loads(data)
+                    body = parsed if isinstance(parsed, dict) else data
+                except (json.JSONDecodeError, TypeError):
+                    body = data
+            result = await _run_sync(_http_post, url, body if body else None, headers)
+            return _unwrap(result)
+        except Exception as e:
+            return _err(f"http_post 失败: {e}")
+
+
+@dataclass
+class HttpDownloadTool(FunctionTool):
+    """HTTP 二进制下载。"""
+    name: str = "http_download"
+    description: str = (
+        "下载文件到本地。支持大文件，自动处理重定向。"
+        "参数: url(下载地址), path(保存路径), overwrite(是否覆盖), timeout(默认60s)。"
+        "用于下载插件包、图片、PDF、安装程序等二进制文件。"
+    )
+    parameters: dict = field(default_factory=lambda: {
+        "type": "object",
+        "properties": {
+            "url": {"type": "string", "description": "下载地址"},
+            "path": {"type": "string", "description": "保存路径（含文件名）"},
+            "overwrite": {"type": "boolean", "description": "是否覆盖已有文件，默认 false"},
+            "timeout": {"type": "integer", "description": "超时秒数，默认 60"}
+        },
+        "required": ["url", "path"]
+    })
+
+    async def call(self, context: ContextWrapper[AstrAgentContext], url: str, path: str,
+                   overwrite: bool = False, timeout: int = 60, **kwargs) -> ToolExecResult:
+        try:
+            result = await _run_sync(_http_download, url, path, overwrite, timeout)
+            return _unwrap(result)
+        except Exception as e:
+            return _err(f"http_download 失败: {e}")
+
+
+@dataclass
+class HtmlExtractTool(FunctionTool):
+    """HTML 内容提取。"""
+    name: str = "html_extract"
+    description: str = (
+        "从 HTML 中提取结构化内容。用 BeautifulSoup + lxml。"
+        "what: text(纯文本) / links(链接) / tables(表格) / query(CSS选择器)。"
+        "query 模式需 selector 参数如 'div.content p'。"
+    )
+    parameters: dict = field(default_factory=lambda: {
+        "type": "object",
+        "properties": {
+            "html": {"type": "string", "description": "HTML 字符串"},
+            "what": {"type": "string", "description": "提取类型: text / links / tables / query"},
+            "selector": {"type": "string", "description": "CSS 选择器，what='query' 时必填"}
+        },
+        "required": ["html", "what"]
+    })
+
+    async def call(self, context: ContextWrapper[AstrAgentContext], html: str, what: str,
+                   selector: str = "", **kwargs) -> ToolExecResult:
+        try:
+            result = await _run_sync(_html_extract, html, what, selector)
+            return _unwrap(result)
+        except Exception as e:
+            return _err(f"html_extract 失败: {e}")
+
+
+@dataclass
+class DirTreeTool(FunctionTool):
+    """目录树可视化。"""
+    name: str = "dir_tree"
+    description: str = (
+        "生成目录树结构。比 dir /s 快 10 倍，输出缩进对齐的树形文本。"
+        "参数: path(目录), max_depth(深度默认3), show_hidden(默认false), pattern(如'*.py')。"
+        "用于快速了解项目结构、确认目录布局。"
+    )
+    parameters: dict = field(default_factory=lambda: {
+        "type": "object",
+        "properties": {
+            "path": {"type": "string", "description": "目录路径"},
+            "max_depth": {"type": "integer", "description": "最大递归深度，默认 3"},
+            "show_hidden": {"type": "boolean", "description": "是否显示隐藏文件，默认 false"},
+            "pattern": {"type": "string", "description": "文件名过滤，如 '*.py'"}
+        },
+        "required": ["path"]
+    })
+
+    async def call(self, context: ContextWrapper[AstrAgentContext], path: str,
+                   max_depth: int = 3, show_hidden: bool = False, pattern: str = "", **kwargs) -> ToolExecResult:
+        try:
+            result = await _run_sync(_dir_tree, path, max_depth, show_hidden, pattern)
+            return _unwrap(result)
+        except Exception as e:
+            return _err(f"dir_tree 失败: {e}")
+
+
+@dataclass
+class DiskInfoTool(FunctionTool):
+    """磁盘空间查询。"""
+    name: str = "disk_info"
+    description: str = (
+        "查询所有磁盘分区的使用情况。返回每个盘符的 total/used/free/percent。"
+        "纯 shutil 标准库。当你需要知道磁盘剩余空间时使用。"
+    )
+    parameters: dict = field(default_factory=lambda: {
+        "type": "object",
+        "properties": {},
+        "required": []
+    })
+
+    async def call(self, context: ContextWrapper[AstrAgentContext], **kwargs) -> ToolExecResult:
+        try:
+            result = await _run_sync(_disk_info)
+            return _unwrap(result)
+        except Exception as e:
+            return _err(f"disk_info 失败: {e}")
+
+
+@dataclass
+class PortCheckTool(FunctionTool):
+    """端口检测。"""
+    name: str = "port_check"
+    description: str = (
+        "检测端口是否监听。纯 socket 标准库，3s 超时。"
+        "用于快速确认服务是否在运行——如 SD WebUI(7860)、Milvus(19530)、AstrBot(6199)等。"
+        "支持单端口检测和多端口批量扫描。"
+    )
+    parameters: dict = field(default_factory=lambda: {
+        "type": "object",
+        "properties": {
+            "host": {"type": "string", "description": "主机地址，默认 127.0.0.1", "default": "127.0.0.1"},
+            "ports": {"type": "array", "description": "端口列表，如 [7860, 19530, 6199]。单端口传 [7860]"},
+        },
+        "required": ["ports"]
+    })
+
+    async def call(self, context: ContextWrapper[AstrAgentContext], host: str = "127.0.0.1", ports: list = None, **kwargs) -> ToolExecResult:
+        try:
+            if not ports:
+                return _err("请提供 ports 参数")
+            if len(ports) == 1:
+                result = await _run_sync(_port_check, host, ports[0])
+            else:
+                result = await _run_sync(_port_scan, ports, host)
+            return _unwrap(result)
+        except Exception as e:
+            return _err(f"port_check 失败: {e}")
+
+
+@dataclass
+class FileDiffTool(FunctionTool):
+    """文件差异比较。"""
+    name: str = "file_diff"
+    description: str = (
+        "比较两个文件，返回结构化差异：added/removed/total_changes/identical。"
+        "纯 difflib 标准库，不依赖外部 diff 命令。"
+        "返回统计好的增删行数 + unified diff 文本（限 100 行），比 raw diff 命令更适合 LLM 处理。"
+        "用 diff_lines_shown/diff_lines_total 判断是否截断。"
+    )
+    parameters: dict = field(default_factory=lambda: {
+        "type": "object",
+        "properties": {
+            "file_a": {"type": "string", "description": "第一个文件路径"},
+            "file_b": {"type": "string", "description": "第二个文件路径"}
+        },
+        "required": ["file_a", "file_b"]
+    })
+
+    async def call(self, context: ContextWrapper[AstrAgentContext], file_a: str, file_b: str, **kwargs) -> ToolExecResult:
+        try:
+            result = await _run_sync(_file_diff, file_a, file_b)
+            return _unwrap(result)
+        except Exception as e:
+            return _err(f"file_diff 失败: {e}")
+
+
+@dataclass
+class ProcListTool(FunctionTool):
+    """进程列表查询。"""
+    name: str = "proc_list"
+    description: str = (
+        "列出所有进程，按内存降序排列。支持按名称模糊过滤——如 filter_name='python' 列出所有 Python 进程。"
+        "封装 tasklist 命令，返回结构化数据（name/pid/memory_kb）。"
+        "用于排查服务状态、查找僵尸进程、确认程序是否在运行。"
+    )
+    parameters: dict = field(default_factory=lambda: {
+        "type": "object",
+        "properties": {
+            "filter_name": {"type": "string", "description": "按进程名模糊过滤，如 'python' 'docker' 'node'"}
+        },
+        "required": []
+    })
+
+    async def call(self, context: ContextWrapper[AstrAgentContext], filter_name: str = "", **kwargs) -> ToolExecResult:
+        try:
+            result = await _run_sync(_proc_list, filter_name or None)
+            return _unwrap(result)
+        except Exception as e:
+            return _err(f"proc_list 失败: {e}")
+
+
+@dataclass
+class FileHashTool(FunctionTool):
+    """文件哈希计算。"""
+    name: str = "file_hash"
+    description: str = (
+        "计算文件哈希值（MD5/SHA1/SHA256）。默认 SHA256。"
+        "纯 hashlib 标准库，返回 hex 字符串 + 文件大小。"
+        "用于验证下载完整性、比对文件是否一致。"
+    )
+    parameters: dict = field(default_factory=lambda: {
+        "type": "object",
+        "properties": {
+            "filepath": {"type": "string", "description": "文件路径"},
+            "algo": {"type": "string", "description": "哈希算法: md5/sha1/sha256，默认 sha256", "default": "sha256"}
+        },
+        "required": ["filepath"]
+    })
+
+    async def call(self, context: ContextWrapper[AstrAgentContext], filepath: str, algo: str = "sha256", **kwargs) -> ToolExecResult:
+        try:
+            result = await _run_sync(_file_hash, filepath, algo)
+            return _unwrap(result)
+        except Exception as e:
+            return _err(f"file_hash 失败: {e}")
+
+
+@dataclass
+class FileZipTool(FunctionTool):
+    """ZIP 压缩。"""
+    name: str = "file_zip"
+    description: str = (
+        "打包文件/目录到 ZIP。纯 zipfile 标准库，DEFLATED 压缩。"
+        "参数 files 为文件或目录列表。返回 ZIP 路径和大小。"
+    )
+    parameters: dict = field(default_factory=lambda: {
+        "type": "object",
+        "properties": {
+            "files": {"type": "array", "description": "要打包的文件/目录路径列表"},
+            "output": {"type": "string", "description": "输出 ZIP 文件路径"}
+        },
+        "required": ["files", "output"]
+    })
+
+    async def call(self, context: ContextWrapper[AstrAgentContext], files: list, output: str, **kwargs) -> ToolExecResult:
+        try:
+            result = await _run_sync(_file_zip, files, output)
+            return _unwrap(result)
+        except Exception as e:
+            return _err(f"file_zip 失败: {e}")
+
+
+@dataclass
+class FileUnzipTool(FunctionTool):
+    """ZIP 解压。"""
+    name: str = "file_unzip"
+    description: str = (
+        "解压 ZIP 文件到指定目录。纯 zipfile 标准库。"
+        "返回解压的文件列表（限 50 个）。"
+    )
+    parameters: dict = field(default_factory=lambda: {
+        "type": "object",
+        "properties": {
+            "zip_file": {"type": "string", "description": "ZIP 文件路径"},
+            "output_dir": {"type": "string", "description": "解压目标目录"}
+        },
+        "required": ["zip_file", "output_dir"]
+    })
+
+    async def call(self, context: ContextWrapper[AstrAgentContext], zip_file: str, output_dir: str, **kwargs) -> ToolExecResult:
+        try:
+            result = await _run_sync(_file_unzip, zip_file, output_dir)
+            return _unwrap(result)
+        except Exception as e:
+            return _err(f"file_unzip 失败: {e}")
+
+
+@dataclass
+class SysSnapshotTool(FunctionTool):
+    """系统快照。"""
+    name: str = "sys_snapshot"
+    description: str = (
+        "获取系统整体状态快照：主机名/平台/Python版本/CPU核数/内存总量和可用/进程数/开机时间。"
+        "纯标准库 + systeminfo/tasklist。当你需要了解系统整体状况时调用。"
+    )
+    parameters: dict = field(default_factory=lambda: {
+        "type": "object",
+        "properties": {},
+        "required": []
+    })
+
+    async def call(self, context: ContextWrapper[AstrAgentContext], **kwargs) -> ToolExecResult:
+        try:
+            result = await _run_sync(_sys_snapshot)
+            return _unwrap(result)
+        except Exception as e:
+            return _err(f"sys_snapshot 失败: {e}")
+
+
+@dataclass
+class EncodeTool(FunctionTool):
+    """编解码工具箱。"""
+    name: str = "encode_utils"
+    description: str = (
+        "编解码工具箱：base64/URL/hex 三种编解码。"
+        "action 可选: b64e(编码) / b64d(解码) / urle(URL编码) / urld(URL解码) / hexe(十六进制编码) / hexd(十六进制解码)。"
+        "b64e 可设 as_uri=True 生成 data: URI；b64d 可设 strip_uri=True 自动剥离前缀。"
+        "纯标准库。处理二进制字符串、构建 data URI、解码 URL 参数时使用。"
+    )
+    parameters: dict = field(default_factory=lambda: {
+        "type": "object",
+        "properties": {
+            "action": {"type": "string", "description": "操作: b64e / b64d / urle / urld / hexe / hexd"},
+            "data": {"type": "string", "description": "要编码/解码的数据"},
+            "as_uri": {"type": "boolean", "description": "b64e 时是否生成 data: URI，默认 false"},
+            "strip_uri": {"type": "boolean", "description": "b64d 时是否自动剥离 data: URI 前缀，默认 false"},
+        },
+        "required": ["action", "data"]
+    })
+
+    async def call(self, context: ContextWrapper[AstrAgentContext], action: str, data: str, as_uri: bool = False, strip_uri: bool = False, **kwargs) -> ToolExecResult:
+        try:
+            actions = {
+                "b64e": lambda: b64_encode(data, as_uri),
+                "b64d": lambda: b64_decode(data, strip_uri),
+                "urle": lambda: url_encode(data),
+                "urld": lambda: url_decode(data),
+                "hexe": lambda: hex_encode(data),
+                "hexd": lambda: hex_decode(data),
+            }
+            if action not in actions:
+                return _err(f"未知 action: {action}，可选: {list(actions.keys())}")
+            return _unwrap(actions[action]())
+        except Exception as e:
+            return _err(f"encode_utils 失败: {e}")
+
+
+@dataclass
+class TimeTool(FunctionTool):
+    """时间工具。"""
+    name: str = "time_utils"
+    description: str = (
+        "时间工具：当前时间、时间戳↔ISO互转、时间差计算。"
+        "action 可选: now(当前) / ts2iso(时间戳→ISO) / iso2ts(ISO→时间戳) / diff(差值)。"
+        "ts2iso 可设 ms=True 标识毫秒时间戳；diff 需要 iso1 和 iso2 两个参数。"
+        "纯 datetime 标准库。"
+    )
+    parameters: dict = field(default_factory=lambda: {
+        "type": "object",
+        "properties": {
+            "action": {"type": "string", "description": "操作: now / ts2iso / iso2ts / diff"},
+            "ts": {"type": "integer", "description": "时间戳（用于 ts2iso）"},
+            "ms": {"type": "boolean", "description": "ts2iso 时标识毫秒时间戳，默认 false"},
+            "iso": {"type": "string", "description": "ISO 字符串（用于 iso2ts）"},
+            "iso1": {"type": "string", "description": "diff 的第一个 ISO 时间"},
+            "iso2": {"type": "string", "description": "diff 的第二个 ISO 时间"},
+        },
+        "required": ["action"]
+    })
+
+    async def call(self, context: ContextWrapper[AstrAgentContext], action: str, ts: int = None, ms: bool = False, iso: str = "", iso1: str = "", iso2: str = "", **kwargs) -> ToolExecResult:
+        try:
+            if action == "now":
+                return _unwrap(_time_now())
+            elif action == "ts2iso":
+                if ts is None:
+                    return _err("ts2iso 需要 ts 参数")
+                return _unwrap(ts_to_iso(ts, ms))
+            elif action == "iso2ts":
+                if not iso:
+                    return _err("iso2ts 需要 iso 参数")
+                return _unwrap(iso_to_ts(iso))
+            elif action == "diff":
+                if not iso1 or not iso2:
+                    return _err("diff 需要 iso1 和 iso2 参数")
+                return _unwrap(time_diff(iso1, iso2))
+            return _err(f"未知 action: {action}，可选: now/ts2iso/iso2ts/diff")
+        except Exception as e:
+            return _err(f"time_utils 失败: {e}")
+
+
+@dataclass
+class RegexTestTool(FunctionTool):
+    """正则测试。"""
+    name: str = "regex_test"
+    description: str = (
+        "测试正则表达式：返回匹配项、位置(start/end)、分组信息（有名/数字）。"
+        "flags 支持: i(忽略大小写) m(多行) s(DOTALL) x(VERBOSE)，可组合如 'im'。"
+        "纯 re 标准库。匹配上限 50 条，超过会标记 truncated。"
+    )
+    parameters: dict = field(default_factory=lambda: {
+        "type": "object",
+        "properties": {
+            "pattern": {"type": "string", "description": "正则表达式"},
+            "text": {"type": "string", "description": "要匹配的文本"},
+            "flags": {"type": "string", "description": "正则标志，如 'i' 'im' 'imsx'，可选"}
+        },
+        "required": ["pattern", "text"]
+    })
+
+    async def call(self, context: ContextWrapper[AstrAgentContext], pattern: str, text: str, flags: str = "", **kwargs) -> ToolExecResult:
+        try:
+            return _unwrap(_regex_test(pattern, text, flags))
+        except Exception as e:
+            return _err(f"regex_test 失败: {e}")
+
+
+@dataclass
+class RegexReplaceTool(FunctionTool):
+    """正则替换。"""
+    name: str = "regex_replace"
+    description: str = (
+        "正则替换：用 replacement 替换 text 中所有匹配 pattern 的内容。"
+        "支持反向引用 \\1 \\2 和有名分组 \\g<name>。"
+        "flags 同 regex_test。返回替换后文本（限 5000 字符）和替换次数。"
+        "纯 re 标准库。"
+    )
+    parameters: dict = field(default_factory=lambda: {
+        "type": "object",
+        "properties": {
+            "pattern": {"type": "string", "description": "正则表达式（匹配规则）"},
+            "replacement": {"type": "string", "description": "替换文本，支持 \\1 \\2 反向引用"},
+            "text": {"type": "string", "description": "原始文本"},
+            "flags": {"type": "string", "description": "正则标志，如 'i'"}
+        },
+        "required": ["pattern", "replacement", "text"]
+    })
+
+    async def call(self, context: ContextWrapper[AstrAgentContext], pattern: str, replacement: str, text: str, flags: str = "", **kwargs) -> ToolExecResult:
+        try:
+            return _unwrap(_regex_replace(pattern, replacement, text, flags))
+        except Exception as e:
+            return _err(f"regex_replace 失败: {e}")
+
+
+@dataclass
+class DirListTool(FunctionTool):
+    """列出目录内容。"""
+    name: str = "dir_list"
+    description: str = (
+        "列出目录内容——纯 Python os.scandir，结构化返回，比 shell dir 快 10 倍。"
+        "支持 pattern 通配过滤（如 '*.py'）、max_depth 递归深度、show_hidden 隐藏文件。"
+        "结果按目录优先/名称排序，上限 200 条。用于快速浏览目录结构、查找文件。"
+    )
+    parameters: dict = field(default_factory=lambda: {
+        "type": "object",
+        "properties": {
+            "path": {"type": "string", "description": "目录路径"},
+            "pattern": {"type": "string", "description": "文件名匹配，如 '*.py' 'test_*'，默认 '*'"},
+            "max_depth": {"type": "integer", "description": "最大递归深度，默认 1"},
+            "show_hidden": {"type": "boolean", "description": "是否显示隐藏文件，默认 false"},
+        },
+        "required": ["path"]
+    })
+
+    async def call(self, context: ContextWrapper[AstrAgentContext], path: str, pattern: str = "*", max_depth: int = 1, show_hidden: bool = False, **kwargs) -> ToolExecResult:
+        try:
+            return _unwrap(_list_dir(path, pattern, max_depth, show_hidden))
+        except Exception as e:
+            return _err(f"dir_list 失败: {e}")
+
+
+@dataclass
+class JsonQueryTool(FunctionTool):
+    """JSON 查询。"""
+    name: str = "json_query"
+    description: str = (
+        "jq 式 JSON 查询——点路径遍历 JSON 字符串。"
+        "语法: key.subkey / key[0] / key[-1] / [*].field。"
+        "用于解析 API 返回、提取嵌套字段、聚合数组元素。纯 json 标准库。"
+    )
+    parameters: dict = field(default_factory=lambda: {
+        "type": "object",
+        "properties": {
+            "data": {"type": "string", "description": "JSON 字符串"},
+            "path": {"type": "string", "description": "查询路径，如 'data.items[0].name' 或 'users[*].email'"},
+        },
+        "required": ["data", "path"]
+    })
+
+    async def call(self, context: ContextWrapper[AstrAgentContext], data: str, path: str, **kwargs) -> ToolExecResult:
+        try:
+            return _unwrap(_json_query(data, path))
+        except Exception as e:
+            return _err(f"json_query 失败: {e}")
+
+
+@dataclass
+class TextFilterTool(FunctionTool):
+    """行文本过滤。"""
+    name: str = "text_filter"
+    description: str = (
+        "行文本过滤器：head/tail/grep/invert/count，处理已加载文本。"
+        "action: head(前N行)/tail(后N行)/grep(匹配)/invert(反向)/count(统计)。"
+        "grep/invert 支持 *? 通配（非完整正则，如需正则用 regex_test）。"
+        "不依赖 shell，纯 Python。上限 200 行。"
+    )
+    parameters: dict = field(default_factory=lambda: {
+        "type": "object",
+        "properties": {
+            "action": {"type": "string", "description": "操作: grep / invert / head / tail / count"},
+            "text": {"type": "string", "description": "输入文本"},
+            "pattern": {"type": "string", "description": "grep/invert 时的匹配模式"},
+            "n": {"type": "integer", "description": "head/tail 时取的行数，默认 10"},
+            "case_sensitive": {"type": "boolean", "description": "是否区分大小写，默认 false"},
+        },
+        "required": ["action", "text"]
+    })
+
+    async def call(self, context: ContextWrapper[AstrAgentContext], action: str, text: str, pattern: str = "", n: int = 10, case_sensitive: bool = False, **kwargs) -> ToolExecResult:
+        try:
+            return _unwrap(_text_filter(text, action, pattern, n, case_sensitive))
+        except Exception as e:
+            return _err(f"text_filter 失败: {e}")
+
+
+@dataclass
+class DiffStringsTool(FunctionTool):
+    """字符串差异比较。"""
+    name: str = "diff_strings"
+    description: str = (
+        "比较两个字符串（非文件），返回 unified diff。"
+        "纯 difflib 标准库。返回 added/removed/total_changes/identical。"
+        "context_lines 控制上下文行数（默认 3）。用于比较命令输出、配置前后差异。"
+    )
+    parameters: dict = field(default_factory=lambda: {
+        "type": "object",
+        "properties": {
+            "a": {"type": "string", "description": "第一个字符串"},
+            "b": {"type": "string", "description": "第二个字符串"},
+            "context_lines": {"type": "integer", "description": "上下文行数，默认 3"},
+        },
+        "required": ["a", "b"]
+    })
+
+    async def call(self, context: ContextWrapper[AstrAgentContext], a: str, b: str, context_lines: int = 3, **kwargs) -> ToolExecResult:
+        try:
+            return _unwrap(_diff_strings(a, b, context_lines))
+        except Exception as e:
+            return _err(f"diff_strings 失败: {e}")
+
+
+@dataclass
+class CsvParseTool(FunctionTool):
+    """CSV 解析。"""
+    name: str = "csv_parse"
+    description: str = (
+        "解析 CSV/TSV 文本为结构化数据（dict 列表）。"
+        "delimiter='auto' 自动检测分隔符（逗号或制表符）。has_header=True 时首行为表头。"
+        "返回 headers + rows + count，上限 200 行。纯 csv 标准库。"
+    )
+    parameters: dict = field(default_factory=lambda: {
+        "type": "object",
+        "properties": {
+            "text": {"type": "string", "description": "CSV/TSV 文本"},
+            "delimiter": {"type": "string", "description": "分隔符，'auto' 自动检测，或指定 ',' '\\t'"},
+            "has_header": {"type": "boolean", "description": "首行是否为表头，默认 true"},
+        },
+        "required": ["text"]
+    })
+
+    async def call(self, context: ContextWrapper[AstrAgentContext], text: str, delimiter: str = "auto", has_header: bool = True, **kwargs) -> ToolExecResult:
+        try:
+            return _unwrap(_csv_parse(text, delimiter, has_header))
+        except Exception as e:
+            return _err(f"csv_parse 失败: {e}")
+
+
+@dataclass
+class CsvGenTool(FunctionTool):
+    """CSV 生成。"""
+    name: str = "csv_gen"
+    description: str = (
+        "将 dict 列表生成为 CSV 文本。delimiter 默认逗号。"
+        "输入格式: [{\"name\":\"a\",\"age\":1}, ...]。纯 csv 标准库。"
+    )
+    parameters: dict = field(default_factory=lambda: {
+        "type": "object",
+        "properties": {
+            "rows": {"type": "string", "description": "JSON 数组字符串，如 '[{\"a\":1},{\"a\":2}]'"},
+            "delimiter": {"type": "string", "description": "分隔符，默认 ','"}
+        },
+        "required": ["rows"]
+    })
+
+    async def call(self, context: ContextWrapper[AstrAgentContext], rows: str, delimiter: str = ",", **kwargs) -> ToolExecResult:
+        try:
+            import json
+            parsed = json.loads(rows)
+            return _unwrap(_csv_gen(parsed, delimiter))
+        except Exception as e:
+            return _err(f"csv_gen 失败: {e}")
+
+
+@dataclass
+class UuidGenTool(FunctionTool):
+    """UUID/随机字符串生成。"""
+    name: str = "uuid_gen"
+    description: str = (
+        "生成唯一标识符或随机字符串。kind: uuid4(UUID4) / hex(十六进制) / token(字母数字)。"
+        "hex/token 可设 length 控制长度（默认 16）。纯 uuid+secrets 标准库。"
+    )
+    parameters: dict = field(default_factory=lambda: {
+        "type": "object",
+        "properties": {
+            "kind": {"type": "string", "description": "类型: uuid4 / hex / token", "default": "uuid4"},
+            "length": {"type": "integer", "description": "hex/token 时的长度，默认 16"}
+        },
+        "required": []
+    })
+
+    async def call(self, context: ContextWrapper[AstrAgentContext], kind: str = "uuid4", length: int = 16, **kwargs) -> ToolExecResult:
+        try:
+            return _unwrap(_uuid_gen(kind, length))
+        except Exception as e:
+            return _err(f"uuid_gen 失败: {e}")
+
+
+@dataclass
+class SemverTool(FunctionTool):
+    """语义版本号比较。"""
+    name: str = "semver_compare"
+    description: str = (
+        "比较两个语义版本号。返回 > / < / =。支持 '1.2.3' '2.0.0-beta.1' 格式。"
+        "纯 Python，无依赖。"
+    )
+    parameters: dict = field(default_factory=lambda: {
+        "type": "object",
+        "properties": {
+            "v1": {"type": "string", "description": "第一个版本号"},
+            "v2": {"type": "string", "description": "第二个版本号"}
+        },
+        "required": ["v1", "v2"]
+    })
+
+    async def call(self, context: ContextWrapper[AstrAgentContext], v1: str, v2: str, **kwargs) -> ToolExecResult:
+        try:
+            return _unwrap(_semver_compare(v1, v2))
+        except Exception as e:
+            return _err(f"semver_compare 失败: {e}")
+
+
+@dataclass
+class MdStripTool(FunctionTool):
+    """Markdown 剥离。"""
+    name: str = "md_strip"
+    description: str = (
+        "剥离 Markdown 标记，返回纯文本。处理标题/粗体/斜体/代码块/链接/图片/列表/引用/删除线。"
+        "纯 re 标准库。"
+    )
+    parameters: dict = field(default_factory=lambda: {
+        "type": "object",
+        "properties": {
+            "text": {"type": "string", "description": "Markdown 文本"}
+        },
+        "required": ["text"]
+    })
+
+    async def call(self, context: ContextWrapper[AstrAgentContext], text: str, **kwargs) -> ToolExecResult:
+        try:
+            return _unwrap(_md_strip(text))
+        except Exception as e:
+            return _err(f"md_strip 失败: {e}")
+
+
+@dataclass
+class GhCliTool(FunctionTool):
+    """GitHub CLI 工具箱 — PR、Issue、Release、CI 全流程。"""
+    name: str = "gh_cli"
+    description: str = (
+        "GitHub CLI 封装。直接操作 GitHub，无需浏览器。\n"
+        "支持操作: repo_create(创建仓库+推送) / pr_create(创建PR) / pr_list(列出PR) / pr_merge(合并PR) / pr_view(查看PR) / "
+        "issue_create(创建Issue) / issue_list(列出Issue) / issue_close(关闭Issue) / "
+        "release_create(发布Release) / release_list(列出Release) / "
+        "repo_view(仓库信息) / run_list(CI状态) / auth_status(认证检查)\n"
+        "参数: action(必填), cwd(仓库路径,选填), 及各操作特有参数"
+    )
+    parameters: dict = field(default_factory=lambda: {
+        "type": "object",
+        "properties": {
+            "action": {
+                "type": "string",
+                "description": "操作: repo_create / pr_create / pr_list / pr_merge / pr_view / issue_create / issue_list / issue_close / release_create / release_list / repo_view / run_list / auth_status",
+                "enum": ["repo_create", "pr_create", "pr_list", "pr_merge", "pr_view", "issue_create", "issue_list", "issue_close", "release_create", "release_list", "repo_view", "run_list", "auth_status"]
+            },
+            "cwd": {"type": "string", "description": "仓库路径，默认当前工作目录"},
+            "title": {"type": "string", "description": "PR/Issue 标题（pr_create/issue_create 时必填）"},
+            "body": {"type": "string", "description": "PR/Issue 正文（pr_create/issue_create 时可选）"},
+            "tag": {"type": "string", "description": "Release 标签，如 v1.2.3（release_create 时必填）"},
+            "number": {"type": "integer", "description": "PR/Issue 编号（pr_view/pr_merge/issue_close 时使用）"},
+            "state": {"type": "string", "description": "筛选状态: open/closed/merged（pr_list/issue_list 时默认 open）"},
+            "limit": {"type": "integer", "description": "返回数量上限（pr_list/issue_list/release_list/run_list 时默认 10）"},
+            "labels": {"type": "string", "description": "Issue 标签，逗号分隔（issue_create/issue_list 时可选）"},
+            "generate_notes": {"type": "boolean", "description": "自动生成 release notes（release_create 时默认 true）"},
+            # L4-L5: 补全缺失参数
+            "public": {"type": "boolean", "description": "repo_create 时是否创建公开仓库（默认 false=私有）"},
+            "base": {"type": "string", "description": "pr_create 时的目标分支，默认 master"},
+            "head": {"type": "string", "description": "pr_create 时的源分支，默认当前分支"},
+            "strategy": {"type": "string", "description": "pr_merge 合并策略: squash/rebase/merge，默认 squash"},
+            "owner_repo": {"type": "string", "description": "repo_view 时指定仓库，格式 owner/repo，默认当前仓库"},
+        },
+        "required": ["action"]
+    })
+
+    async def call(self, context: ContextWrapper[AstrAgentContext], action: str,
+                   cwd: str = "", title: str = "", body: str = "", tag: str = "",
+                   number: int = 0, state: str = "open", limit: int = 10,
+                   labels: str = "", generate_notes: bool = True,
+                   public: bool = False, base: str = "master", head: str = "",
+                   strategy: str = "squash", owner_repo: str = "", **kwargs) -> ToolExecResult:
+        try:
+            result = None
+            match action:
+                case "pr_create":
+                    if not title:
+                        return _err("pr_create 需要 title 参数")
+                    result = await _run_sync(_gh_pr_create, cwd or "", title, body, base, head)
+                case "pr_list":
+                    result = await _run_sync(_gh_pr_list, cwd or "", state, limit)
+                case "pr_merge":
+                    result = await _run_sync(_gh_pr_merge, cwd or "", number if number else None, strategy)
+                case "pr_view":
+                    result = await _run_sync(_gh_pr_view, cwd or "", number if number else None)
+                case "issue_create":
+                    if not title:
+                        return _err("issue_create 需要 title 参数")
+                    lbls = [l.strip() for l in labels.split(",")] if labels else None
+                    result = await _run_sync(_gh_issue_create, cwd or "", title, body, lbls)
+                case "issue_list":
+                    result = await _run_sync(_gh_issue_list, cwd or "", state, limit, labels)
+                case "issue_close":
+                    if not number:
+                        return _err("issue_close 需要 number 参数")
+                    result = await _run_sync(_gh_issue_close, cwd or "", number)
+                case "release_create":
+                    if not tag:
+                        return _err("release_create 需要 tag 参数")
+                    result = await _run_sync(_gh_release_create, cwd or "", tag, body, generate_notes)
+                case "release_list":
+                    result = await _run_sync(_gh_release_list, cwd or "", limit)
+                case "repo_view":
+                    result = await _run_sync(_gh_repo_view, cwd or "", owner_repo)
+                case "repo_create":
+                    if not title:
+                        return _err("repo_create 需要 title 参数（仓库名）")
+                    result = await _run_sync(_gh_repo_create, title, not public, cwd or "", True)
+                case "run_list":
+                    result = await _run_sync(_gh_run_list, cwd or "", limit)
+                case "auth_status":
+                    result = await _run_sync(_gh_auth_status)
+                case _:
+                    return _err(f"未知操作: {action}")
+            return _unwrap(result)
+        except Exception as e:
+            return _err(f"gh_cli.{action} 失败: {e}")
+
+
+@dataclass
+class OpenCodeTool(FunctionTool):
+    """委托编码任务给 OpenCode（默认 Flash 模型），省 token、保上下文。"""
+    name: str = "opencode"
+    description: str = (
+        "委托编码/审查/分析任务给 OpenCode CLI。"
+        "适用于：编写代码、修复 bug、审计代码、重构、分析项目。"
+        "默认异步执行（不阻塞弥亚），结果由观测台 task_runner 后台处理。默认 DeepSeek V4 Pro。"
+        "直接使用 DeepSeek V4 Pro，无需切换模型"
+        ""
+        "mode: audit=只读分析 / code=允许修改 / explore=探索结构"
+        "oc_context: 传入已知上下文（已读文件内容），省去探索时间"
+    )
+    parameters: dict = field(default_factory=lambda: {
+        "type": "object",
+        "properties": {
+            "task": {"type": "string", "description": "编码任务描述（必填，越详细越好）"},
+            "cwd": {"type": "string", "description": "工作目录，默认当前 workspace"},
+            "model": {"type": "string", "description": "模型，默认 DeepSeek V4 Pro，也可手动指定"},
+            "timeout": {"type": "integer", "description": "超时秒数，默认 180"},
+            "mode": {"type": "string", "description": "audit(只读分析)/code(允许修改)/explore(探索项目)，默认 audit"},
+            "oc_context": {"type": "string", "description": "已知上下文（已读文件内容等），节省探索时间"},
+            "async_mode": {"type": "boolean", "description": "异步模式（默认 true）：写任务文件后立即返回，由任务执行器后台执行。弥亚不阻塞。想同步等结果时传 false"},
+            "depends_on": {"type": "string", "description": "依赖的前置任务 ID——task_runner 自动读取其结果并注入为当前任务的上下文。用于任务链：先实现 Model，再基于 Model 实现 Service"},
+            "files": {"type": "string", "description": "本任务会修改的文件（逗号分隔，如 'main.py,utils.py'）。系统自动检测文件锁冲突，避免和弥亚撞车"},
+        },
+        "required": ["task"]
+    })
+
+    async def call(self, context: ContextWrapper[AstrAgentContext],
+                   task: str, cwd: str = "", model: str = "opencode-go/deepseek-v4-pro",
+                   timeout: int = 180, mode: str = "audit", oc_context: str = "",
+                   async_mode: bool = True, depends_on: str = "", files: str = "", **kwargs) -> ToolExecResult:
+        # 从 kwargs 提取 LLM 传入的 context（避免与框架 context 参数冲突）
+        if "context" in kwargs and kwargs["context"]:
+            oc_context = kwargs["context"]
+        try:
+            result = await _run_sync(_opencode_run, task, cwd, model, timeout, mode, oc_context, async_mode, depends_on, files)
+            return _unwrap(result)
+        except Exception as e:
+            return _err(f"opencode 失败: {e}")
+
+
+# ═══════════════════════════════════════════════════════════
+# Plugin entry
+# ═══════════════════════════════════════════════════════════
+
+class Main(star.Star):
+    """弥亚开发工具箱插件"""
+
+    def __init__(self, context: star.Context, config: dict = None) -> None:
+        super().__init__(context)
+        self.context = context
+
+        # A2: 加载配置并注入到工具模块
+        plug_dir = os.path.dirname(os.path.abspath(__file__))
+        config_path = os.path.join(plug_dir, "config.json")
+        _config = {}
+        if os.path.exists(config_path):
+            try:
+                with open(config_path, "r", encoding="utf-8") as f:
+                    _config = json.load(f)
+            except Exception:
+                logger.warning("配置文件 config.json 读取失败，使用默认值")
+        else:
+            _config = {
+                "es_path": "",
+                "opencode_path": "",
+                "gh_path": "",
+                "state_dir": "",
+                "lock_dirs": [],
+                "backup_dir": "",
+            }
+            try:
+                with open(config_path, "w", encoding="utf-8") as f:
+                    json.dump(_config, f, ensure_ascii=False, indent=2)
+            except Exception:
+                pass
+        _tool_config.set_config(_config, plug_dir)
+
+        # AstrBot WebUI 配置（_conf_schema.json）优先于 config.json
+        if config:
+            paths = config.get("paths", {})
+            changed = False
+            for key in ("es_path", "opencode_path", "gh_path", "state_dir", "backup_dir"):
+                if paths.get(key):
+                    _config[key] = paths[key]
+                    changed = True
+            if paths.get("lock_dirs"):
+                _config["lock_dirs"] = [d.strip() for d in paths["lock_dirs"].split(",") if d.strip()]
+                changed = True
+            if changed:
+                _tool_config.set_config(_config, plug_dir)
+                try:
+                    with open(config_path, "w", encoding="utf-8") as f:
+                        json.dump(_config, f, ensure_ascii=False, indent=2)
+                except Exception:
+                    pass
+
+        # 注册全部 42 个 LLM 工具
+        context.add_llm_tools(
+            SafeEditTool(),
+            SafeRollbackTool(),
+            SafeBackupsTool(),
+            FilePatchTool(),
+            FilePreviewTool(),
+            SyntaxCheckTool(),
+            GitStatusTool(),
+            GitDiffTool(),
+            GitLogTool(),
+            GitCommitTool(),
+            GitBranchTool(),
+            GitRemoteTool(),
+            GitPushTool(),
+            EsSearchTool(),
+            HttpGetTool(),
+            HttpPostTool(),
+            HttpDownloadTool(),
+            HtmlExtractTool(),
+            DirTreeTool(),
+            DiskInfoTool(),
+            PortCheckTool(),
+            FileDiffTool(),
+            ProcListTool(),
+            FileHashTool(),
+            FileZipTool(),
+            FileUnzipTool(),
+            SysSnapshotTool(),
+            EncodeTool(),
+            TimeTool(),
+            RegexTestTool(),
+            RegexReplaceTool(),
+            DirListTool(),
+            JsonQueryTool(),
+            TextFilterTool(),
+            DiffStringsTool(),
+            CsvParseTool(),
+            CsvGenTool(),
+            UuidGenTool(),
+            SemverTool(),
+            MdStripTool(),
+            GhCliTool(),
+            OpenCodeTool(),
+        )
+        logger.info("🔧 弥亚开发工具箱已就绪 — 42 个工具注册完毕")

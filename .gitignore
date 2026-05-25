@@ -1,0 +1,6 @@
+__pycache__/
+*.pyc
+*.bak
+*.pem
+*.key
+.env

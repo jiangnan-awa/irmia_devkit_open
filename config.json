@@ -1,0 +1,9 @@
+{
+  "_comment": "弥亚开发工具箱配置。空值 = 自动检测。",
+  "es_path": "",
+  "opencode_path": "",
+  "gh_path": "",
+  "state_dir": "",
+  "lock_dirs": [],
+  "backup_dir": ""
+}

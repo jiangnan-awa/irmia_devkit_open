@@ -1,0 +1,38 @@
+{
+  "paths": {
+    "description": "外部工具路径（留空 = 自动检测）",
+    "type": "object",
+    "items": {
+      "es_path": {
+        "description": "Everything CLI (es.exe) 路径",
+        "type": "string",
+        "default": ""
+      },
+      "opencode_path": {
+        "description": "OpenCode CLI 路径",
+        "type": "string",
+        "default": ""
+      },
+      "gh_path": {
+        "description": "GitHub CLI (gh.exe) 路径",
+        "type": "string",
+        "default": ""
+      },
+      "state_dir": {
+        "description": "异步任务状态文件目录",
+        "type": "string",
+        "default": ""
+      },
+      "lock_dirs": {
+        "description": "文件锁检测目录（逗号分隔）",
+        "type": "string",
+        "default": ""
+      },
+      "backup_dir": {
+        "description": "safe_edit 备份目录",
+        "type": "string",
+        "default": ""
+      }
+    }
+  }
+}

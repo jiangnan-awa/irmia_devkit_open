@@ -1,0 +1,193 @@
+"""
+safe_edit — 安全编辑工具（强制使用）。
+修改任何代码文件必须用此工具。内部自动：备份→patch→语法检查→通过保留/失败回滚。
+"""
+import shutil
+from datetime import datetime
+from pathlib import Path
+
+# 同一包内引用
+from .file_patch import patch
+from .syntax_check import check as syntax_check
+
+BACKUP_DIR = Path.home() / ".irmia" / "backups"
+
+
+def edit(filepath: str, old: str, new: str, replace_all: bool = False, occurrence: int = 0) -> dict:
+    """
+    安全编辑文件：自动备份→替换→语法检查→通过保留/失败回滚。
+    
+    修改任何代码文件必须使用此工具，不要绕过它直接用 file_write 或 file_patch。
+    
+    Args:
+        filepath: 文件路径
+        old: 旧文本（精确匹配）
+        new: 新文本
+        replace_all: 是否替换所有匹配
+        occurrence: 替换第 N 次出现（0=默认行为，首次出现。多匹配时可用此参数消歧）
+    
+    Returns:
+        {"ok": true, "backup": "...", "syntax_ok": true} 
+        或 {"ok": false, "rolled_back": true, "error": "..."}
+        或 {"ok": false, "matches": [行号...], "hint": "请使用 occurrence=N 指定目标"}
+    """
+    # C2: 拦截空 old 字符串，防止 content.replace("", "X") 损毁文件
+    if not old:
+        return {"ok": False, "error": "old 参数不能为空字符串，空替换会损毁文件"}
+
+    filepath = str(Path(filepath).resolve())
+    p = Path(filepath)
+    
+    if not p.exists():
+        return {"ok": False, "error": f"文件不存在: {filepath}"}
+    
+    # 0. 读取文件内容 (H3: GBK fallback, H11: 保留原始换行符)
+    content = None
+    encoding = "utf-8"
+    try:
+        with open(filepath, "r", encoding="utf-8", newline="") as f:
+            content = f.read()
+    except UnicodeDecodeError:
+        try:
+            with open(filepath, "r", encoding="gbk", newline="") as f:
+                content = f.read()
+                encoding = "gbk"
+        except Exception as e:
+            return {"ok": False, "error": f"无法解码文件: {e}"}
+    
+    # 0.1 消歧：计数 old 出现次数
+    old_count = content.count(old)
+    if old_count == 0:
+        return {"ok": False, "error": f"未找到匹配文本，文件内容未修改"}
+    
+    # ── 消歧与替换 ──
+    skip_patch = False
+
+    if old_count > 1 and not replace_all and occurrence == 0:
+        lines = content.split("\n")
+        positions = []
+        pos = 0
+        for i, line in enumerate(lines, 1):
+            local_pos = line.find(old)
+            if local_pos != -1:
+                positions.append({"line": i, "col": local_pos + 1, "preview": line.strip()[:80]})
+        return {
+            "ok": False,
+            "error": f"old 文本在文件中出现了 {old_count} 次，请指定要替换第几次出现",
+            "occurrence_count": old_count,
+            "matches": positions[:20],
+            "hint": f"请使用 occurrence=N 指定目标（1~{old_count}），或设 replace_all=True 替换全部"
+        }
+    
+    # 1. 备份（在任何修改之前）
+    ts = datetime.now().strftime("%Y%m%d_%H%M%S")
+    backup_path = BACKUP_DIR / f"{p.name}.{ts}.bak"
+    BACKUP_DIR.mkdir(parents=True, exist_ok=True)
+    shutil.copy2(filepath, str(backup_path))
+    
+    result = {
+        "file": filepath,
+        "backup": str(backup_path),
+        "timestamp": ts,
+    }
+
+    # 2. 执行替换
+    if occurrence > 0 and not replace_all:
+        if occurrence > old_count:
+            return {"ok": False, "error": f"occurrence={occurrence} 超过匹配总数 {old_count}"}
+        # C1 修复: 先收集所有非重叠匹配位置，再取第 N 个
+        positions = []
+        pos = 0
+        while True:
+            idx = content.find(old, pos)
+            if idx == -1:
+                break
+            positions.append(idx)
+            pos = idx + len(old)
+        target_idx = occurrence - 1
+        idx = positions[target_idx]
+        content = content[:idx] + new + content[idx + len(old):]
+        with open(filepath, "w", encoding=encoding, newline="") as f:
+            f.write(content)
+        skip_patch = True
+        result["replaced"] = 1
+        result["occurrence"] = occurrence
+    else:
+        patch_result = patch(filepath, old, new, replace_all)
+        if not patch_result.get("ok"):
+            return {**result, "ok": False, "error": patch_result.get("error", "patch 失败"), "rolled_back": False}
+        result["replaced"] = patch_result.get("replaced", 0)
+    
+    # 3. 语法检查（只对代码文件）
+    suffix = p.suffix.lower()
+    if suffix in (".py", ".nim", ".go", ".js", ".ts", ".jsx", ".tsx"):
+        check_result = syntax_check(filepath)
+        result["syntax_check"] = check_result
+        
+        if not check_result.get("ok"):
+            if check_result.get("skipped"):
+                result["syntax_ok"] = None
+                result["syntax_check"] = check_result
+            else:
+                shutil.copy2(str(backup_path), filepath)
+                return {
+                    **result,
+                    "ok": False,
+                    "rolled_back": True,
+                    "error": f"语法检查失败，已自动回滚到备份: {backup_path}",
+                    "syntax_errors": check_result.get("errors", [])
+                }
+        else:
+            result["syntax_ok"] = True
+    else:
+        result["syntax_ok"] = None
+        result["syntax_check"] = {"note": "非代码文件，跳过语法检查"}
+    
+    result["ok"] = True
+    return result
+
+
+def list_backups(filepath: str = None) -> dict:
+    """列出备份文件。"""
+    BACKUP_DIR.mkdir(parents=True, exist_ok=True)
+    backups = []
+    for b in sorted(BACKUP_DIR.glob("*.bak"), reverse=True):
+        stat = b.stat()
+        backups.append({
+            "file": b.name,
+            "size": stat.st_size,
+            "time": datetime.fromtimestamp(stat.st_mtime).isoformat()
+        })
+    
+    if filepath:
+        name = Path(filepath).name
+        prefix = f"{name}."
+        backups = [b for b in backups if b["file"].startswith(prefix)]
+    
+    return {"ok": True, "backups": backups[:20], "total": len(backups)}
+
+
+def rollback(filepath: str, backup_name: str = None) -> dict:
+    """
+    回滚文件到指定备份。不指定则回滚到最近的备份。
+    """
+    p = Path(filepath)
+    
+    if backup_name:
+        backup_path = BACKUP_DIR / Path(backup_name).name  # 只取文件名防路径穿越
+        if not backup_path.exists():
+            return {"ok": False, "error": f"备份不存在: {backup_name}"}
+    else:
+        # 找最近的备份
+        pattern = f"{p.name}.*.bak"
+        candidates = sorted(BACKUP_DIR.glob(pattern), reverse=True)
+        if not candidates:
+            return {"ok": False, "error": f"没有找到 {p.name} 的备份"}
+        backup_path = candidates[0]
+    
+    shutil.copy2(str(backup_path), filepath)
+    return {
+        "ok": True,
+        "file": filepath,
+        "restored_from": str(backup_path)
+    }
