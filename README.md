@@ -51,7 +51,7 @@ data/plugins/
 | 工具 | 依赖 | 未安装时的行为 |
 |------|------|---------------|
 | `es_search` | [Everything](https://www.voidtools.com/) + es.exe | 返回错误提示 |
-| `gh_cli` | [GitHub CLI](https://cli.github.com/) | 返回错误提示 |
+| `gh_pr` / `gh_issue` / `gh_release` / `gh_repo` | [GitHub CLI](https://cli.github.com/) | 返回错误提示 |
 | `html_extract` | `pip install beautifulsoup4`（lxml 可选） | bs4 必装，lxml 缺失回退 html.parser |
 | `syntax_check` (Nim) | Nim 编译器 | 跳过 (skipped=true) |
 | `syntax_check` (Go) | Go 编译器 | 跳过 |
@@ -62,7 +62,7 @@ data/plugins/
 
 > 其余 40+ 个工具为纯 Python 标准库，零外部依赖。
 
-## 工具列表 (54 个)
+## 工具列表 (57 个)
 
 ### 🔒 安全编辑链 (6)
 
@@ -75,7 +75,7 @@ data/plugins/
 | `file_preview` | 预览替换效果 (dry-run diff) |
 | `syntax_check` | Python / Nim / Go / JS / TS 语法检查 |
 
-### 🔀 Git & GitHub (8)
+### 🔀 Git & GitHub (11)
 
 | 工具 | 用途 |
 |------|------|
@@ -86,7 +86,10 @@ data/plugins/
 | `git_branch` | 当前分支名 |
 | `git_remote` | 远程仓库 URL |
 | `git_push` | 推送到 origin（无 --force） |
-| `gh_cli` | PR / Issue / Release / CI / 仓库 — 13 种操作 |
+| `gh_pr` | Pull Request：创建/列出/合并/查看 |
+| `gh_issue` | Issue：创建/列出/关闭 |
+| `gh_release` | Release：创建发布/列出 |
+| `gh_repo` | 仓库：创建/查看/CI状态/认证检查 |
 
 ### 📁 文件系统 (10)
 
@@ -168,7 +171,7 @@ data/plugins/
 
 ## 版本
 
-**1.5.0** — 跨平台支持 + 工具拆分 + 新工具 + 工具组开关
+**1.6.0** — 工具组开关 + GhCli拆分 + IPv6安全 + 注册表外移
 
 ## 作者
 
