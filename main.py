@@ -12,9 +12,6 @@ from astrbot.api import logger, star
 
 from .tools import config as _tool_config
 
-# ── 共享辅助函数 ──
-from .tools._helpers import err_json as _err, unwrap as _unwrap, run_sync as _run_sync
-
 from .tools._registry import TOOL_GROUPS, _ALL_TOOLS
 
 _DEFAULT_CONFIG = {

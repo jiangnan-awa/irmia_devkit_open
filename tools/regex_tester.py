@@ -11,6 +11,9 @@ _MAX_PATTERN_LEN = 2000
 _MAX_TEXT_LEN = 100_000
 _REGEX_TIMEOUT = 3  # 秒
 
+# S2: 嵌套量词检测 — 防灾难性回溯
+_NESTED_RE = re.compile(r'\([^)]*\)[\*\+]\s*[\*\+]|\([^)]*[\*\+]\s*\)[\*\+]')
+
 
 def _timeout_handler(signum, frame):
     raise TimeoutError("正则匹配超时")
@@ -25,7 +28,6 @@ def test(pattern: str, text: str, flags: str = "") -> dict:
         return {"ok": False, "error": f"待匹配文本过长（{len(text)} > {_MAX_TEXT_LEN}）"}
 
     # S2: 嵌套量词检测 — 防灾难性回溯
-    _NESTED_RE = re.compile(r'\([^)]*\)[\*\+]\s*[\*\+]|\([^)]*[\*\+]\s*\)[\*\+]')
     if _NESTED_RE.search(pattern):
         return {"ok": False, "error": "正则包含嵌套量词（如 (a+)+），存在灾难性回溯风险，已被拒绝"}
 
