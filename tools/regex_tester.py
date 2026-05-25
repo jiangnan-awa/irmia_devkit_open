@@ -24,6 +24,11 @@ def test(pattern: str, text: str, flags: str = "") -> dict:
     if len(text) > _MAX_TEXT_LEN:
         return {"ok": False, "error": f"待匹配文本过长（{len(text)} > {_MAX_TEXT_LEN}）"}
 
+    # S2: 嵌套量词检测 — 防灾难性回溯
+    _NESTED_RE = re.compile(r'\([^)]*\)[\*\+]\s*[\*\+]|\([^)]*[\*\+]\s*\)[\*\+]')
+    if _NESTED_RE.search(pattern):
+        return {"ok": False, "error": "正则包含嵌套量词（如 (a+)+），存在灾难性回溯风险，已被拒绝"}
+
     flag_map = {
         "i": re.IGNORECASE,
         "m": re.MULTILINE,

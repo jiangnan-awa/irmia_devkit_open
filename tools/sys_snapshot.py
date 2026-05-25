@@ -44,9 +44,10 @@ def _windows_info(info: dict) -> None:
                 info["available_memory_mb"] = _extract_mb(line)
             if "系统启动时间" in line or "System Boot Time" in line:
                 info["boot_time"] = line.split(":", 1)[-1].strip()
-    except Exception:
+    except Exception as e:
         info["total_memory_mb"] = None
         info["available_memory_mb"] = None
+        info["_windows_mem_error"] = str(e)
 
     try:
         result = subprocess.run(
@@ -54,8 +55,9 @@ def _windows_info(info: dict) -> None:
             capture_output=True, text=True, timeout=10, encoding="gbk", errors="replace"
         )
         info["process_count"] = len([l for l in result.stdout.split("\n") if l.strip()])
-    except Exception:
+    except Exception as e:
         info["process_count"] = None
+        info["_windows_proc_error"] = str(e)
 
 
 def _linux_info(info: dict) -> None:
@@ -74,7 +76,8 @@ def _linux_info(info: dict) -> None:
         info["process_count"] = sum(
             1 for d in os.listdir("/proc") if d.isdigit()
         )
-    except Exception:
+    except Exception as e:
         info["total_memory_mb"] = None
         info["available_memory_mb"] = None
         info["process_count"] = None
+        info["_linux_error"] = str(e)

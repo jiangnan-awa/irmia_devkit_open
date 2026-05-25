@@ -36,6 +36,14 @@ def watch(path: str, duration_s: int = 10, interval_s: float = 1.0, pattern: str
     deadline = start + duration_s
     while time.time() < deadline:
         time.sleep(interval_s)
+        # Q2: 每轮重扫目录，捕获新增文件
+        if p.is_dir():
+            current_files = set(p.rglob("*") if not pattern else p.rglob(pattern))
+            target = [f for f in current_files if f.is_file()]
+            for f in target:
+                key = str(f)
+                if key not in baseline:
+                    baseline[key] = (0, 0)
         for f in list(target):
             try:
                 st = f.stat()

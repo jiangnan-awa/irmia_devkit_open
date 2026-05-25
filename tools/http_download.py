@@ -59,7 +59,7 @@ def download(url: str, path: str, overwrite: bool = False, timeout: int = 60) ->
 
     start = time.time()
     try:
-        req = urllib.request.Request(url, headers={"User-Agent": "IrmiaDevKit/1.0"})
+        req = urllib.request.Request(url, headers={"User-Agent": "IrmiaDevKit/1.6"})
         with urllib.request.urlopen(req, timeout=timeout) as resp:
             size = int(resp.headers.get("Content-Length", 0))
             # H5: 下载大小上限

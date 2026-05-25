@@ -28,7 +28,7 @@ def _build_response(resp) -> dict:
 
 def _add_ua(req, headers: dict | None):
     if not headers or "User-Agent" not in headers:
-        req.add_header("User-Agent", "Irmia-DevKit/1.0")
+        req.add_header("User-Agent", "IrmiaDevKit/1.6")
 
 
 def get(url: str, headers: dict | None = None, timeout: int = 10) -> dict:

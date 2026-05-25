@@ -31,6 +31,16 @@ def validate_url(url: str) -> dict | None:
                 return {"ok": False, "error": f"禁止访问内网地址: {hostname}"}
     except ValueError:
         pass
+
+    # IPv4-mapped-IPv6: ::ffff:192.168.1.1 → 检查映射的 IPv4
+    try:
+        ipv4 = ip.ipv4_mapped
+        if ipv4:
+            for net in _PRIVATE_NETS:
+                if ipv4 in net:
+                    return {"ok": False, "error": f"禁止访问内网地址: {hostname}"}
+    except (AttributeError, ValueError):
+        pass
     try:
         addrs = socket.getaddrinfo(hostname, None, proto=socket.IPPROTO_TCP)
         for addr in addrs:
