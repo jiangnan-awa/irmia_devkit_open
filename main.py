@@ -1320,7 +1320,7 @@ class LogParseTool(FunctionTool):
 @dataclass
 class FileWatchTool(FunctionTool):
     name: str = "file_watch"
-    description: str = "监控目录/文件变化（轮询 mtime/size）。duration_s 监控时长(默认10s)，interval_s 轮询间隔(默认1s)。"
+    description: str = "监控目录/文件变化（轮询 mtime/size），用于观察操作后的文件变更。duration_s 监控时长(默认10s)，interval_s 轮询间隔(默认1s)。注意会阻塞 duration_s 秒。"
     parameters: dict = field(default_factory=lambda: {
         "type": "object",
         "properties": {
@@ -1355,7 +1355,7 @@ class ConfigDiffTool(FunctionTool):
 @dataclass
 class SvgRenderTool(FunctionTool):
     name: str = "svg_render"
-    description: str = "将 SVG 文件渲染为 PNG。需要 cairosvg (pip install cairosvg)。"
+    description: str = "将 SVG 文件渲染为 PNG，用于预览 SVG 图标/图形效果。需要 cairosvg (pip install cairosvg)。"
     parameters: dict = field(default_factory=lambda: {
         "type": "object",
         "properties": {
