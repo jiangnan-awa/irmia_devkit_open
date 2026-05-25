@@ -11,7 +11,7 @@
       "文本处理": { "type": "bool", "default": true, "description": "📝 文本处理 — HTML/JSON/CSV/正则/日志" },
       "编码": { "type": "bool", "default": true, "description": "🔤 编码 — Base64/URL/Hex 编解码" },
       "时间": { "type": "bool", "default": true, "description": "⏱ 时间 — 时间戳/ISO互转/时间差" },
-      "扩展": { "type": "bool", "default": true, "description": "🧩 扩展 — SVG/Schema/版本/UUID" }
+      "扩展": { "type": "bool", "default": true, "description": "🧩 扩展 — 项目初始化/变更日志/SVG/Schema/版本/UUID" },
     }
   },
   "disabled_tools": {

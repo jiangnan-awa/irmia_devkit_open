@@ -62,6 +62,8 @@ from .file_watch import watch as _file_watch
 from .config_diff import diff as _config_diff
 from .svg_render import render as _svg_render
 from .json_schema_val import validate as _json_schema_val
+from .project_init import scan as _project_init_scan
+from .git_changelog import changelog as _git_changelog
 
 # ═══════════════════════════════════════════════════════════
 # Tool classes
@@ -1451,6 +1453,39 @@ class JsonSchemaValTool(FunctionTool):
         except Exception as e: return _err(f"json_schema_val 失败: {e}")
 
 
+@dataclass
+class ProjectInitTool(FunctionTool):
+    name: str = "project_init"
+    description: str = "扫描项目目录，detect 语言/框架/依赖/目录结构，返回结构化上下文 JSON 给 LLM 理解项目。"
+    parameters: dict = field(default_factory=lambda: {
+        "type": "object",
+        "properties": {
+            "project_dir": {"type": "string", "description": "项目根目录路径，默认当前目录"},
+        },
+        "required": []
+    })
+    async def call(self, context: ContextWrapper[AstrAgentContext], project_dir: str = ".", **kwargs) -> ToolExecResult:
+        try: return _unwrap(await _run_sync(_project_init_scan, project_dir))
+        except Exception as e: return _err(f"project_init 失败: {e}")
+
+
+@dataclass
+class GitChangelogTool(FunctionTool):
+    name: str = "git_changelog"
+    description: str = "从 git log 生成分类 changelog：按 fix:/feat:/refactor:/docs: 前缀分组，返回结构化 counts。"
+    parameters: dict = field(default_factory=lambda: {
+        "type": "object",
+        "properties": {
+            "cwd": {"type": "string", "description": "Git 仓库路径"},
+            "count": {"type": "integer", "description": "最近的 commit 数，默认 30"},
+        },
+        "required": ["cwd"]
+    })
+    async def call(self, context: ContextWrapper[AstrAgentContext], cwd: str, count: int = 30, **kwargs) -> ToolExecResult:
+        try: return _unwrap(await _run_sync(_git_changelog, cwd, count))
+        except Exception as e: return _err(f"git_changelog 失败: {e}")
+
+
 # ═══════════════════════════════════════════════════════════
 # Tool groups and registry
 # ═══════════════════════════════════════════════════════════
@@ -1464,7 +1499,7 @@ TOOL_GROUPS: dict[str, list[str]] = {
     "文本处理": ["html_extract", "json_query", "text_filter", "diff_strings", "regex_test", "regex_replace", "csv_parse", "csv_gen", "md_strip", "log_parse"],
     "编码": ["base64_encode", "base64_decode", "url_encode", "url_decode", "hex_encode", "hex_decode"],
     "时间": ["time_now", "ts_to_iso", "iso_to_ts", "time_diff"],
-    "扩展": ["svg_render", "json_schema_val", "semver_compare", "uuid_gen"],
+    "扩展": ["svg_render", "json_schema_val", "semver_compare", "uuid_gen", "project_init", "git_changelog"],
 }
 
 _ALL_TOOLS = {
@@ -1487,4 +1522,5 @@ _ALL_TOOLS = {
     "time_now": TimeNowTool, "ts_to_iso": TsToIsoTool, "iso_to_ts": IsoToTsTool, "time_diff": TimeDiffTool,
     "svg_render": SvgRenderTool, "json_schema_val": JsonSchemaValTool,
     "semver_compare": SemverTool, "uuid_gen": UuidGenTool,
+    "project_init": ProjectInitTool, "git_changelog": GitChangelogTool,
 }

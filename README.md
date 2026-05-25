@@ -39,7 +39,7 @@ data/plugins/
 
 ## 工具组
 
-54 个工具按 9 组管理。在 `config.json` 中设 `tool_groups` 的组为 `false` 关闭整组，或用 `disabled_tools` 逗号分隔禁用单个工具。WebUI 面板同样支持。**修改后需重启 AstrBot**。
+59 个工具按 9 组管理。在 `config.json` 中设 `tool_groups` 的组为 `false` 关闭整组，或用 `disabled_tools` 逗号分隔禁用单个工具。WebUI 面板同样支持。**修改后需重启 AstrBot**。
 
 | 字段 | 说明 |
 |------|------|
@@ -62,7 +62,7 @@ data/plugins/
 
 > 其余 40+ 个工具为纯 Python 标准库，零外部依赖。
 
-## 工具列表 (57 个)
+## 工具列表 (59 个)
 
 ### 🔒 安全编辑链 (6)
 
@@ -154,7 +154,7 @@ data/plugins/
 | `iso_to_ts` | ISO 字符串→时间戳 |
 | `time_diff` | 两个 ISO 时间的差值 |
 
-### 🧩 扩展 (4)
+### 🧩 扩展 (6)
 
 | 工具 | 用途 |
 |------|------|
@@ -162,6 +162,8 @@ data/plugins/
 | `uuid_gen` | UUID4 / hex / token 生成（密码学安全） |
 | `svg_render` | SVG→PNG 渲染（可选 cairosvg） |
 | `json_schema_val` | JSON Schema 校验（可选 jsonschema） |
+| `project_init` | 扫描项目：detect 语言/框架/依赖/目录结构 |
+| `git_changelog` | git log→分类 changelog（fix/feat/refactor/docs） |
 
 ### 🧠 Skill
 
@@ -171,7 +173,7 @@ data/plugins/
 
 ## 版本
 
-**1.6.0** — 工具组开关 + GhCli拆分 + IPv6安全 + 注册表外移
+**1.7.0** — project_init项目扫描 + git_changelog语义分组
 
 ## 作者
 
