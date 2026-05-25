@@ -59,11 +59,17 @@ def _check_python(p: Path) -> dict:
             hint = "文件末尾缺少闭合符号——检查是否有未闭合的引号、括号或三引号。"
         else:
             hint = f"第{e.lineno}行语法错误: {e.msg}"
+        errors = [{
+            "line": e.lineno,
+            "col": e.offset,
+            "msg": e.msg,
+            "text": e.text.strip() if e.text else ""
+        }]
         return proposal_reply(False, hint,
-                              language="python",
                               error=f"语法检查失败: {e.msg}",
-                              evidence={"line": e.lineno, "col": e.offset, "msg": e.msg, "text": e.text.strip() if e.text else ""},
-                              options=["修正后重试 safe_edit", "查看错误行上下文"])
+                              evidence={"line": e.lineno, "col": e.offset, "msg": e.msg},
+                              options=["修正后重试 safe_edit", "查看错误行上下文"],
+                              language="python", errors=errors)
     except Exception:
         # 回退到 py_compile
         try:
