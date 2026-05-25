@@ -60,8 +60,6 @@ from .tools.gh_cli import (
     release_create as _gh_release_create, release_list as _gh_release_list,
     repo_view as _gh_repo_view, repo_create as _gh_repo_create, run_list as _gh_run_list, auth_status as _gh_auth_status,
 )
-from .tools.opencode import run as _opencode_run
-
 
 def _ok(data: Any = None) -> str:
     result: dict[str, Any] = {"ok": True}
@@ -251,7 +249,7 @@ class GitStatusTool(FunctionTool):
     """Git 状态。"""
     name: str = "git_status"
     description: str = (
-        "查看 Git 仓库状态。修改代码前必调用，确认工作区是否干净。"
+        "替代 `git status`——查看 Git 仓库状态。修改代码前必调用，确认工作区是否干净。"
         "返回 changed_count 和 changes 列表。想看具体差异请用 git_diff。"
     )
     parameters: dict = field(default_factory=lambda: {
@@ -274,7 +272,7 @@ class GitStatusTool(FunctionTool):
 class GitDiffTool(FunctionTool):
     """Git diff。"""
     name: str = "git_diff"
-    description: str = "查看 Git 差异。改完代码后先用 staged=false 看工作区改动；提交前必须用 staged=true 自查要提交的内容。"
+    description: str = "替代 `git diff`——查看 Git 差异。改完代码后先用 staged=false 看工作区改动；提交前必须用 staged=true 自查要提交的内容。"
     parameters: dict = field(default_factory=lambda: {
         "type": "object",
         "properties": {
@@ -297,7 +295,7 @@ class GitDiffTool(FunctionTool):
 class GitLogTool(FunctionTool):
     """Git log。"""
     name: str = "git_log"
-    description: str = "查看 Git 最近提交记录。提交前确认历史干净、回滚后确认恢复到哪个版本时使用。"
+    description: str = "替代 `git log`——查看 Git 最近提交记录。提交前确认历史干净、回滚后确认恢复到哪个版本时使用。"
     parameters: dict = field(default_factory=lambda: {
         "type": "object",
         "properties": {
@@ -319,7 +317,7 @@ class GitLogTool(FunctionTool):
 class GitCommitTool(FunctionTool):
     """Git commit。"""
     name: str = "git_commit"
-    description: str = "提交所有更改。提交前请先调 git_diff(staged=true) 自查，确认改动正确后再提交。建议 message 格式: fix:/feat:/refactor: + 中文简述。"
+    description: str = "替代 `git commit`——提交所有更改。提交前请先调 git_diff(staged=true) 自查，确认改动正确后再提交。建议 message 格式: fix:/feat:/refactor: + 中文简述。"
     parameters: dict = field(default_factory=lambda: {
         "type": "object",
         "properties": {
@@ -341,7 +339,7 @@ class GitCommitTool(FunctionTool):
 class GitBranchTool(FunctionTool):
     """Git branch。"""
     name: str = "git_branch"
-    description: str = "获取当前 Git 分支名。提交前确认不在错误分支上（如误在 master 而非 feature 分支开发）。"
+    description: str = "替代 `git branch`——获取当前 Git 分支名。提交前确认不在错误分支上（如误在 master 而非 feature 分支开发）。"
     parameters: dict = field(default_factory=lambda: {
         "type": "object",
         "properties": {
@@ -362,7 +360,7 @@ class GitBranchTool(FunctionTool):
 class GitRemoteTool(FunctionTool):
     """Git remote URL。"""
     name: str = "git_remote"
-    description: str = "获取远程仓库 URL。首次推送前确认 remote 指向正确仓库（如 irmia2026/xxx 而非别人 fork）。"
+    description: str = "替代 `git remote -v`——获取远程仓库 URL。首次推送前确认 remote 指向正确仓库（如 irmia2026/xxx 而非别人 fork）。"
     parameters: dict = field(default_factory=lambda: {
         "type": "object",
         "properties": {
@@ -383,7 +381,7 @@ class GitRemoteTool(FunctionTool):
 class GitPushTool(FunctionTool):
     """Git push。"""
     name: str = "git_push"
-    description: str = "推送到远程仓库。自动获取当前分支，推送到 origin。推送前请先用 git_status + git_diff 自查。"
+    description: str = "替代 `git push`——推送到远程仓库。自动获取当前分支，推送到 origin。推送前请先用 git_status + git_diff 自查。"
     parameters: dict = field(default_factory=lambda: {
         "type": "object",
         "properties": {
@@ -1257,48 +1255,6 @@ class GhCliTool(FunctionTool):
             return _err(f"gh_cli.{action} 失败: {e}")
 
 
-@dataclass
-class OpenCodeTool(FunctionTool):
-    """委托编码任务给 OpenCode（默认 Flash 模型），省 token、保上下文。"""
-    name: str = "opencode"
-    description: str = (
-        "委托编码/审查/分析任务给 OpenCode CLI。"
-        "适用于：编写代码、修复 bug、审计代码、重构、分析项目。"
-        "默认异步执行（不阻塞弥亚），结果由观测台 task_runner 后台处理。默认 DeepSeek V4 Pro。"
-        "直接使用 DeepSeek V4 Pro，无需切换模型"
-        ""
-        "mode: audit=只读分析 / code=允许修改 / explore=探索结构"
-        "oc_context: 传入已知上下文（已读文件内容），省去探索时间"
-    )
-    parameters: dict = field(default_factory=lambda: {
-        "type": "object",
-        "properties": {
-            "task": {"type": "string", "description": "编码任务描述（必填，越详细越好）"},
-            "cwd": {"type": "string", "description": "工作目录，默认当前 workspace"},
-            "model": {"type": "string", "description": "模型，默认 DeepSeek V4 Pro，也可手动指定"},
-            "timeout": {"type": "integer", "description": "超时秒数，默认 180"},
-            "mode": {"type": "string", "description": "audit(只读分析)/code(允许修改)/explore(探索项目)，默认 audit"},
-            "oc_context": {"type": "string", "description": "已知上下文（已读文件内容等），节省探索时间"},
-            "async_mode": {"type": "boolean", "description": "异步模式（默认 true）：写任务文件后立即返回，由任务执行器后台执行。弥亚不阻塞。想同步等结果时传 false"},
-            "depends_on": {"type": "string", "description": "依赖的前置任务 ID——task_runner 自动读取其结果并注入为当前任务的上下文。用于任务链：先实现 Model，再基于 Model 实现 Service"},
-            "files": {"type": "string", "description": "本任务会修改的文件（逗号分隔，如 'main.py,utils.py'）。系统自动检测文件锁冲突，避免和弥亚撞车"},
-        },
-        "required": ["task"]
-    })
-
-    async def call(self, context: ContextWrapper[AstrAgentContext],
-                   task: str, cwd: str = "", model: str = "opencode-go/deepseek-v4-pro",
-                   timeout: int = 180, mode: str = "audit", oc_context: str = "",
-                   async_mode: bool = True, depends_on: str = "", files: str = "", **kwargs) -> ToolExecResult:
-        # 从 kwargs 提取 LLM 传入的 context（避免与框架 context 参数冲突）
-        if "context" in kwargs and kwargs["context"]:
-            oc_context = kwargs["context"]
-        try:
-            result = await _run_sync(_opencode_run, task, cwd, model, timeout, mode, oc_context, async_mode, depends_on, files)
-            return _unwrap(result)
-        except Exception as e:
-            return _err(f"opencode 失败: {e}")
-
 
 # ═══════════════════════════════════════════════════════════
 # Plugin entry
@@ -1324,7 +1280,6 @@ class Main(star.Star):
         else:
             _config = {
                 "es_path": "",
-                "opencode_path": "",
                 "gh_path": "",
                 "state_dir": "",
                 "lock_dirs": [],
@@ -1341,7 +1296,7 @@ class Main(star.Star):
         if config:
             paths = config.get("paths", {})
             changed = False
-            for key in ("es_path", "opencode_path", "gh_path", "state_dir", "backup_dir"):
+            for key in ("es_path", "gh_path", "state_dir", "backup_dir"):
                 if paths.get(key):
                     _config[key] = paths[key]
                     changed = True
@@ -1356,7 +1311,7 @@ class Main(star.Star):
                 except Exception:
                     pass
 
-        # 注册全部 42 个 LLM 工具
+        # 注册全部 41 个 LLM 工具
         context.add_llm_tools(
             SafeEditTool(),
             SafeRollbackTool(),
@@ -1399,6 +1354,5 @@ class Main(star.Star):
             SemverTool(),
             MdStripTool(),
             GhCliTool(),
-            OpenCodeTool(),
         )
-        logger.info("🔧 弥亚开发工具箱已就绪 — 42 个工具注册完毕")
+        logger.info("🔧 弥亚开发工具箱已就绪 — 41 个工具注册完毕")
