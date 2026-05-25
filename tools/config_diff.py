@@ -69,6 +69,9 @@ def _load(p: Path) -> dict:
     if suffix == ".json":
         return json.loads(text)
     if suffix in (".yaml", ".yml"):
-        import yaml
+        try:
+            import yaml
+        except ImportError:
+            raise ImportError("pyyaml 未安装，请运行: pip install pyyaml")
         return yaml.safe_load(text)
     raise ValueError(f"不支持的文件类型: {suffix}")

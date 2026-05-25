@@ -32,7 +32,8 @@ def watch(path: str, duration_s: int = 10, interval_s: float = 1.0, pattern: str
             pass
 
     events = []
-    deadline = time.time() + duration_s
+    start = time.time()
+    deadline = start + duration_s
     while time.time() < deadline:
         time.sleep(interval_s)
         for f in list(target):
@@ -61,7 +62,7 @@ def watch(path: str, duration_s: int = 10, interval_s: float = 1.0, pattern: str
         "ok": True,
         "path": str(p),
         "files_watched": len(target),
-        "duration_s": round(time.time() - (deadline - duration_s), 1),
+        "duration_s": round(time.time() - start, 1),
         "events": events[:100],
         "event_count": len(events),
         "truncated": len(events) > 100,

@@ -5,7 +5,7 @@ CPU/内存/进程数/开机时长。Windows: systeminfo+tasklist | Linux: /proc�
 import os
 import platform
 import subprocess
-from datetime import datetime
+from datetime import datetime, timedelta
 
 
 def snapshot() -> dict:
@@ -69,7 +69,7 @@ def _linux_info(info: dict) -> None:
 
         with open("/proc/uptime", "r") as f:
             uptime_s = float(f.read().split()[0])
-            info["boot_time"] = str(datetime.now() - datetime.timedelta(seconds=uptime_s))
+            info["boot_time"] = str(datetime.now() - timedelta(seconds=uptime_s))
 
         info["process_count"] = sum(
             1 for d in os.listdir("/proc") if d.isdigit()

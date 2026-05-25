@@ -66,10 +66,10 @@ def _list_windows(filter_name: str | None) -> dict:
 
 
 def _list_posix(filter_name: str | None) -> dict:
-    """Linux/macOS: ps aux"""
+    """Linux/macOS: ps aux（跳过表头行）"""
     try:
         result = subprocess.run(
-            ["ps", "aux", "--no-headers"] if os.path.exists("/usr/bin/ps") else ["ps", "aux"],
+            ["ps", "aux"],
             capture_output=True, text=True, timeout=10
         )
         if result.returncode != 0:
