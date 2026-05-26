@@ -5,7 +5,7 @@
     "items": {
       "安全编辑链": { "type": "bool", "default": true, "description": "🔒 安全编辑链 — 编辑/备份/语法/回滚/代码质量检查" },
       "Git & GitHub": { "type": "bool", "default": true, "description": "🔀 Git & GitHub — git操作+PR/Issue/Release/CI" },
-      "文件系统": { "type": "bool", "default": true, "description": "📁 文件系统 — 搜索/浏览/哈希/压缩/磁盘" },
+      "文件系统": { "type": "bool", "default": true, "description": "📁 文件系统 — 搜索/浏览/哈希/压缩/磁盘/删除" },
       "系统信息": { "type": "bool", "default": true, "description": "📊 系统信息 — 端口/进程/快照/统计" },
       "网络": { "type": "bool", "default": true, "description": "🌐 网络 — HTTP GET/POST/下载" },
       "文本处理": { "type": "bool", "default": true, "description": "📝 文本处理 — HTML/JSON/CSV/正则/日志" },

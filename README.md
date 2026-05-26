@@ -43,7 +43,7 @@ Python ≥ 3.10
 
 部分工具（`git_commit`、`syntax_check`、`port_check`、`es_search`、`lint_runner`、`dep_scan` 等 17 个）在失败或歧义时返回 `{proposal, evidence, options, next_call}` 结构化信息，替代纯文本错误。
 
-63 个工具按 9 组管理，可在 `config.json` 中按组或按单个工具关闭。
+64 个工具按 9 组管理，可在 `config.json` 中按组或按单个工具关闭。
 
 ## 工具列表 (63)
 
@@ -75,7 +75,7 @@ Python ≥ 3.10
 | `gh_release` | Release：创建/列出 |
 | `gh_repo` | 仓库：创建/查看/CI/认证 |
 
-### 📁 文件系统 (10)
+### 📁 文件系统 (11)
 
 | 工具 | 用途 |
 |------|------|
@@ -86,6 +86,7 @@ Python ≥ 3.10
 | `file_hash` | MD5 / SHA1 / SHA256 |
 | `file_zip` | ZIP 打包 |
 | `file_unzip` | ZIP 解压（Zip-slip 防护） |
+| `file_remove` | 删除文件/目录（沙箱+批量确认） |
 | `disk_info` | 磁盘分区使用情况 |
 | `file_watch` | 文件变化监控 |
 | `config_diff` | 配置文件 key 级差异 |

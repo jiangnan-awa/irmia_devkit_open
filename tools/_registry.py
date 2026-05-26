@@ -90,6 +90,7 @@ from .lint_runner import run as _lint_run
 from .tool_stats import snapshot as _tool_stats_snap
 from .db_query import query as _db_query
 from .dep_scan import scan as _dep_scan
+from .file_remove import remove as _file_remove
 
 # ═══════════════════════════════════════════════════════════
 # Tool classes
@@ -2499,6 +2500,45 @@ class DepScanTool(FunctionTool):
             return _err(f"dep_scan 失败: {e}")
 
 
+@dataclass
+class FileRemoveTool(FunctionTool):
+    """删除文件/目录（含沙箱）。"""
+
+    name: str = "file_remove"
+    description: str = (
+        "【替代 del/rmdir——首选】删除文件或目录，自带沙箱和批量确认。"
+        "比 shell del 多一层路径保护，比 Python os.remove 多一层批量拦截。"
+        "目录超过 50 个文件时返回提案，需 confirm=true 确认。"
+    )
+    parameters: dict = field(
+        default_factory=lambda: {
+            "type": "object",
+            "properties": {
+                "path": {"type": "string", "description": "文件或目录路径"},
+                "confirm": {
+                    "type": "boolean",
+                    "description": "目录删除需显式确认",
+                    "default": False,
+                },
+            },
+            "required": ["path"],
+        }
+    )
+
+    async def call(
+        self,
+        context: ContextWrapper[AstrAgentContext],
+        path: str,
+        confirm: bool = False,
+        **kwargs,
+    ) -> ToolExecResult:
+        _tool_stats.record(self.name)
+        try:
+            return _unwrap(await _run_sync(_file_remove, path, confirm))
+        except Exception as e:
+            return _err(f"file_remove 失败: {e}")
+
+
 # ═══════════════════════════════════════════════════════════
 # Tool groups and registry
 # ═══════════════════════════════════════════════════════════
@@ -2536,6 +2576,7 @@ TOOL_GROUPS: dict[str, list[str]] = {
         "file_unzip",
         "disk_info",
         "file_watch",
+        "file_remove",
         "config_diff",
     ],
     "系统信息": ["port_check", "proc_list", "sys_snapshot", "tool_stats"],
@@ -2601,6 +2642,7 @@ _ALL_TOOLS = {
     "file_unzip": FileUnzipTool,
     "disk_info": DiskInfoTool,
     "file_watch": FileWatchTool,
+    "file_remove": FileRemoveTool,
     "config_diff": ConfigDiffTool,
     "port_check": PortCheckTool,
     "proc_list": ProcListTool,
