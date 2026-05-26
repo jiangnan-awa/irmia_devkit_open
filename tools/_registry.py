@@ -727,12 +727,16 @@ class HttpPostTool(FunctionTool):
         _tool_stats.record(self.name)
         try:
             body = data
+            json_failed = False
             if data:
                 try:
                     parsed = json.loads(data)
                     body = parsed if isinstance(parsed, dict) else data
                 except (json.JSONDecodeError, TypeError):
-                    body = data
+                    json_failed = True
+            if json_failed and data.strip():
+                if data.strip()[0] in ("{", "["):
+                    return _err(f"data 看起来是 JSON 但解析失败——请检查 JSON 语法后重试")
             result = await _run_sync(_http_post, url, body if body else None, headers)
             return _unwrap(result)
         except Exception as e:
@@ -1920,11 +1924,11 @@ class GhPrTool(FunctionTool):
                     result = await _run_sync(_gh_pr_list, cwd or "", state, limit)
                 case "merge":
                     result = await _run_sync(
-                        _gh_pr_merge, cwd or "", number if number else None, strategy
+                        _gh_pr_merge, cwd or "", number or None, strategy
                     )
                 case "view":
                     result = await _run_sync(
-                        _gh_pr_view, cwd or "", number if number else None
+                        _gh_pr_view, cwd or "", number or None
                     )
                 case _:
                     return _err(f"未知操作: {action}")
