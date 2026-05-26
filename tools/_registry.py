@@ -1266,7 +1266,7 @@ class HexDecodeTool(FunctionTool):
 @dataclass
 class UrlTool(FunctionTool):
     name: str = "url_"
-    description: str = "URL 编解码。action: encode(编码) / decode(解码)。"
+    description: str = "URL 编解码。action: encode(编码) / decode(解码)。比手写 urllib.parse 少 4 行样板。"
     parameters: dict = field(
         default_factory=lambda: {
             "type": "object",
@@ -1333,7 +1333,7 @@ class TimeNowTool(FunctionTool):
 @dataclass
 class TimeConvertTool(FunctionTool):
     name: str = "time_convert"
-    description: str = "Unix 时间戳与 ISO 互转。direction: to_iso(时间戳→ISO) / to_ts(ISO→时间戳)。ms=True 表示毫秒。"
+    description: str = "【替代手动乘除——首选】Unix 时间戳与 ISO 互转。direction: to_iso(时间戳→ISO) / to_ts(ISO→时间戳)。ms=True 表示毫秒。比 Python datetime.fromtimestamp 少 3 行。"
     parameters: dict = field(
         default_factory=lambda: {
             "type": "object",
