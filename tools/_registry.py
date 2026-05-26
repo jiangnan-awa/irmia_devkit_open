@@ -1153,159 +1153,160 @@ class SysSnapshotTool(FunctionTool):
 
 # ══ 编码 (6) ══
 @dataclass
-class Base64EncodeTool(FunctionTool):
-    name: str = "base64_encode"
-    description: str = "将文本编码为 Base64。as_uri=True 生成 data: URI。"
+class Base64Tool(FunctionTool):
+    name: str = "base64_"
+    description: str = (
+        "【替代 base64 命令——首选】Base64 编解码。"
+        "action: encode(编码)/decode(解码)。encode 时 as_uri=True 可生成 data: URI，"
+        "decode 时 strip_uri=True 自动剥离 data: URI 前缀。"
+        "比 shell base64 命令少一步管道拼接。"
+    )
     parameters: dict = field(
         default_factory=lambda: {
             "type": "object",
             "properties": {
-                "data": {"type": "string", "description": "要编码的文本"},
-                "as_uri": {
-                    "type": "boolean",
-                    "description": "是否生成 data: URI",
-                    "default": False,
-                },
+                "action": {"type": "string", "description": "encode / decode", "enum": ["encode", "decode"]},
+                "data": {"type": "string", "description": "要处理的文本"},
+                "as_uri": {"type": "boolean", "description": "encode 时是否生成 data: URI", "default": False},
+                "strip_uri": {"type": "boolean", "description": "decode 时是否剥离 data: URI 前缀", "default": False},
             },
-            "required": ["data"],
+            "required": ["action", "data"],
         }
     )
 
     async def call(
-        self,
-        context: ContextWrapper[AstrAgentContext],
-        data: str,
-        as_uri: bool = False,
-        **kwargs,
+        self, context: ContextWrapper[AstrAgentContext], action: str, data: str,
+        as_uri: bool = False, strip_uri: bool = False, **kwargs
     ) -> ToolExecResult:
         _tool_stats.record(self.name)
         try:
-            return _unwrap(b64_encode(data, as_uri))
-        except Exception as e:
-            return _err(f"base64_encode 失败: {e}")
+            if action == "encode": return _unwrap(b64_encode(data, as_uri))
+            return _unwrap(b64_decode(data, strip_uri))
+        except Exception as e: return _err(f"base64_ 失败: {e}")
+
+
+# 向后兼容别名（1 版本后移除）
+@dataclass
+class Base64EncodeTool(FunctionTool):
+    name: str = "base64_encode"
+    description: str = "Base64 编码。[已合并到 base64_，新调用请用 base64_ with action=encode]"
+    parameters: dict = field(default_factory=lambda: {
+        "type": "object", "properties": {"data": {"type": "string"}}, "required": ["data"]
+    })
+    async def call(self, context: ContextWrapper[AstrAgentContext], data: str, **kwargs) -> ToolExecResult:
+        _tool_stats.record(self.name)
+        try: return _unwrap(b64_encode(data, False))
+        except Exception as e: return _err(f"base64_encode 失败: {e}")
 
 
 @dataclass
 class Base64DecodeTool(FunctionTool):
     name: str = "base64_decode"
+    description: str = "Base64 解码。[已合并到 base64_，新调用请用 base64_ with action=decode]"
+    parameters: dict = field(default_factory=lambda: {
+        "type": "object", "properties": {"data": {"type": "string"}}, "required": ["data"]
+    })
+    async def call(self, context: ContextWrapper[AstrAgentContext], data: str, **kwargs) -> ToolExecResult:
+        _tool_stats.record(self.name)
+        try: return _unwrap(b64_decode(data, False))
+        except Exception as e: return _err(f"base64_decode 失败: {e}")
+
+class HexTool(FunctionTool):
+    name: str = "hex_"
     description: str = (
-        "将 Base64 解码为原始文本。strip_uri=True 自动剥离 data: URI 前缀。"
+        "【替代 xxd/od——首选】十六进制与文本互转。"
+        "action: encode(文本→十六进制) / decode(十六进制→文本)。比 shell xxd 少 5 个参数。"
     )
     parameters: dict = field(
         default_factory=lambda: {
             "type": "object",
             "properties": {
-                "data": {"type": "string", "description": "Base64 字符串"},
-                "strip_uri": {
-                    "type": "boolean",
-                    "description": "是否自动剥离 data: URI 前缀",
-                    "default": False,
-                },
+                "action": {"type": "string", "description": "encode / decode", "enum": ["encode", "decode"]},
+                "data": {"type": "string", "description": "要处理的文本"},
             },
-            "required": ["data"],
+            "required": ["action", "data"],
         }
     )
-
-    async def call(
-        self,
-        context: ContextWrapper[AstrAgentContext],
-        data: str,
-        strip_uri: bool = False,
-        **kwargs,
-    ) -> ToolExecResult:
+    async def call(self, context: ContextWrapper[AstrAgentContext], action: str, data: str, **kwargs) -> ToolExecResult:
         _tool_stats.record(self.name)
         try:
-            return _unwrap(b64_decode(data, strip_uri))
-        except Exception as e:
-            return _err(f"base64_decode 失败: {e}")
-
-
-@dataclass
-class UrlEncodeTool(FunctionTool):
-    name: str = "url_encode"
-    description: str = "对文本进行 URL 编码（百分号编码）。"
-    parameters: dict = field(
-        default_factory=lambda: {
-            "type": "object",
-            "properties": {"data": {"type": "string", "description": "要编码的文本"}},
-            "required": ["data"],
-        }
-    )
-
-    async def call(
-        self, context: ContextWrapper[AstrAgentContext], data: str, **kwargs
-    ) -> ToolExecResult:
-        _tool_stats.record(self.name)
-        try:
-            return _unwrap(url_encode(data))
-        except Exception as e:
-            return _err(f"url_encode 失败: {e}")
-
-
-@dataclass
-class UrlDecodeTool(FunctionTool):
-    name: str = "url_decode"
-    description: str = "对 URL 编码的文本进行解码。"
-    parameters: dict = field(
-        default_factory=lambda: {
-            "type": "object",
-            "properties": {"data": {"type": "string", "description": "URL 编码的文本"}},
-            "required": ["data"],
-        }
-    )
-
-    async def call(
-        self, context: ContextWrapper[AstrAgentContext], data: str, **kwargs
-    ) -> ToolExecResult:
-        _tool_stats.record(self.name)
-        try:
-            return _unwrap(url_decode(data))
-        except Exception as e:
-            return _err(f"url_decode 失败: {e}")
+            if action == "encode": return _unwrap(hex_encode(data))
+            return _unwrap(hex_decode(data))
+        except Exception as e: return _err(f"hex_ 失败: {e}")
 
 
 @dataclass
 class HexEncodeTool(FunctionTool):
     name: str = "hex_encode"
-    description: str = "将文本编码为十六进制字符串。"
-    parameters: dict = field(
-        default_factory=lambda: {
-            "type": "object",
-            "properties": {"data": {"type": "string", "description": "要编码的文本"}},
-            "required": ["data"],
-        }
-    )
-
-    async def call(
-        self, context: ContextWrapper[AstrAgentContext], data: str, **kwargs
-    ) -> ToolExecResult:
+    description: str = "十六进制编码。[已合并到 hex_，新调用请用 hex_ with action=encode]"
+    parameters: dict = field(default_factory=lambda: {
+        "type": "object", "properties": {"data": {"type": "string"}}, "required": ["data"]
+    })
+    async def call(self, context: ContextWrapper[AstrAgentContext], data: str, **kwargs) -> ToolExecResult:
         _tool_stats.record(self.name)
-        try:
-            return _unwrap(hex_encode(data))
-        except Exception as e:
-            return _err(f"hex_encode 失败: {e}")
+        try: return _unwrap(hex_encode(data))
+        except Exception as e: return _err(f"hex_encode 失败: {e}")
 
 
 @dataclass
 class HexDecodeTool(FunctionTool):
     name: str = "hex_decode"
-    description: str = "将十六进制字符串解码为原始文本。"
+    description: str = "十六进制解码。[已合并到 hex_，新调用请用 hex_ with action=decode]"
+    parameters: dict = field(default_factory=lambda: {
+        "type": "object", "properties": {"data": {"type": "string"}}, "required": ["data"]
+    })
+    async def call(self, context: ContextWrapper[AstrAgentContext], data: str, **kwargs) -> ToolExecResult:
+        _tool_stats.record(self.name)
+        try: return _unwrap(hex_decode(data))
+        except Exception as e: return _err(f"hex_decode 失败: {e}")
+
+
+@dataclass
+class UrlTool(FunctionTool):
+    name: str = "url_"
+    description: str = "URL 编解码。action: encode(编码) / decode(解码)。"
     parameters: dict = field(
         default_factory=lambda: {
             "type": "object",
-            "properties": {"data": {"type": "string", "description": "十六进制字符串"}},
-            "required": ["data"],
+            "properties": {
+                "action": {"type": "string", "description": "encode / decode", "enum": ["encode", "decode"]},
+                "data": {"type": "string", "description": "要处理的文本"},
+            },
+            "required": ["action", "data"],
         }
     )
-
-    async def call(
-        self, context: ContextWrapper[AstrAgentContext], data: str, **kwargs
-    ) -> ToolExecResult:
+    async def call(self, context: ContextWrapper[AstrAgentContext], action: str, data: str, **kwargs) -> ToolExecResult:
         _tool_stats.record(self.name)
         try:
-            return _unwrap(hex_decode(data))
-        except Exception as e:
-            return _err(f"hex_decode 失败: {e}")
+            if action == "encode": return _unwrap(url_encode(data))
+            return _unwrap(url_decode(data))
+        except Exception as e: return _err(f"url_ 失败: {e}")
+
+
+@dataclass
+class UrlEncodeTool(FunctionTool):
+    name: str = "url_encode"
+    description: str = "URL 编码。[已合并到 url_，新调用请用 url_ with action=encode]"
+    parameters: dict = field(default_factory=lambda: {
+        "type": "object", "properties": {"data": {"type": "string"}}, "required": ["data"]
+    })
+    async def call(self, context: ContextWrapper[AstrAgentContext], data: str, **kwargs) -> ToolExecResult:
+        _tool_stats.record(self.name)
+        try: return _unwrap(url_encode(data))
+        except Exception as e: return _err(f"url_encode 失败: {e}")
+
+
+@dataclass
+class UrlDecodeTool(FunctionTool):
+    name: str = "url_decode"
+    description: str = "URL 解码。[已合并到 url_，新调用请用 url_ with action=decode]"
+    parameters: dict = field(default_factory=lambda: {
+        "type": "object", "properties": {"data": {"type": "string"}}, "required": ["data"]
+    })
+    async def call(self, context: ContextWrapper[AstrAgentContext], data: str, **kwargs) -> ToolExecResult:
+        _tool_stats.record(self.name)
+        try: return _unwrap(url_decode(data))
+        except Exception as e: return _err(f"url_decode 失败: {e}")
 
 
 # ══ 时间 (4) ══
@@ -1328,61 +1329,59 @@ class TimeNowTool(FunctionTool):
 
 
 @dataclass
-class TsToIsoTool(FunctionTool):
-    name: str = "ts_to_iso"
-    description: str = "Unix 时间戳 → ISO 时间字符串。ms=True 表示毫秒时间戳。"
+class TimeConvertTool(FunctionTool):
+    name: str = "time_convert"
+    description: str = "Unix 时间戳与 ISO 互转。direction: to_iso(时间戳→ISO) / to_ts(ISO→时间戳)。ms=True 表示毫秒。"
     parameters: dict = field(
         default_factory=lambda: {
             "type": "object",
             "properties": {
-                "ts": {"type": "integer", "description": "时间戳"},
-                "ms": {
-                    "type": "boolean",
-                    "description": "是否为毫秒时间戳",
-                    "default": False,
-                },
+                "direction": {"type": "string", "description": "to_iso / to_ts", "enum": ["to_iso", "to_ts"]},
+                "ts": {"type": "integer", "description": "时间戳（to_iso 时使用）"},
+                "ms": {"type": "boolean", "description": "毫秒时间戳", "default": False},
+                "iso": {"type": "string", "description": "ISO 字符串（to_ts 时使用）"},
             },
-            "required": ["ts"],
+            "required": ["direction"],
         }
     )
-
-    async def call(
-        self,
-        context: ContextWrapper[AstrAgentContext],
-        ts: int,
-        ms: bool = False,
-        **kwargs,
-    ) -> ToolExecResult:
+    async def call(self, context: ContextWrapper[AstrAgentContext], direction: str, ts: int = None,
+                   ms: bool = False, iso: str = "", **kwargs) -> ToolExecResult:
         _tool_stats.record(self.name)
         try:
-            return _unwrap(ts_to_iso(ts, ms))
-        except Exception as e:
-            return _err(f"ts_to_iso 失败: {e}")
+            if direction == "to_iso":
+                if ts is None: return _err("to_iso 需要 ts 参数")
+                return _unwrap(ts_to_iso(ts, ms))
+            if not iso: return _err("to_ts 需要 iso 参数")
+            return _unwrap(iso_to_ts(iso))
+        except Exception as e: return _err(f"time_convert 失败: {e}")
+
+
+@dataclass
+class TsToIsoTool(FunctionTool):
+    name: str = "ts_to_iso"
+    description: str = "时间戳→ISO。[已合并到 time_convert，新调用请用 time_convert with direction=to_iso]"
+    parameters: dict = field(default_factory=lambda: {
+        "type": "object", "properties": {"ts": {"type": "integer"}}, "required": ["ts"]
+    })
+    async def call(self, context: ContextWrapper[AstrAgentContext], ts: int, **kwargs) -> ToolExecResult:
+        _tool_stats.record(self.name)
+        try: return _unwrap(ts_to_iso(ts, False))
+        except Exception as e: return _err(f"ts_to_iso 失败: {e}")
 
 
 @dataclass
 class IsoToTsTool(FunctionTool):
     name: str = "iso_to_ts"
-    description: str = "ISO 时间字符串 → Unix 时间戳。"
-    parameters: dict = field(
-        default_factory=lambda: {
-            "type": "object",
-            "properties": {"iso": {"type": "string", "description": "ISO 时间字符串"}},
-            "required": ["iso"],
-        }
-    )
-
-    async def call(
-        self, context: ContextWrapper[AstrAgentContext], iso: str, **kwargs
-    ) -> ToolExecResult:
+    description: str = "ISO→时间戳。[已合并到 time_convert，新调用请用 time_convert with direction=to_ts]"
+    parameters: dict = field(default_factory=lambda: {
+        "type": "object", "properties": {"iso": {"type": "string"}}, "required": ["iso"]
+    })
+    async def call(self, context: ContextWrapper[AstrAgentContext], iso: str, **kwargs) -> ToolExecResult:
         _tool_stats.record(self.name)
-        try:
-            return _unwrap(iso_to_ts(iso))
-        except Exception as e:
-            return _err(f"iso_to_ts 失败: {e}")
+        try: return _unwrap(iso_to_ts(iso))
+        except Exception as e: return _err(f"iso_to_ts 失败: {e}")
 
 
-@dataclass
 class TimeDiffTool(FunctionTool):
     name: str = "time_diff"
     description: str = "计算两个 ISO 时间的差值（秒/分/时）。"
@@ -2601,7 +2600,7 @@ TOOL_GROUPS: dict[str, list[str]] = {
         "hex_encode",
         "hex_decode",
     ],
-    "时间": ["time_now", "ts_to_iso", "iso_to_ts", "time_diff"],
+    "时间": ["time_now", "time_convert", "time_diff", "ts_to_iso", "iso_to_ts"],
     "扩展": [
         "svg_render",
         "json_schema_val",

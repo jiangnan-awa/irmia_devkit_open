@@ -15,6 +15,11 @@ def parse(text: str, format: str = "auto", max_lines: int = 200) -> dict:
         format: auto / nginx / apache / syslog / jsonl
         max_lines: 最大处理行数，默认 200
     """
+    if len(text) > 50000:
+        text = text[:50000]
+        text_truncated = True
+    else:
+        text_truncated = False
     lines = text.strip().split("\n")
     if format == "auto":
         format = _detect(lines[0] if lines else "")
@@ -50,6 +55,8 @@ def parse(text: str, format: str = "auto", max_lines: int = 200) -> dict:
         "errors": errors,
         "entries": results,
     }
+    if text_truncated:
+        r["truncated_input"] = True
     if errors > 0:
         r["proposal"] = (
             f"解析完成：{len(results)}条成功/{errors}条失败——格式={format}。尝试切换 format 参数。"

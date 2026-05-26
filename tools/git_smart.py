@@ -60,7 +60,8 @@ def diff(cwd: str, staged: bool = False, filepath: str = None) -> dict:
 
 
 def log(cwd: str, count: int = 5) -> dict:
-    """查看最近提交记录。"""
+    """查看最近提交记录。上限 30 条。"""
+    count = min(count, 30)
     r = _run_git(cwd, ["log", f"-{count}", "--oneline", "--decorate"])
     if not r["ok"]:
         return r
@@ -104,8 +105,13 @@ def commit(cwd: str, message: str) -> dict:
     if not r2["ok"]:
         return {"ok": False, "error": f"git commit 失败: {r2['stderr']}"}
 
+    # 获取 commit hash
+    rh = _run_git(cwd, ["log", "-1", "--format=%H"])
+    commit_hash = rh["stdout"] if rh["ok"] else ""
+
     return {
         "ok": True,
+        "hash": commit_hash,
         "message": message,
         "output": r2["stdout"],
         "files_committed": changed,
