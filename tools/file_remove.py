@@ -3,7 +3,6 @@ file_remove — 文件/目录删除工具。
 自带路径沙箱和批量确认，防误删。
 """
 import os
-import shutil
 from pathlib import Path
 
 from ._helpers import proposal_reply
@@ -16,10 +15,6 @@ _FORBIDDEN_PREFIXES = [
     "/bin", "/boot", "/dev", "/etc", "/lib", "/proc", "/root", "/sbin", "/sys", "/usr", "/var",
 ]
 
-_FORBIDDEN_ROOTS = [
-    "C:/", "D:/", "E:/", "F:/", "G:/", "H:/",
-    "/",
-]
 
 
 def remove(path: str, confirm: bool = False, max_items: int = 50) -> dict:
@@ -30,7 +25,6 @@ def remove(path: str, confirm: bool = False, max_items: int = 50) -> dict:
         confirm: 目录删除需显式确认
         max_items: 目录超过此文件数时返回提案不执行
     """
-    raw_path = path
     p = Path(path).resolve()
 
     if ".." in str(Path(path)):  # 原始路径含 .. 穿越
@@ -61,7 +55,9 @@ def remove(path: str, confirm: bool = False, max_items: int = 50) -> dict:
                 error="目录删除需二次确认",
                 options=["confirm_delete", "cancel"])
 
-        file_count = sum(1 for _ in p.rglob("*") if _.is_file())
+        # 单次 rglob 获取文件列表（计数+大小）
+        files_in_dir = [f for f in p.rglob("*") if f.is_file()]
+        file_count = len(files_in_dir)
         if file_count > max_items:
             return proposal_reply(False,
                 f"目录含 {file_count} 个文件，超过上限 {max_items}。确认删除？",
@@ -69,7 +65,7 @@ def remove(path: str, confirm: bool = False, max_items: int = 50) -> dict:
                 evidence={"file_count": file_count, "directory": str(p)},
                 options=["confirm_batch_delete", "cancel"])
 
-        total_size = sum(f.stat().st_size for f in p.rglob("*") if f.is_file())
+        total_size = sum(f.stat().st_size for f in files_in_dir)
         errors = []
 
         try:

@@ -1211,6 +1211,8 @@ class Base64DecodeTool(FunctionTool):
         try: return _unwrap(b64_decode(data, False))
         except Exception as e: return _err(f"base64_decode 失败: {e}")
 
+
+@dataclass
 class HexTool(FunctionTool):
     name: str = "hex_"
     description: str = (
