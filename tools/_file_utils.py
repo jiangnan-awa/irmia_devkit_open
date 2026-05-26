@@ -35,9 +35,10 @@ def read_file_with_encoding(path: str | Path) -> tuple[str, str]:
 
 
 def human_size(n: int) -> str:
-    """字节数 → 人类可读大小（保留一位小数）。"""
+    """字节数 → 人类可读大小（保留一位小数，整数则省略小数）。"""
     for unit in ["B", "KB", "MB", "GB", "TB"]:
         if n < 1024:
-            return f"{n:.1f}{unit}".rstrip("0").rstrip(".") + ("" if "." not in f"{n:.1f}" else f"{n:.1f}{unit}"[-5:])
+            s = f"{n:.1f}{unit}"
+            return s.replace(".0", "") if ".0" in s else s
         n /= 1024
     return f"{n:.1f}PB"

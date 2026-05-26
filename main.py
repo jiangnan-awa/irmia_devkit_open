@@ -35,8 +35,11 @@ class Main(star.Star):
         self.context = context
 
         plug_dir = os.path.dirname(os.path.abspath(__file__))
-        data_dir = StarTools.get_data_dir()
-        config_path = os.path.join(str(data_dir), "config.json")
+        try:
+            data_dir = StarTools.get_data_dir()
+            config_path = os.path.join(str(data_dir), "config.json")
+        except Exception:
+            config_path = os.path.join(plug_dir, "config.json")
         # 向后兼容：若 data_dir 无配置，从插件目录迁移
         legacy_path = os.path.join(plug_dir, "config.json")
         if not os.path.exists(config_path) and os.path.exists(legacy_path):
