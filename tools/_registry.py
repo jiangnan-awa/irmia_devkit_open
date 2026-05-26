@@ -105,7 +105,7 @@ class SafeEditTool(FunctionTool):
     description: str = (
         "【改代码文件唯一选择】安全编辑：自动备份→精确替换→语法检查→"
         "通过保留/失败自动回滚。支持 .py/.nim/.go/.js/.ts（语法检查）+ 其他扩展名（跳过语法检查）。"
-        "不要用 file_write 改已有代码，不要用 astrbot_file_edit_tool 改代码（它无备份无语法检查）。"
+        "不要用 file_write 改已有代码（无备份无回滚）。不要用 astrbot_file_edit_tool 改代码（无备份无语法检查）。"
         "非代码文件（.md/.txt/.json）可以用 file_patch 或 safe_edit，两者均可。"
         "当 old 文本在文件中多处匹配时，工具会报错并列出所有位置——用 occurrence=N 指定第几次出现继续。"
     )
@@ -225,8 +225,8 @@ class FilePatchTool(FunctionTool):
 
     name: str = "file_patch"
     description: str = (
-        "精确替换文件中的文本。用于非代码文件（.md/.txt/.json/.yaml）。"
-        "不要用 astrbot_file_edit_tool——它找不到旧文本时只报错，本工具会提示最接近的匹配行。"
+        "【替代 astrbot_file_edit_tool——非代码文件首选】精确替换非代码文件中的文本。"
+        "不要用 astrbot_file_edit_tool（它找不到旧文本时只报错，无匹配行提示）。"
         "代码文件请用 safe_edit（自动备份+语法检查+失败回滚）。"
     )
     parameters: dict = field(
@@ -271,7 +271,7 @@ class FilePreviewTool(FunctionTool):
     """预览替换效果。"""
 
     name: str = "file_preview"
-    description: str = "预览 file_patch 的替换效果，不实际修改文件，返回 unified diff。用于不确定替换效果时（如旧文本可能有多个相似匹配），确认无误后再用 file_patch 实际修改。"
+    description: str = "【file_patch 伴侣】预览替换效果，不实际修改文件，返回 unified diff。用于不确定替换效果时，确认无误后再用 file_patch 实际修改。"
     parameters: dict = field(
         default_factory=lambda: {
             "type": "object",
@@ -954,10 +954,8 @@ class FileDiffTool(FunctionTool):
 
     name: str = "file_diff"
     description: str = (
-        "比较两个文件，返回结构化差异：added/removed/total_changes/identical。"
-        "纯 difflib 标准库，不依赖外部 diff 命令。"
-        "返回统计好的增删行数 + unified diff 文本（限 100 行），比 raw diff 命令更适合 LLM 处理。"
-        "用 diff_lines_shown/diff_lines_total 判断是否截断。"
+        "【替代 fc/diff——首选】比较两个文件。不要用 astrbot_execute_shell 跑 fc/diff（它无 added/removed 统计，输出需手动解析）。"
+        "返回结构化差异 + unified diff（限 100 行），用 diff_lines_shown/diff_lines_total 判断是否截断。"
     )
     parameters: dict = field(
         default_factory=lambda: {
@@ -1857,8 +1855,8 @@ class GhPrTool(FunctionTool):
 
     name: str = "gh_pr"
     description: str = (
-        "GitHub Pull Request 管理。action: create(创建) / list(列出) / merge(合并) / view(查看)。"
-        "create 需 title+body+base+head；list 支持 state+limit；merge 需 number+strategy；view 需 number。"
+        "【替代 gh CLI——首选】GitHub PR 管理。不要用 astrbot_execute_shell 跑 gh（它无结构化 JSON 输出、无 body-file 参数防护）。"
+        "action: create/list/merge/view。create 需 title+body；merge 需 number+strategy；view 需 number。"
     )
     parameters: dict = field(
         default_factory=lambda: {
@@ -1945,8 +1943,8 @@ class GhIssueTool(FunctionTool):
 
     name: str = "gh_issue"
     description: str = (
-        "GitHub Issue 管理。action: create(创建) / list(列出) / close(关闭)。"
-        "create 需 title+body+labels；list 支持 state+limit+labels；close 需 number。"
+        "【替代 gh CLI——首选】GitHub Issue 管理。不要用 astrbot_execute_shell 跑 gh（它无结构化 JSON 输出）。"
+        "action: create/list/close。create 需 title+body；close 需 number。"
     )
     parameters: dict = field(
         default_factory=lambda: {
@@ -2025,8 +2023,8 @@ class GhReleaseTool(FunctionTool):
 
     name: str = "gh_release"
     description: str = (
-        "GitHub Release 管理。action: create(创建发布) / list(列出发布)。"
-        "create 需 tag+notes+generate_notes；list 支持 limit。"
+        "【替代 gh CLI——首选】GitHub Release 管理。不要用 astrbot_execute_shell 跑 gh（它无结构化 JSON 输出）。"
+        "action: create/list。create 需 tag+generate_notes。"
     )
     parameters: dict = field(
         default_factory=lambda: {
@@ -2091,8 +2089,8 @@ class GhRepoTool(FunctionTool):
 
     name: str = "gh_repo"
     description: str = (
-        "GitHub 仓库管理。action: create(创建仓库+推送) / view(查看仓库信息) / runs(查看CI) / auth(认证检查)。"
-        "create 需 title(仓库名)+public；view 支持 owner_repo；runs 支持 limit。"
+        "【替代 gh CLI——首选】GitHub 仓库与 CI 管理。不要用 astrbot_execute_shell 跑 gh（它无结构化 JSON 输出）。"
+        "action: create/view/runs/auth。create 需 title(仓库名)。"
     )
     parameters: dict = field(
         default_factory=lambda: {
