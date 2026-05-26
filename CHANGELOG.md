@@ -8,7 +8,7 @@
 - **ruff**: 全项目格式化 + `pyproject.toml` 配置
 - **修复**: `_http_utils` 域名路径 NameError、`sys_snapshot` `_extract_mb` 缺失、`_conf_schema.json` trailing comma、`safe_edit` 接入 `backup_dir` 配置、HTTP redirect SSRF 重新校验、gh_cli try/finally 临时文件清理、`human_size` TB/PB 兜底、备份文件名微秒防撞
 
-## v2.0 — 生态扩展 (60→63)
+## v2.0.0 — 生态扩展 (60→63)
 
 - **新工具**: `tool_stats` 调用统计、`db_query` SQLite 只读查询（参数化防注入）、`dep_scan` Python import 依赖图 + 循环引用检测
 - **优雅打磨**: tool_stats 注入率 100%、`_registry.py` 9 组分区注释、README 快速索引

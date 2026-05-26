@@ -19,3 +19,7 @@ venv/
 .coverage*
 htmlcov/
 .mypy_cache/
+Thumbs.db
+.DS_Store
+*.log
+*.db
