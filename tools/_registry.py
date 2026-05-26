@@ -1153,7 +1153,6 @@ class SysSnapshotTool(FunctionTool):
 
 # ══ 编码 (6) ══
 @dataclass
-@dataclass
 class Base64Tool(FunctionTool):
     name: str = "base64_"
     description: str = (
@@ -1187,7 +1186,6 @@ class Base64Tool(FunctionTool):
 
 
 # 向后兼容别名（1 版本后移除）
-@dataclass
 @dataclass
 class Base64EncodeTool(FunctionTool):
     name: str = "base64_encode"
@@ -1240,7 +1238,6 @@ class HexTool(FunctionTool):
 
 
 @dataclass
-@dataclass
 class HexEncodeTool(FunctionTool):
     name: str = "hex_encode"
     description: str = "十六进制编码。[已合并到 hex_，新调用请用 hex_ with action=encode]"
@@ -1288,7 +1285,6 @@ class UrlTool(FunctionTool):
         except Exception as e: return _err(f"url_ 失败: {e}")
 
 
-@dataclass
 @dataclass
 class UrlEncodeTool(FunctionTool):
     name: str = "url_encode"
@@ -1362,7 +1358,6 @@ class TimeConvertTool(FunctionTool):
         except Exception as e: return _err(f"time_convert 失败: {e}")
 
 
-@dataclass
 @dataclass
 class TsToIsoTool(FunctionTool):
     name: str = "ts_to_iso"
