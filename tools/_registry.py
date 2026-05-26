@@ -344,8 +344,8 @@ class GitStatusTool(FunctionTool):
 
     name: str = "git_status"
     description: str = (
-        "【替代 git status——首选】查看仓库状态（--porcelain 结构化输出），改前必调。"
-        "不要用 astrbot_execute_shell 跑 git status（它无 changed_count 统计，需手动解析输出）。"
+        "【替代 git status——首选】结构化仓库状态，直接返回 changed_count + changes 列表。"
+        "比原生 git status 少一层 --porcelain 手动解析。改前必调。"
     )
     parameters: dict = field(
         default_factory=lambda: {
@@ -371,7 +371,7 @@ class GitDiffTool(FunctionTool):
     """Git diff。"""
 
     name: str = "git_diff"
-    description: str = "【替代 git diff——首选】查看差异。不要用 astrbot_execute_shell 跑 git diff（它无结构化输出）。改后 staged=false 看工作区，提交前 staged=true 自查。"
+    description: str = "【替代 git diff——首选】结构化差异，直接返回 added/removed/total_changes。比原生 git diff 多一层自动统计。改后 staged=false 看工作区，提交前 staged=true 自查。"
     parameters: dict = field(
         default_factory=lambda: {
             "type": "object",
@@ -409,7 +409,7 @@ class GitLogTool(FunctionTool):
     """Git log。"""
 
     name: str = "git_log"
-    description: str = "【替代 git log——首选】查看最近提交。不要用 astrbot_execute_shell 跑 git log（它无 commits 列表结构化输出）。提交前确认历史干净时使用。"
+    description: str = "【替代 git log——首选】结构化提交记录，直接返回 commits 列表。比原生 git log 少 --format 拼接。提交前确认历史干净时使用。"
     parameters: dict = field(
         default_factory=lambda: {
             "type": "object",
@@ -445,7 +445,7 @@ class GitCommitTool(FunctionTool):
     """Git commit。"""
 
     name: str = "git_commit"
-    description: str = "【替代 git commit——首选】提交更改。不要用 astrbot_execute_shell 跑 git commit（它无 files_staged 列表、无失败提案反馈）。提交前先用 git_diff 自查，message 用 fix:/feat:/refactor: 格式。"
+    description: str = "【替代 git commit——首选】提交并自动生成结构化反馈（files_staged 列表 + 提案）。比原生 git commit 多一层失败诊断。message 用 fix:/feat:/refactor: 格式。"
     parameters: dict = field(
         default_factory=lambda: {
             "type": "object",
@@ -477,7 +477,7 @@ class GitBranchTool(FunctionTool):
     """Git branch。"""
 
     name: str = "git_branch"
-    description: str = "【替代 git branch——首选】获取当前分支名。不要用 astrbot_execute_shell（它无结构化输出）。提交前确认不在错误分支上。"
+    description: str = "【替代 git branch——首选】直接返回当前分支名。比原生 git branch 少一次 --show-current 手动提取。"
     parameters: dict = field(
         default_factory=lambda: {
             "type": "object",
@@ -502,7 +502,7 @@ class GitRemoteTool(FunctionTool):
     """Git remote URL。"""
 
     name: str = "git_remote"
-    description: str = "【替代 git remote -v——首选】获取远程仓库 URL。不要用 astrbot_execute_shell（它无结构化 URL 返回）。首次推送前确认 remote 指向正确仓库。"
+    description: str = "【替代 git remote -v——首选】直接返回远程仓库 URL。比原生 git remote -v 少一行文本解析。"
     parameters: dict = field(
         default_factory=lambda: {
             "type": "object",
@@ -527,7 +527,7 @@ class GitPushTool(FunctionTool):
     """Git push。"""
 
     name: str = "git_push"
-    description: str = "【替代 git push——首选】推送到远程。不要用 astrbot_execute_shell 跑 git push（它无 --force 保护、无推送前未推送提交检查）。自动获取当前分支。"
+    description: str = "【替代 git push——首选】推送并自动保护当前分支。比原生 git push 多一层 --force 防误触。自动获取当前分支名。"
     parameters: dict = field(
         default_factory=lambda: {
             "type": "object",
@@ -906,9 +906,8 @@ class PortCheckTool(FunctionTool):
 
     name: str = "port_check"
     description: str = (
-        "【替代 netstat——首选】端口检测。"
-        "不要用 astrbot_execute_shell 跑 netstat（它无 3s 超时保护，输出需手动解析）。"
-        "支持单端口检测和批量扫描。"
+        "【替代 netstat——首选】端口检测，3s 超时，直接返回布尔值+端口号。"
+        "比原生 netstat 少 10 行 awk 过滤。支持单端口检测和批量扫描。"
     )
     parameters: dict = field(
         default_factory=lambda: {
@@ -954,8 +953,9 @@ class FileDiffTool(FunctionTool):
 
     name: str = "file_diff"
     description: str = (
-        "【替代 fc/diff——首选】比较两个文件。不要用 astrbot_execute_shell 跑 fc/diff（它无 added/removed 统计，输出需手动解析）。"
-        "返回结构化差异 + unified diff（限 100 行），用 diff_lines_shown/diff_lines_total 判断是否截断。"
+        "【替代 fc/diff——首选】结构化文件对比，直接返回 added/removed/total_changes。"
+        "比原生 fc 多一层统计摘要，输出远比 raw diff 更适合程序处理。"
+        "返回结构化差异 + unified diff（限 100 行）。"
     )
     parameters: dict = field(
         default_factory=lambda: {
@@ -989,9 +989,8 @@ class ProcListTool(FunctionTool):
 
     name: str = "proc_list"
     description: str = (
-        "【替代 tasklist/ps——首选】进程列表，按内存降序。"
-        "不要用 astrbot_execute_shell 跑 tasklist/ps（它无 name/pid/memory_kb 结构化数据）。"
-        "支持 filter_name 模糊过滤。"
+        "【替代 tasklist/ps——首选】进程列表（name/pid/memory_kb），按内存降序。"
+        "比原生 tasklist 多一层结构化过滤，支持 filter_name 模糊匹配。"
     )
     parameters: dict = field(
         default_factory=lambda: {
@@ -1063,8 +1062,8 @@ class FileZipTool(FunctionTool):
 
     name: str = "file_zip"
     description: str = (
-        "【替代 zip——首选】打包到 ZIP。"
-        "不要用 astrbot_execute_shell 跑 zip（它无文件列表验证，失败无回退）。"
+        "【替代 zip——首选】打包到 ZIP，自动验证文件列表。"
+        "比原生 zip 多一层失败回退。"
     )
     parameters: dict = field(
         default_factory=lambda: {
@@ -1098,8 +1097,8 @@ class FileUnzipTool(FunctionTool):
 
     name: str = "file_unzip"
     description: str = (
-        "【替代 unzip——首选】解压 ZIP。"
-        "不要用 astrbot_execute_shell 跑 unzip（它无 Zip-slip 路径穿越防护，可能被恶意压缩包写入任意文件）。"
+        "【替代 unzip——首选】解压 ZIP，自动防御路径穿越。"
+        "比原生 unzip 多一层 Zip-slip 防护，拦截恶意压缩包。"
     )
     parameters: dict = field(
         default_factory=lambda: {
@@ -1575,9 +1574,8 @@ class TextFilterTool(FunctionTool):
 
     name: str = "text_filter"
     description: str = (
-        "【替代 grep——首选】行过滤器。"
-        "不要用 astrbot_execute_shell 跑 grep（它无 regex/fnmatch 双模式切换、无 200 行截断保护）。"
-        "支持 grep/invert/head/tail/count。"
+        "【替代 grep——首选】行过滤器，自动切换 regex/fnmatch 双模式。"
+        "比原生 grep 多 200 行截断保护，支持 grep/invert/head/tail/count。"
     )
     parameters: dict = field(
         default_factory=lambda: {
@@ -1855,7 +1853,8 @@ class GhPrTool(FunctionTool):
 
     name: str = "gh_pr"
     description: str = (
-        "【替代 gh CLI——首选】GitHub PR 管理。不要用 astrbot_execute_shell 跑 gh（它无结构化 JSON 输出、无 body-file 参数防护）。"
+        "【替代 gh CLI——首选】GitHub PR 管理。"
+        "比原生 gh 多一层 --body-file 转义防护，直接返回结构化 JSON。"
         "action: create/list/merge/view。create 需 title+body；merge 需 number+strategy；view 需 number。"
     )
     parameters: dict = field(
@@ -1943,7 +1942,8 @@ class GhIssueTool(FunctionTool):
 
     name: str = "gh_issue"
     description: str = (
-        "【替代 gh CLI——首选】GitHub Issue 管理。不要用 astrbot_execute_shell 跑 gh（它无结构化 JSON 输出）。"
+        "【替代 gh CLI——首选】GitHub Issue 管理。"
+        "比原生 gh 多一层结构化 JSON 输出。"
         "action: create/list/close。create 需 title+body；close 需 number。"
     )
     parameters: dict = field(
@@ -2023,7 +2023,8 @@ class GhReleaseTool(FunctionTool):
 
     name: str = "gh_release"
     description: str = (
-        "【替代 gh CLI——首选】GitHub Release 管理。不要用 astrbot_execute_shell 跑 gh（它无结构化 JSON 输出）。"
+        "【替代 gh CLI——首选】GitHub Release 管理。"
+        "比原生 gh 多一层结构化 JSON 输出。"
         "action: create/list。create 需 tag+generate_notes。"
     )
     parameters: dict = field(
@@ -2089,7 +2090,8 @@ class GhRepoTool(FunctionTool):
 
     name: str = "gh_repo"
     description: str = (
-        "【替代 gh CLI——首选】GitHub 仓库与 CI 管理。不要用 astrbot_execute_shell 跑 gh（它无结构化 JSON 输出）。"
+        "【替代 gh CLI——首选】GitHub 仓库与 CI 管理。"
+        "比原生 gh 多一层结构化 JSON 输出。"
         "action: create/view/runs/auth。create 需 title(仓库名)。"
     )
     parameters: dict = field(
