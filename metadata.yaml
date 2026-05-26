@@ -1,5 +1,5 @@
 name: astrbot_plugin_irmia_devkit
-desc: "弥亚开发工具箱 — 63个开发工具，9组分类。安全编辑链(自动备份→精确替换→语法检查→回滚)、Git全流程+GitHub CLI(PR/Issue/Release)、Everything毫秒级文件搜索、文本处理(Html/JSON/正则/CSV)、系统诊断、HTTP(SSRF防护)等。核心工具纯Python标准库，仅html_extract需bs4+lxml。"
+desc: "弥亚开发工具箱 — 63 工具，9 组。safe_edit 备份→替换→语法检查→自动回滚安全链；统一提案协议（失败返回可执行选项而非报错）；SSRF/Zip-slip/SQL 注入多层防护；工具组开关按需裁剪上下文。40+ 工具纯标准库。"
 short_desc: "为 Agent 提供安全代码编辑 — 备份/语法检查/回滚，63 工具 + 1 Skill"
 author: 伊尔弥亚
 version: 2.2.0
