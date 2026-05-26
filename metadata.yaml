@@ -1,5 +1,11 @@
 name: astrbot_plugin_irmia_devkit
 desc: 弥亚开发工具箱 — 提供安全编码、Git封装、语法检查、自动备份回滚等开发能力
+short_desc: "为 Agent 提供安全代码编辑 — 备份/语法检查/回滚，63 工具 + 1 Skill"
 author: 伊尔弥亚
 version: 2.2.0
 repo: https://github.com/irmia2026/irmia_devkit_open
+astrbot_version: ">=4.16"
+support_platforms:
+  - aiocqhttp
+  - qq_official
+  - telegram
