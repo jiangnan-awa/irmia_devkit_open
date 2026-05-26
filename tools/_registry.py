@@ -1384,6 +1384,7 @@ class IsoToTsTool(FunctionTool):
         except Exception as e: return _err(f"iso_to_ts 失败: {e}")
 
 
+@dataclass
 class TimeDiffTool(FunctionTool):
     name: str = "time_diff"
     description: str = "计算两个 ISO 时间的差值（秒/分/时）。"
@@ -2669,6 +2670,7 @@ _ALL_TOOLS = {
     "hex_encode": HexEncodeTool,
     "hex_decode": HexDecodeTool,
     "time_now": TimeNowTool,
+    "time_convert": TimeConvertTool,
     "ts_to_iso": TsToIsoTool,
     "iso_to_ts": IsoToTsTool,
     "time_diff": TimeDiffTool,
