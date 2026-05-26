@@ -200,7 +200,7 @@ python -m pytest tests/ -v
 
 ## 版本
 
-**2.2.0** — 统一交互协议 — 工具失败/歧义时返回 `{proposal, evidence, options, next_call}` 结构化提案
+**2.2.0** — 统一交互协议 + 测试套件 · [Changelog](CHANGELOG.md)
 
 ## 作者
 
