@@ -12,3 +12,4 @@ dist/
 build/
 wo/
 .pytest_cache/
+.ruff_cache/
