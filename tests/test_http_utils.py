@@ -1,5 +1,5 @@
 """Tests for _http_utils.validate_url — SSRF protection."""
-import pytest
+
 from tools._http_utils import validate_url
 
 

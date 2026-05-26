@@ -2,6 +2,7 @@
 db_query — SQLite 只读查询。
 参数化防注入，仅允许 SELECT/PRAGMA，只读模式打开。
 """
+
 import sqlite3
 from pathlib import Path
 
@@ -39,10 +40,19 @@ def query(db_path: str, sql: str, params: list = None) -> dict:
             "truncated": len(rows) > 200,
         }
     except sqlite3.Error as e:
-        return proposal_reply(False, "SQLite 查询错误——检查表名/列名是否正确",
-                              error=f"SQLite 错误: {e}",
-                              evidence={"sql": sql[:200], "params": params},
-                              options=["用 PRAGMA table_info 确认 schema", "检查表名和列名"],
-                              next_call={"tool": "db_query", "params": {"db_path": db_path, "sql": "SELECT name FROM sqlite_master WHERE type='table'"}})
+        return proposal_reply(
+            False,
+            "SQLite 查询错误——检查表名/列名是否正确",
+            error=f"SQLite 错误: {e}",
+            evidence={"sql": sql[:200], "params": params},
+            options=["用 PRAGMA table_info 确认 schema", "检查表名和列名"],
+            next_call={
+                "tool": "db_query",
+                "params": {
+                    "db_path": db_path,
+                    "sql": "SELECT name FROM sqlite_master WHERE type='table'",
+                },
+            },
+        )
     except Exception as e:
         return {"ok": False, "error": str(e)}

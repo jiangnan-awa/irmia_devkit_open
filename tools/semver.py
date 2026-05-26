@@ -2,6 +2,7 @@
 semver — 语义版本号比较。
 纯 Python，无依赖。
 """
+
 import re
 
 
@@ -45,10 +46,10 @@ def _parse(v: str) -> tuple | None:
     build_split = v.split("+", 1)
     v = build_split[0]
 
-    m = re.match(r'^(\d+)\.(\d+)\.(\d+)(?:-(.+))?$', v)
+    m = re.match(r"^(\d+)\.(\d+)\.(\d+)(?:-(.+))?$", v)
     if not m:
         # 尝试容忍只有 major.minor
-        m = re.match(r'^(\d+)\.(\d+)$', v)
+        m = re.match(r"^(\d+)\.(\d+)$", v)
         if not m:
             return None
         return (int(m.group(1)), int(m.group(2)), 0, (chr(127),))

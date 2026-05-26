@@ -1,4 +1,5 @@
 """Tests for file_zip.extract — Zip-slip protection."""
+
 import zipfile
 import os
 import tempfile
@@ -12,6 +13,7 @@ def temp_zip_dir():
     d = tempfile.mkdtemp()
     yield d
     import shutil
+
     shutil.rmtree(d, ignore_errors=True)
 
 
@@ -40,4 +42,6 @@ class TestFileZipExtract:
         Path(fake).write_text("not a zip file")
         result = extract(fake, os.path.join(temp_zip_dir, "out"))
         assert result["ok"] is False
-        assert "不是有效的 ZIP" in result["error"] or "BadZip" in result.get("error", "")
+        assert "不是有效的 ZIP" in result["error"] or "BadZip" in result.get(
+            "error", ""
+        )

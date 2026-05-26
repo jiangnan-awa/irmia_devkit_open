@@ -1,5 +1,5 @@
 """Tests for regex_tester — nested quantifier rejection (ReDoS)."""
-import pytest
+
 from tools.regex_tester import test as regex_test
 
 

@@ -2,9 +2,9 @@
 config_diff — 配置文件结构化差异比较。
 支持 JSON / YAML，按 key 比较而非逐行 diff。
 """
+
 import json
 from pathlib import Path
-
 
 
 def diff(file_a: str, file_b: str) -> dict:
@@ -66,7 +66,9 @@ def diff(file_a: str, file_b: str) -> dict:
     if total == unchanged:
         result["proposal"] = "两个配置文件完全相同——无需合并/比较。"
     elif changed:
-        result["proposal"] = f"{len(changed)}个key变更, {len(added)}个新增, {len(removed)}个删除。"
+        result["proposal"] = (
+            f"{len(changed)}个key变更, {len(added)}个新增, {len(removed)}个删除。"
+        )
         result["options"] = ["逐个应用到目标文件", "仅查看有差别的 key"]
     return result
 

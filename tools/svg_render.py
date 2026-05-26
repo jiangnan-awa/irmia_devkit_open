@@ -2,10 +2,13 @@
 svg_render — SVG→PNG 渲染。
 cairosvg 为可选依赖，未安装时返回错误提示。
 """
+
 from pathlib import Path
 
 
-def render(svg_path: str, output_path: str = "", width: int = 0, height: int = 0) -> dict:
+def render(
+    svg_path: str, output_path: str = "", width: int = 0, height: int = 0
+) -> dict:
     """将 SVG 文件渲染为 PNG。
 
     Args:
@@ -24,6 +27,7 @@ def render(svg_path: str, output_path: str = "", width: int = 0, height: int = 0
 
     try:
         import cairosvg
+
         svg_data = p.read_bytes()
         kwargs = {}
         if width:

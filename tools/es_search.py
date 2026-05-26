@@ -2,6 +2,7 @@
 es_search — Everything 搜索引擎封装。
 使用 es.exe 进行毫秒级文件名搜索，比 os.walk/dir 快 50-500 倍。
 """
+
 import csv
 import io
 import os
@@ -22,6 +23,7 @@ def _get_es_path() -> str:
     if found:
         return found
     return "es"
+
 
 SORT_MAP = {
     "name": "name",
@@ -66,11 +68,18 @@ def search(
     """
     es_path = _get_es_path()
     if not Path(es_path).exists():
-        return proposal_reply(False, f"Everything (es.exe) 未找到: {es_path}",
-                              error=f"es.exe 不存在: {es_path}",
-                              evidence={"configured": get_config().get("es_path"), "fallback": es_path},
-                              options=["安装 Everything 并确保 es.exe 在 PATH 中", "配置 es_path", "回退到 dir_list"],
-                              next_call={"tool": "dir_list", "params": {"path": path or "."}})
+        return proposal_reply(
+            False,
+            f"Everything (es.exe) 未找到: {es_path}",
+            error=f"es.exe 不存在: {es_path}",
+            evidence={"configured": get_config().get("es_path"), "fallback": es_path},
+            options=[
+                "安装 Everything 并确保 es.exe 在 PATH 中",
+                "配置 es_path",
+                "回退到 dir_list",
+            ],
+            next_call={"tool": "dir_list", "params": {"path": path or "."}},
+        )
 
     args = [es_path]
 
@@ -80,7 +89,7 @@ def search(
         args.append(query)
 
     if ext:
-        args[-1] = f'{args[-1]} *.{ext}'
+        args[-1] = f"{args[-1]} *.{ext}"
     if path:
         args.extend(["-path", path])
 
@@ -103,14 +112,17 @@ def search(
         args.extend(["-n", str(max_results)])
 
     # --- 输出格式：CSV ---
-    args.extend([
-        "-csv",
-        "-name",
-        "-path-column",
-        "-size",
-        "-size-format", "1",  # bytes
-        "-date-modified",
-    ])
+    args.extend(
+        [
+            "-csv",
+            "-name",
+            "-path-column",
+            "-size",
+            "-size-format",
+            "1",  # bytes
+            "-date-modified",
+        ]
+    )
 
     # --- 执行 ---
     try:
@@ -123,20 +135,29 @@ def search(
             errors="replace",
         )
     except subprocess.TimeoutExpired:
-        return proposal_reply(False, "Everything 搜索超时 (15s)——尝试缩小搜索范围",
-                              error="es.exe 搜索超时（15s）",
-                              evidence={"query": query, "timeout": 15},
-                              options=["缩小 path 范围", "简化 query 通配符", "回退到 dir_list"],
-                              next_call={"tool": "dir_list", "params": {"path": path or "."}})
+        return proposal_reply(
+            False,
+            "Everything 搜索超时 (15s)——尝试缩小搜索范围",
+            error="es.exe 搜索超时（15s）",
+            evidence={"query": query, "timeout": 15},
+            options=["缩小 path 范围", "简化 query 通配符", "回退到 dir_list"],
+            next_call={"tool": "dir_list", "params": {"path": path or "."}},
+        )
     except Exception as e:
-        return proposal_reply(False, "es.exe 执行失败",
-                              error=f"es.exe 执行失败: {e}",
-                              evidence={"query": query},
-                              options=["检查 query 语法", "回退到 dir_list"],
-                              next_call={"tool": "dir_list", "params": {"path": path or "."}})
+        return proposal_reply(
+            False,
+            "es.exe 执行失败",
+            error=f"es.exe 执行失败: {e}",
+            evidence={"query": query},
+            options=["检查 query 语法", "回退到 dir_list"],
+            next_call={"tool": "dir_list", "params": {"path": path or "."}},
+        )
 
     if proc.returncode != 0:
-        return {"ok": False, "error": proc.stderr.strip() or f"es.exe 返回码 {proc.returncode}"}
+        return {
+            "ok": False,
+            "error": proc.stderr.strip() or f"es.exe 返回码 {proc.returncode}",
+        }
 
     # --- 解析 CSV ---
     reader = csv.DictReader(io.StringIO(proc.stdout))
@@ -154,13 +175,15 @@ def search(
             size = 0
 
         total_size += size
-        items.append({
-            "name": name,
-            "path": fpath,
-            "full": str(Path(fpath) / name) if fpath else name,
-            "size": size,
-            "date_modified": date_mod,
-        })
+        items.append(
+            {
+                "name": name,
+                "path": fpath,
+                "full": str(Path(fpath) / name) if fpath else name,
+                "size": size,
+                "date_modified": date_mod,
+            }
+        )
 
     r = {
         "ok": True,

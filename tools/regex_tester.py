@@ -3,6 +3,7 @@ regex_tester — 正则调试器。
 测试正则表达式，返回匹配组、位置和纯文本解释。
 纯 re 标准库，不依赖外部工具。
 """
+
 import re
 import signal
 
@@ -12,7 +13,7 @@ _MAX_TEXT_LEN = 100_000
 _REGEX_TIMEOUT = 3  # 秒
 
 # S2: 嵌套量词检测 — 防灾难性回溯
-_NESTED_RE = re.compile(r'\([^)]*\)[\*\+]\s*[\*\+]|\([^)]*[\*\+]\s*\)[\*\+]')
+_NESTED_RE = re.compile(r"\([^)]*\)[\*\+]\s*[\*\+]|\([^)]*[\*\+]\s*\)[\*\+]")
 
 
 def _timeout_handler(signum, frame):
@@ -23,13 +24,22 @@ def test(pattern: str, text: str, flags: str = "") -> dict:
     """在 text 中匹配 pattern，返回所有匹配项及分组信息。"""
     # C6: 长度限制
     if len(pattern) > _MAX_PATTERN_LEN:
-        return {"ok": False, "error": f"正则表达式过长（{len(pattern)} > {_MAX_PATTERN_LEN}）"}
+        return {
+            "ok": False,
+            "error": f"正则表达式过长（{len(pattern)} > {_MAX_PATTERN_LEN}）",
+        }
     if len(text) > _MAX_TEXT_LEN:
-        return {"ok": False, "error": f"待匹配文本过长（{len(text)} > {_MAX_TEXT_LEN}）"}
+        return {
+            "ok": False,
+            "error": f"待匹配文本过长（{len(text)} > {_MAX_TEXT_LEN}）",
+        }
 
     # S2: 嵌套量词检测 — 防灾难性回溯
     if _NESTED_RE.search(pattern):
-        return {"ok": False, "error": "正则包含嵌套量词（如 (a+)+），存在灾难性回溯风险，已被拒绝"}
+        return {
+            "ok": False,
+            "error": "正则包含嵌套量词（如 (a+)+），存在灾难性回溯风险，已被拒绝",
+        }
 
     flag_map = {
         "i": re.IGNORECASE,
@@ -43,12 +53,19 @@ def test(pattern: str, text: str, flags: str = "") -> dict:
         if ch in flag_map:
             re_flags |= flag_map[ch]
         else:
-            return {"ok": False, "error": f"不支持的 flag: '{ch}'，可选: {list(flag_map.keys())}"}
+            return {
+                "ok": False,
+                "error": f"不支持的 flag: '{ch}'，可选: {list(flag_map.keys())}",
+            }
 
     try:
         compiled = re.compile(pattern, re_flags)
     except re.error as e:
-        return {"ok": False, "error": f"正则语法错误: {e.msg} (pos {e.pos})", "pattern": pattern}
+        return {
+            "ok": False,
+            "error": f"正则语法错误: {e.msg} (pos {e.pos})",
+            "pattern": pattern,
+        }
 
     # C6: 超时保护（Unix 用 signal，Windows 用简单最大匹配数限制）
     matches = []
@@ -101,7 +118,10 @@ def replace(pattern: str, replacement: str, text: str, flags: str = "") -> dict:
         if ch in flag_map:
             re_flags |= flag_map[ch]
         else:
-            return {"ok": False, "error": f"不支持的 flag: '{ch}'，可选: {list(flag_map.keys())}"}
+            return {
+                "ok": False,
+                "error": f"不支持的 flag: '{ch}'，可选: {list(flag_map.keys())}",
+            }
 
     try:
         compiled = re.compile(pattern, re_flags)
@@ -109,6 +129,7 @@ def replace(pattern: str, replacement: str, text: str, flags: str = "") -> dict:
         return {"ok": False, "error": f"正则语法错误: {e.msg} (pos {e.pos})"}
 
     count = 0
+
     def replacer(m):
         nonlocal count
         count += 1

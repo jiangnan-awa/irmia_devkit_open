@@ -2,17 +2,19 @@
 http_download — 二进制文件下载。
 用 urllib 下载文件到本地，自动处理重定向、进度、覆盖确认。
 """
+
 import urllib.request
 import urllib.error
 import time
 from pathlib import Path
 
 from ._http_utils import validate_url, SafeRedirectHandler
+from ._file_utils import human_size
 
 
 def _make_opener():
     return urllib.request.build_opener(SafeRedirectHandler())
-from ._file_utils import human_size
+
 
 # C4: 下载沙箱根目录
 _DOWNLOAD_SANDBOX = Path.home() / ".irmia" / "downloads"
@@ -58,7 +60,10 @@ def download(url: str, path: str, overwrite: bool = False, timeout: int = 60) ->
     _DOWNLOAD_SANDBOX.mkdir(parents=True, exist_ok=True)
 
     if safe_path.exists() and not overwrite:
-        return {"ok": False, "error": f"文件已存在: {safe_path}，设 overwrite=True 覆盖"}
+        return {
+            "ok": False,
+            "error": f"文件已存在: {safe_path}，设 overwrite=True 覆盖",
+        }
 
     start = time.time()
     try:
@@ -68,7 +73,10 @@ def download(url: str, path: str, overwrite: bool = False, timeout: int = 60) ->
             size = int(resp.headers.get("Content-Length", 0))
             # H5: 下载大小上限
             if size > _MAX_DOWNLOAD_SIZE:
-                return {"ok": False, "error": f"文件大小 {size//1024//1024}MB 超过上限 {_MAX_DOWNLOAD_SIZE//1024//1024}MB"}
+                return {
+                    "ok": False,
+                    "error": f"文件大小 {size // 1024 // 1024}MB 超过上限 {_MAX_DOWNLOAD_SIZE // 1024 // 1024}MB",
+                }
             content_type = resp.headers.get("Content-Type", "unknown")
 
             downloaded = 0
@@ -82,7 +90,10 @@ def download(url: str, path: str, overwrite: bool = False, timeout: int = 60) ->
                     if downloaded > _MAX_DOWNLOAD_SIZE:
                         f.close()
                         safe_path.unlink(missing_ok=True)  # M5: 超限清理半完成文件
-                        return {"ok": False, "error": f"实际下载大小超过上限 {_MAX_DOWNLOAD_SIZE//1024//1024}MB"}
+                        return {
+                            "ok": False,
+                            "error": f"实际下载大小超过上限 {_MAX_DOWNLOAD_SIZE // 1024 // 1024}MB",
+                        }
                     f.write(chunk)
 
         elapsed = round(time.time() - start, 2)

@@ -1,4 +1,5 @@
 """pytest fixtures for irmia_devkit tests."""
+
 import sys
 import os
 

@@ -2,6 +2,7 @@
 sys_snapshot — 系统快照。
 CPU/内存/进程数/开机时长。Windows: systeminfo+tasklist | Linux: /proc。
 """
+
 import os
 import platform
 import subprocess
@@ -34,7 +35,11 @@ def _windows_info(info: dict) -> None:
     try:
         result = subprocess.run(
             ["systeminfo"],
-            capture_output=True, text=True, timeout=15, encoding="gbk", errors="replace"
+            capture_output=True,
+            text=True,
+            timeout=15,
+            encoding="gbk",
+            errors="replace",
         )
         for line in result.stdout.split("\n"):
             line = line.strip()
@@ -52,7 +57,11 @@ def _windows_info(info: dict) -> None:
     try:
         result = subprocess.run(
             ["tasklist", "/FO", "CSV", "/NH"],
-            capture_output=True, text=True, timeout=10, encoding="gbk", errors="replace"
+            capture_output=True,
+            text=True,
+            timeout=10,
+            encoding="gbk",
+            errors="replace",
         )
         info["process_count"] = len([l for l in result.stdout.split("\n") if l.strip()])
     except Exception as e:
@@ -73,9 +82,7 @@ def _linux_info(info: dict) -> None:
             uptime_s = float(f.read().split()[0])
             info["boot_time"] = str(datetime.now() - timedelta(seconds=uptime_s))
 
-        info["process_count"] = sum(
-            1 for d in os.listdir("/proc") if d.isdigit()
-        )
+        info["process_count"] = sum(1 for d in os.listdir("/proc") if d.isdigit())
     except Exception as e:
         info["total_memory_mb"] = None
         info["available_memory_mb"] = None

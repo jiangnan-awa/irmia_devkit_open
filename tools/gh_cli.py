@@ -2,6 +2,7 @@
 gh_cli — GitHub CLI 封装。
 通过 gh 命令直接操作 GitHub，无需浏览器。
 """
+
 import subprocess
 import json
 import os
@@ -36,13 +37,13 @@ def _run_gh(args: list[str], cwd: str = None, timeout: int = 20) -> dict:
             text=True,
             timeout=timeout,
             encoding="utf-8",
-            errors="replace"
+            errors="replace",
         )
         return {
             "ok": result.returncode == 0,
             "stdout": result.stdout.strip(),
             "stderr": result.stderr.strip(),
-            "code": result.returncode
+            "code": result.returncode,
         }
     except FileNotFoundError:
         return {"ok": False, "error": f"gh 未找到: {gh_bin}"}
@@ -52,11 +53,15 @@ def _run_gh(args: list[str], cwd: str = None, timeout: int = 20) -> dict:
         return {"ok": False, "error": str(e)}
 
 
-def _with_body_file(body: str, args: list[str], flag: str = "--body-file") -> str | None:
+def _with_body_file(
+    body: str, args: list[str], flag: str = "--body-file"
+) -> str | None:
     """如果 body 非空，写入临时文件并追加 flag + 路径到 args，返回文件路径用于后续清理。"""
     if not body:
         return None
-    f = tempfile.NamedTemporaryFile(mode="w", suffix=".md", delete=False, encoding="utf-8")
+    f = tempfile.NamedTemporaryFile(
+        mode="w", suffix=".md", delete=False, encoding="utf-8"
+    )
     f.write(body)
     f.close()
     args.extend([flag, f.name])
@@ -71,7 +76,9 @@ def _cleanup(path: str | None) -> None:
             pass
 
 
-def pr_create(cwd: str, title: str, body: str = "", base: str = "master", head: str = "") -> dict:
+def pr_create(
+    cwd: str, title: str, body: str = "", base: str = "master", head: str = ""
+) -> dict:
     """创建 Pull Request。"""
     args = ["pr", "create", "--title", title, "--base", base]
     tmp = _with_body_file(body, args)
@@ -86,9 +93,17 @@ def pr_create(cwd: str, title: str, body: str = "", base: str = "master", head: 
 def pr_list(cwd: str, state: str = "open", limit: int = 10) -> dict:
     """列出 PR。"""
     r = _run_gh(
-        ["pr", "list", "--state", state, "--limit", str(limit),
-         "--json", "number,title,state,url,author,createdAt"],
-        cwd=cwd
+        [
+            "pr",
+            "list",
+            "--state",
+            state,
+            "--limit",
+            str(limit),
+            "--json",
+            "number,title,state,url,author,createdAt",
+        ],
+        cwd=cwd,
     )
     if not r["ok"]:
         return r
@@ -104,7 +119,9 @@ def pr_view(cwd: str, number: int = None) -> dict:
     args = ["pr", "view"]
     if number:
         args.append(str(number))
-    args.extend(["--json", "number,title,state,url,body,author,createdAt,mergedAt,mergeable"])
+    args.extend(
+        ["--json", "number,title,state,url,body,author,createdAt,mergedAt,mergeable"]
+    )
     return _run_gh(args, cwd=cwd)
 
 
@@ -117,7 +134,9 @@ def pr_merge(cwd: str, number: int = None, strategy: str = "squash") -> dict:
     return _run_gh(args, cwd=cwd, timeout=30)
 
 
-def issue_create(cwd: str, title: str, body: str = "", labels: list[str] = None) -> dict:
+def issue_create(
+    cwd: str, title: str, body: str = "", labels: list[str] = None
+) -> dict:
     """创建 Issue。"""
     args = ["issue", "create", "--title", title]
     tmp = _with_body_file(body, args)
@@ -130,10 +149,20 @@ def issue_create(cwd: str, title: str, body: str = "", labels: list[str] = None)
         _cleanup(tmp)
 
 
-def issue_list(cwd: str, state: str = "open", limit: int = 10, labels: str = "") -> dict:
+def issue_list(
+    cwd: str, state: str = "open", limit: int = 10, labels: str = ""
+) -> dict:
     """列出 Issue。"""
-    args = ["issue", "list", "--state", state, "--limit", str(limit),
-            "--json", "number,title,state,url,labels,createdAt"]
+    args = [
+        "issue",
+        "list",
+        "--state",
+        state,
+        "--limit",
+        str(limit),
+        "--json",
+        "number,title,state,url,labels,createdAt",
+    ]
     if labels:
         args.extend(["--label", labels])
     r = _run_gh(args, cwd=cwd)
@@ -151,7 +180,9 @@ def issue_close(cwd: str, number: int) -> dict:
     return _run_gh(["issue", "close", str(number)], cwd=cwd)
 
 
-def release_create(cwd: str, tag: str, notes: str = "", generate_notes: bool = True) -> dict:
+def release_create(
+    cwd: str, tag: str, notes: str = "", generate_notes: bool = True
+) -> dict:
     """创建 Release。"""
     args = ["release", "create", tag]
     if generate_notes:
@@ -166,9 +197,15 @@ def release_create(cwd: str, tag: str, notes: str = "", generate_notes: bool = T
 def release_list(cwd: str, limit: int = 5) -> dict:
     """列出 Release。"""
     r = _run_gh(
-        ["release", "list", "--limit", str(limit),
-         "--json", "name,tagName,publishedAt,isLatest,isPrerelease"],
-        cwd=cwd
+        [
+            "release",
+            "list",
+            "--limit",
+            str(limit),
+            "--json",
+            "name,tagName,publishedAt,isLatest,isPrerelease",
+        ],
+        cwd=cwd,
     )
     if not r["ok"]:
         return r
@@ -184,16 +221,24 @@ def repo_view(cwd: str, owner_repo: str = "") -> dict:
     args = ["repo", "view"]
     if owner_repo:
         args.append(owner_repo)
-    args.extend(["--json", "name,description,url,defaultBranchRef,stargazerCount,forkCount"])
+    args.extend(
+        ["--json", "name,description,url,defaultBranchRef,stargazerCount,forkCount"]
+    )
     return _run_gh(args, cwd=cwd)
 
 
 def run_list(cwd: str, limit: int = 5) -> dict:
     """查看 CI 运行记录。"""
     r = _run_gh(
-        ["run", "list", "--limit", str(limit),
-         "--json", "name,status,conclusion,createdAt,headBranch,url"],
-        cwd=cwd
+        [
+            "run",
+            "list",
+            "--limit",
+            str(limit),
+            "--json",
+            "name,status,conclusion,createdAt,headBranch,url",
+        ],
+        cwd=cwd,
     )
     if not r["ok"]:
         return r
@@ -204,7 +249,9 @@ def run_list(cwd: str, limit: int = 5) -> dict:
         return {"ok": True, "raw": r["stdout"]}
 
 
-def repo_create(name: str, private: bool = True, cwd: str = "", push: bool = True) -> dict:
+def repo_create(
+    name: str, private: bool = True, cwd: str = "", push: bool = True
+) -> dict:
     """创建 GitHub 仓库并推送。"""
     args = ["repo", "create", name]
     if private:

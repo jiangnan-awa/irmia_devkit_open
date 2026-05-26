@@ -2,6 +2,7 @@
 tools/config.py — 插件级配置共享模块。
 main.py 在 __init__ 时调用 set_config 注入配置，各工具模块通过 get_config 读取。
 """
+
 from pathlib import Path
 
 _plugin_dir: Path | None = None

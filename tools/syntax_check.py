@@ -2,6 +2,7 @@
 syntax_check — 语法检查工具。
 改完代码后验证语法正确性。支持 Python / Nim / Go / 通用文本。
 """
+
 import subprocess
 import ast
 import sys
@@ -13,7 +14,7 @@ from ._helpers import proposal_reply
 def check(filepath: str) -> dict:
     """
     检查文件语法。
-    
+
     Returns:
         {"ok": true, "language": "python"} 或 {"ok": false, "errors": [...], "language": "..."}
     """
@@ -32,7 +33,11 @@ def check(filepath: str) -> dict:
     elif suffix in (".js", ".ts", ".jsx", ".tsx"):
         return _check_node(p)
     else:
-        return {"ok": True, "language": f"text/{suffix}", "note": "无法语法检查此类型文件，仅确认文件存在"}
+        return {
+            "ok": True,
+            "language": f"text/{suffix}",
+            "note": "无法语法检查此类型文件，仅确认文件存在",
+        }
 
 
 def _check_python(p: Path) -> dict:
@@ -59,23 +64,32 @@ def _check_python(p: Path) -> dict:
             hint = "文件末尾缺少闭合符号——检查是否有未闭合的引号、括号或三引号。"
         else:
             hint = f"第{e.lineno}行语法错误: {e.msg}"
-        errors = [{
-            "line": e.lineno,
-            "col": e.offset,
-            "msg": e.msg,
-            "text": e.text.strip() if e.text else ""
-        }]
-        return proposal_reply(False, hint,
-                              error=f"语法检查失败: {e.msg}",
-                              evidence={"line": e.lineno, "col": e.offset, "msg": e.msg},
-                              options=["修正后重试 safe_edit", "查看错误行上下文"],
-                              language="python", errors=errors)
+        errors = [
+            {
+                "line": e.lineno,
+                "col": e.offset,
+                "msg": e.msg,
+                "text": e.text.strip() if e.text else "",
+            }
+        ]
+        return proposal_reply(
+            False,
+            hint,
+            error=f"语法检查失败: {e.msg}",
+            evidence={"line": e.lineno, "col": e.offset, "msg": e.msg},
+            options=["修正后重试 safe_edit", "查看错误行上下文"],
+            language="python",
+            errors=errors,
+        )
     except Exception:
         # 回退到 py_compile
         try:
             subprocess.run(
                 [sys.executable, "-m", "py_compile", "--", str(p)],
-                capture_output=True, text=True, timeout=10, check=True
+                capture_output=True,
+                text=True,
+                timeout=10,
+                check=True,
             )
             return {"ok": True, "language": "python"}
         except subprocess.CalledProcessError as e:
@@ -87,7 +101,9 @@ def _check_nim(p: Path) -> dict:
     try:
         result = subprocess.run(
             ["nim", "check", "--verbosity:0", "--", str(p)],
-            capture_output=True, text=True, timeout=20
+            capture_output=True,
+            text=True,
+            timeout=20,
         )
         stderr = result.stderr.strip()
         if result.returncode == 0 and not stderr:
@@ -95,10 +111,15 @@ def _check_nim(p: Path) -> dict:
         return {
             "ok": False,
             "language": "nim",
-            "errors": [{"msg": stderr or result.stdout.strip()}]
+            "errors": [{"msg": stderr or result.stdout.strip()}],
         }
     except FileNotFoundError:
-        return {"ok": True, "language": "nim", "skipped": True, "reason": "nim 编译器未安装，跳过语法检查"}
+        return {
+            "ok": True,
+            "language": "nim",
+            "skipped": True,
+            "reason": "nim 编译器未安装，跳过语法检查",
+        }
     except Exception as e:
         return {"ok": False, "language": "nim", "errors": [{"msg": str(e)}]}
 
@@ -107,15 +128,19 @@ def _check_go(p: Path) -> dict:
     """Go 语法检查：gofmt -e。"""
     try:
         result = subprocess.run(
-            ["gofmt", "-e", str(p)],
-            capture_output=True, text=True, timeout=15
+            ["gofmt", "-e", str(p)], capture_output=True, text=True, timeout=15
         )
         stderr = result.stderr.strip()
         if result.returncode == 0 and not stderr:
             return {"ok": True, "language": "go"}
         return {"ok": False, "language": "go", "errors": [{"msg": stderr}]}
     except FileNotFoundError:
-        return {"ok": True, "language": "go", "skipped": True, "reason": "go 未安装，跳过语法检查"}
+        return {
+            "ok": True,
+            "language": "go",
+            "skipped": True,
+            "reason": "go 未安装，跳过语法检查",
+        }
     except Exception as e:
         return {"ok": False, "language": "go", "errors": [{"msg": str(e)}]}
 
@@ -125,15 +150,30 @@ def _check_node(p: Path) -> dict:
     try:
         result = subprocess.run(
             ["node", "--check", "--", str(p)],
-            capture_output=True, text=True, timeout=10
+            capture_output=True,
+            text=True,
+            timeout=10,
         )
         if result.returncode == 0:
             return {"ok": True, "language": "javascript/typescript"}
-        return {"ok": False, "language": "javascript/typescript", "errors": [{"msg": result.stderr.strip()}]}
+        return {
+            "ok": False,
+            "language": "javascript/typescript",
+            "errors": [{"msg": result.stderr.strip()}],
+        }
     except FileNotFoundError:
-        return {"ok": True, "language": "javascript/typescript", "skipped": True, "reason": "node 未安装，跳过语法检查"}
+        return {
+            "ok": True,
+            "language": "javascript/typescript",
+            "skipped": True,
+            "reason": "node 未安装，跳过语法检查",
+        }
     except Exception as e:
-        return {"ok": False, "language": "javascript/typescript", "errors": [{"msg": str(e)}]}
+        return {
+            "ok": False,
+            "language": "javascript/typescript",
+            "errors": [{"msg": str(e)}],
+        }
 
 
 def _parse_py_compile_error(stderr: str, language: str) -> dict:
@@ -144,4 +184,8 @@ def _parse_py_compile_error(stderr: str, language: str) -> dict:
         if not line:
             continue
         errors.append({"msg": line})
-    return {"ok": False, "language": language, "errors": errors if errors else [{"msg": stderr}]}
+    return {
+        "ok": False,
+        "language": language,
+        "errors": errors if errors else [{"msg": stderr}],
+    }

@@ -2,13 +2,19 @@
 dir_tree — 目录树可视化。
 用 os.scandir 递归扫描目录，生成缩进树结构。
 """
+
 import os
 
 from ._file_utils import human_size
 
 
-def tree(path: str, max_depth: int = 3, show_hidden: bool = False,
-         pattern: str = "", max_items: int = 100) -> dict:
+def tree(
+    path: str,
+    max_depth: int = 3,
+    show_hidden: bool = False,
+    pattern: str = "",
+    max_items: int = 100,
+) -> dict:
     """生成目录树。
 
     Args:
@@ -44,7 +50,9 @@ def tree(path: str, max_depth: int = 3, show_hidden: bool = False,
         except OSError:
             pass
         try:
-            entries = sorted(os.scandir(current), key=lambda e: (not e.is_dir(), e.name.lower()))
+            entries = sorted(
+                os.scandir(current), key=lambda e: (not e.is_dir(), e.name.lower())
+            )
         except PermissionError:
             lines.append(f"{prefix}└── [权限不足]")
             return
@@ -56,11 +64,14 @@ def tree(path: str, max_depth: int = 3, show_hidden: bool = False,
         # 模式过滤
         if pattern:
             import fnmatch
-            entries = [e for e in entries if e.is_dir() or fnmatch.fnmatch(e.name, pattern)]
+
+            entries = [
+                e for e in entries if e.is_dir() or fnmatch.fnmatch(e.name, pattern)
+            ]
 
         count = min(len(entries), max_items)
         for i, entry in enumerate(entries[:count]):
-            is_last = (i == count - 1)
+            is_last = i == count - 1
             connector = "└── " if is_last else "├── "
             if entry.is_dir():
                 stats["dirs"] += 1
@@ -70,7 +81,9 @@ def tree(path: str, max_depth: int = 3, show_hidden: bool = False,
                 stats["files"] += 1
                 try:
                     size = entry.stat().st_size
-                    lines.append(f"{prefix}{connector}{entry.name} ({human_size(size)})")
+                    lines.append(
+                        f"{prefix}{connector}{entry.name} ({human_size(size)})"
+                    )
                 except OSError:
                     lines.append(f"{prefix}{connector}{entry.name}")
 

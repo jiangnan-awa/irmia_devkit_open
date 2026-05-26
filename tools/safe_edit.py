@@ -2,6 +2,7 @@
 safe_edit — 安全编辑工具（强制使用）。
 修改任何代码文件必须用此工具。内部自动：备份→patch→语法检查→通过保留/失败回滚。
 """
+
 import shutil
 from datetime import datetime
 from pathlib import Path
@@ -33,21 +34,23 @@ def _collect_positions(content: str, old: str) -> list[int]:
     return positions
 
 
-def edit(filepath: str, old: str, new: str, replace_all: bool = False, occurrence: int = 0) -> dict:
+def edit(
+    filepath: str, old: str, new: str, replace_all: bool = False, occurrence: int = 0
+) -> dict:
     """
     安全编辑文件：自动备份→替换→语法检查→通过保留/失败回滚。
-    
+
     修改任何代码文件必须使用此工具，不要绕过它直接用 file_write 或 file_patch。
-    
+
     Args:
         filepath: 文件路径
         old: 旧文本（精确匹配）
         new: 新文本
         replace_all: 是否替换所有匹配
         occurrence: 替换第 N 次出现（0=默认行为，首次出现。多匹配时可用此参数消歧）
-    
+
     Returns:
-        {"ok": true, "backup": "...", "syntax_ok": true} 
+        {"ok": true, "backup": "...", "syntax_ok": true}
         或 {"ok": false, "rolled_back": true, "error": "..."}
         或 {"ok": false, "matches": [行号...], "hint": "请使用 occurrence=N 指定目标"}
     """
@@ -78,9 +81,16 @@ def edit(filepath: str, old: str, new: str, replace_all: bool = False, occurrenc
     # 0.1 消歧：计数 old 出现次数
     old_count = content.count(old)
     if old_count == 0:
-        return {"ok": False, "error": "未找到匹配文本，文件内容未修改",
-                "proposal": "old 文本在文件中未找到——检查是否包含完整且精确的文本片段（包括缩进和换行）。",
-                "options": ["检查缩进是否匹配", "用 file_preview 先预览", "确认 old 文本来自文件的准确复制"]}
+        return {
+            "ok": False,
+            "error": "未找到匹配文本，文件内容未修改",
+            "proposal": "old 文本在文件中未找到——检查是否包含完整且精确的文本片段（包括缩进和换行）。",
+            "options": [
+                "检查缩进是否匹配",
+                "用 file_preview 先预览",
+                "确认 old 文本来自文件的准确复制",
+            ],
+        }
 
     # ── 消歧与替换 ──
 
@@ -100,7 +110,7 @@ def edit(filepath: str, old: str, new: str, replace_all: bool = False, occurrenc
             "error": f"old 文本在文件中出现了 {old_count} 次，请指定要替换第几次出现",
             "occurrence_count": old_count,
             "matches": positions[:20],
-            "hint": f"请使用 occurrence=N 指定目标（1~{old_count}），或设 replace_all=True 替换全部"
+            "hint": f"请使用 occurrence=N 指定目标（1~{old_count}），或设 replace_all=True 替换全部",
         }
 
     # 1. 备份（在任何修改之前）
@@ -118,10 +128,13 @@ def edit(filepath: str, old: str, new: str, replace_all: bool = False, occurrenc
     # 2. 执行替换
     if occurrence > 0 and not replace_all:
         if occurrence > old_count:
-            return {"ok": False, "error": f"occurrence={occurrence} 超过匹配总数 {old_count}"}
+            return {
+                "ok": False,
+                "error": f"occurrence={occurrence} 超过匹配总数 {old_count}",
+            }
         positions = _collect_positions(content, old)
         idx = positions[occurrence - 1]
-        content = content[:idx] + new + content[idx + len(old):]
+        content = content[:idx] + new + content[idx + len(old) :]
         with open(filepath, "w", encoding=encoding, newline="") as f:
             f.write(content)
         result["replaced"] = 1
@@ -129,7 +142,12 @@ def edit(filepath: str, old: str, new: str, replace_all: bool = False, occurrenc
     else:
         patch_result = patch(filepath, old, new, replace_all)
         if not patch_result.get("ok"):
-            return {**result, "ok": False, "error": patch_result.get("error", "patch 失败"), "rolled_back": False}
+            return {
+                **result,
+                "ok": False,
+                "error": patch_result.get("error", "patch 失败"),
+                "rolled_back": False,
+            }
         result["replaced"] = patch_result.get("replaced", 0)
 
     # 3. 语法检查（只对代码文件）
@@ -180,11 +198,13 @@ def list_backups(filepath: str = None) -> dict:
     backups = []
     for b in sorted(_backup_dir().glob("*.bak"), reverse=True):
         stat = b.stat()
-        backups.append({
-            "file": b.name,
-            "size": stat.st_size,
-            "time": datetime.fromtimestamp(stat.st_mtime).isoformat()
-        })
+        backups.append(
+            {
+                "file": b.name,
+                "size": stat.st_size,
+                "time": datetime.fromtimestamp(stat.st_mtime).isoformat(),
+            }
+        )
 
     if filepath:
         name = Path(filepath).name
@@ -213,8 +233,4 @@ def rollback(filepath: str, backup_name: str = None) -> dict:
         backup_path = candidates[0]
 
     shutil.copy2(str(backup_path), filepath)
-    return {
-        "ok": True,
-        "file": filepath,
-        "restored_from": str(backup_path)
-    }
+    return {"ok": True, "file": filepath, "restored_from": str(backup_path)}

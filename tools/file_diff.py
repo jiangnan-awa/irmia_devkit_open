@@ -3,6 +3,7 @@ file_diff — 文件差异比较。
 逐行比较两个文件，返回结构化的 added/removed/changed。
 纯 difflib 标准库，不依赖外部 diff 命令。
 """
+
 import difflib
 from pathlib import Path
 
@@ -24,7 +25,10 @@ def compare(file_a: str, file_b: str) -> dict:
 
     # C5: 大小检查
     if pa.stat().st_size > _MAX_FILE_SIZE or pb.stat().st_size > _MAX_FILE_SIZE:
-        return {"ok": False, "error": f"文件过大（上限 {_MAX_FILE_SIZE//1024//1024}MB），请使用外部 diff 工具"}
+        return {
+            "ok": False,
+            "error": f"文件过大（上限 {_MAX_FILE_SIZE // 1024 // 1024}MB），请使用外部 diff 工具",
+        }
 
     try:
         a_text = read_file(pa)
@@ -40,11 +44,15 @@ def compare(file_a: str, file_b: str) -> dict:
     lines_b = b_text.splitlines()
     total_lines = len(lines_a) + len(lines_b)
 
-    diff = list(difflib.unified_diff(
-        lines_a, lines_b,
-        fromfile=file_a, tofile=file_b,
-        lineterm="",
-    ))
+    diff = list(
+        difflib.unified_diff(
+            lines_a,
+            lines_b,
+            fromfile=file_a,
+            tofile=file_b,
+            lineterm="",
+        )
+    )
 
     full_count = len(diff)
     displayed = diff[:100]

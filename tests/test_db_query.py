@@ -1,8 +1,8 @@
 """Tests for db_query — SQL injection and read-only guarantees."""
+
 import os
 import sqlite3
 import tempfile
-from pathlib import Path
 import pytest
 from tools.db_query import query
 

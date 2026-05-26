@@ -2,6 +2,7 @@
 encode_utils — 编解码工具箱。
 base64/URL/hex，纯标准库，三个函数覆盖 90% 日常编码需求。
 """
+
 import base64
 import binascii
 import urllib.parse
@@ -53,7 +54,10 @@ def url_decode(data: str) -> dict:
 def hex_encode(data: str) -> dict:
     """字符串 → 十六进制。"""
     try:
-        return {"ok": True, "result": binascii.hexlify(data.encode("utf-8")).decode("ascii")}
+        return {
+            "ok": True,
+            "result": binascii.hexlify(data.encode("utf-8")).decode("ascii"),
+        }
     except Exception as e:
         return {"ok": False, "error": str(e)}
 

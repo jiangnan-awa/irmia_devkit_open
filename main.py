@@ -2,6 +2,7 @@
 astrbot_plugin_irmia_devkit — 弥亚开发工具箱
 为弥亚提供安全、精确的代码开发工具：safe_edit、git_smart、syntax_check、file_patch。
 """
+
 from __future__ import annotations
 
 import json
@@ -23,6 +24,7 @@ _DEFAULT_CONFIG = {
     "lock_dirs": [],
     "backup_dir": "",
 }
+
 
 class Main(star.Star):
     """弥亚开发工具箱插件"""
@@ -60,7 +62,9 @@ class Main(star.Star):
             if paths.get("lock_dirs"):
                 raw = paths["lock_dirs"]
                 if isinstance(raw, str):
-                    _config["lock_dirs"] = [d.strip() for d in raw.split(",") if d.strip()]
+                    _config["lock_dirs"] = [
+                        d.strip() for d in raw.split(",") if d.strip()
+                    ]
                 elif isinstance(raw, list):
                     _config["lock_dirs"] = raw
                 changed = True
@@ -73,7 +77,9 @@ class Main(star.Star):
                 changed = True
             web_disabled = config.get("disabled_tools", "")
             if web_disabled:
-                _config["disabled_tools"] = [t.strip() for t in web_disabled.split(",") if t.strip()]
+                _config["disabled_tools"] = [
+                    t.strip() for t in web_disabled.split(",") if t.strip()
+                ]
                 changed = True
             if changed:
                 try:

@@ -2,6 +2,7 @@
 git_changelog — Git 日志语义分组。
 按 fix:/feat:/refactor: 等前缀分类 commit，输出结构化 changelog。
 """
+
 import subprocess
 import re
 from pathlib import Path
@@ -20,10 +21,17 @@ def changelog(cwd: str, count: int = 30) -> dict:
     try:
         r = subprocess.run(
             ["git", "log", f"-{count}", "--oneline", "--no-decorate"],
-            cwd=cwd, capture_output=True, text=True, timeout=10
+            cwd=cwd,
+            capture_output=True,
+            text=True,
+            timeout=10,
         )
         if r.returncode != 0:
-            return {"ok": False, "error": f"git log 失败: {r.stderr.strip()}", "cwd": cwd}
+            return {
+                "ok": False,
+                "error": f"git log 失败: {r.stderr.strip()}",
+                "cwd": cwd,
+            }
     except FileNotFoundError:
         return {"ok": False, "error": "git 未安装或不在 PATH 中"}
     except subprocess.TimeoutExpired:
@@ -36,15 +44,15 @@ def changelog(cwd: str, count: int = 30) -> dict:
 
     for line in lines:
         # skip the leading hash
-        m = re.match(r'^\S+\s+(.*)$', line)
+        m = re.match(r"^\S+\s+(.*)$", line)
         msg = m.group(1) if m else line
-        if re.match(r'^feat[\s(:]', msg, re.IGNORECASE):
+        if re.match(r"^feat[\s(:]", msg, re.IGNORECASE):
             categories["features"].append(msg)
-        elif re.match(r'^fix[\s(:]', msg, re.IGNORECASE):
+        elif re.match(r"^fix[\s(:]", msg, re.IGNORECASE):
             categories["fixes"].append(msg)
-        elif re.match(r'^refactor[\s(:]', msg, re.IGNORECASE):
+        elif re.match(r"^refactor[\s(:]", msg, re.IGNORECASE):
             categories["refactors"].append(msg)
-        elif re.match(r'^docs[\s(:]', msg, re.IGNORECASE):
+        elif re.match(r"^docs[\s(:]", msg, re.IGNORECASE):
             categories["docs"].append(msg)
         else:
             categories["other"].append(msg)

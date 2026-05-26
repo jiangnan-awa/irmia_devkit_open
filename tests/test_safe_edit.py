@@ -1,4 +1,5 @@
 """Tests for safe_edit — backup/patch/syntax/rollback pipeline."""
+
 import os
 import tempfile
 from pathlib import Path

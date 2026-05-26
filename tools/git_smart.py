@@ -2,6 +2,7 @@
 git_smart — Git 操作封装。
 常用 git 命令的结构化输出。不要用 shell 直接执行 git 命令——用此工具。
 """
+
 import subprocess
 
 from ._helpers import proposal_reply
@@ -17,13 +18,13 @@ def _run_git(cwd: str, args: list[str], timeout: int = 15) -> dict:
             text=True,
             timeout=timeout,
             encoding="utf-8",
-            errors="replace"
+            errors="replace",
         )
         return {
             "ok": result.returncode == 0,
             "stdout": result.stdout.strip(),
             "stderr": result.stderr.strip(),
-            "code": result.returncode
+            "code": result.returncode,
         }
     except FileNotFoundError:
         return {"ok": False, "error": "git 未安装或不在 PATH 中"}
@@ -43,7 +44,7 @@ def status(cwd: str) -> dict:
         "ok": True,
         "clean": len(lines) == 0 or (len(lines) == 1 and lines[0] == ""),
         "changes": [line for line in lines if line.strip()],
-        "changed_count": len([l for l in lines if l.strip()])
+        "changed_count": len([l for l in lines if l.strip()]),
     }
 
 
@@ -63,10 +64,7 @@ def log(cwd: str, count: int = 5) -> dict:
     r = _run_git(cwd, ["log", f"-{count}", "--oneline", "--decorate"])
     if not r["ok"]:
         return r
-    return {
-        "ok": True,
-        "commits": r["stdout"].split("\n") if r["stdout"] else []
-    }
+    return {"ok": True, "commits": r["stdout"].split("\n") if r["stdout"] else []}
 
 
 def commit(cwd: str, message: str) -> dict:
@@ -82,14 +80,19 @@ def commit(cwd: str, message: str) -> dict:
         groups = {"Python": [], "Config": [], "Other": []}
         for f_line in s.get("changes", []):
             f_name = f_line.split()[-1] if len(f_line.split()) > 2 else f_line.strip()
-            if f_name.endswith((".py", ".nim", ".go")): groups["Python"].append(f_name)
-            elif f_name.endswith((".json", ".yaml", ".yml", ".toml", ".cfg", ".ini")): groups["Config"].append(f_name)
-            else: groups["Other"].append(f_name)
-        return proposal_reply(False,
+            if f_name.endswith((".py", ".nim", ".go")):
+                groups["Python"].append(f_name)
+            elif f_name.endswith((".json", ".yaml", ".yml", ".toml", ".cfg", ".ini")):
+                groups["Config"].append(f_name)
+            else:
+                groups["Other"].append(f_name)
+        return proposal_reply(
+            False,
             f"{changed}个文件待提交——Python:{len(groups['Python'])} Config:{len(groups['Config'])} Other:{len(groups['Other'])}。建议分批。",
             error=f"未暂存文件过多 ({changed} 个)。请先用 git_status 和 git_diff 确认后分批提交。",
             evidence={"file_groups": {k: v for k, v in groups.items() if v}},
-            options=["commit_python_only", "show_all_files", "force_all"])
+            options=["commit_python_only", "show_all_files", "force_all"],
+        )
 
     files_to_stage = s.get("changes", [])
 

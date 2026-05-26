@@ -2,6 +2,7 @@
 html_extract — HTML 内容提取。
 用 BeautifulSoup + lxml 从 HTML 中提取文本、链接、表格。
 """
+
 from bs4 import BeautifulSoup
 
 from ._helpers import proposal_reply
@@ -38,15 +39,20 @@ def extract(html: str, what: str = "text", selector: str = "") -> dict:
             text = soup.get_text(separator="\n", strip=True)
             # 合并多余空行
             lines = [l.strip() for l in text.split("\n") if l.strip()]
-            return {"ok": True, "data": {"text": "\n".join(lines), "line_count": len(lines)}}
+            return {
+                "ok": True,
+                "data": {"text": "\n".join(lines), "line_count": len(lines)},
+            }
 
         elif what == "links":
             links = []
             for a in soup.find_all("a", href=True):
-                links.append({
-                    "text": a.get_text(strip=True)[:100],
-                    "href": a["href"],
-                })
+                links.append(
+                    {
+                        "text": a.get_text(strip=True)[:100],
+                        "href": a["href"],
+                    }
+                )
             return {"ok": True, "data": {"links": links, "count": len(links)}}
 
         elif what == "tables":
@@ -58,7 +64,9 @@ def extract(html: str, what: str = "text", selector: str = "") -> dict:
                     cols = [td.get_text(strip=True) for td in tr.find_all(["td", "th"])]
                     if cols:
                         rows.append(cols)
-                tables.append({"headers": headers, "rows": rows, "row_count": len(rows)})
+                tables.append(
+                    {"headers": headers, "rows": rows, "row_count": len(rows)}
+                )
             return {"ok": True, "data": {"tables": tables, "count": len(tables)}}
 
         elif what == "query":
@@ -66,28 +74,44 @@ def extract(html: str, what: str = "text", selector: str = "") -> dict:
                 return {"ok": False, "error": "what='query' 需要 selector 参数"}
             elements = soup.select(selector)
             if not elements:
-                return proposal_reply(True, f"CSS 选择器 '{selector}' 未匹配任何元素",
-                                      evidence={"selector": selector},
-                                      options=["简化选择器(去掉层级)", "尝试 what='text' 提取全文"],
-                                      data={"results": [], "count": 0})
+                return proposal_reply(
+                    True,
+                    f"CSS 选择器 '{selector}' 未匹配任何元素",
+                    evidence={"selector": selector},
+                    options=["简化选择器(去掉层级)", "尝试 what='text' 提取全文"],
+                    data={"results": [], "count": 0},
+                )
             results = [el.get_text(strip=True)[:200] for el in elements]
             html_snippets = []
             for el in elements[:5]:
                 pretty = el.prettify()
                 first_line = pretty.split("\n")[0] if "\n" in pretty else pretty[:300]
                 html_snippets.append(first_line[:300])
-            return {"ok": True, "data": {
-                "selector": selector,
-                "results": results,
-                "count": len(elements),
-                "html_preview": html_snippets,
-            }}
+            return {
+                "ok": True,
+                "data": {
+                    "selector": selector,
+                    "results": results,
+                    "count": len(elements),
+                    "html_preview": html_snippets,
+                },
+            }
 
         else:
-            return {"ok": False, "error": f"未知提取类型: {what}，可选 text/links/tables/query"}
+            return {
+                "ok": False,
+                "error": f"未知提取类型: {what}，可选 text/links/tables/query",
+            }
 
     except Exception as e:
-        return proposal_reply(False, "HTML 解析失败——lxml 和 html.parser 均无法解析",
-                              error=f"HTML 解析失败: {e}",
-                              evidence={"html_preview": html[:200]},
-                              options=["检查输入是否为完整 HTML", "尝试手动提取纯文本", "可能非 HTML 格式"])
+        return proposal_reply(
+            False,
+            "HTML 解析失败——lxml 和 html.parser 均无法解析",
+            error=f"HTML 解析失败: {e}",
+            evidence={"html_preview": html[:200]},
+            options=[
+                "检查输入是否为完整 HTML",
+                "尝试手动提取纯文本",
+                "可能非 HTML 格式",
+            ],
+        )

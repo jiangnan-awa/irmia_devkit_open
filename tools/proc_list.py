@@ -2,6 +2,7 @@
 proc_list — 进程列表查询。
 封装 tasklist(Windows) / ps(Linux) 命令，返回结构化的进程信息。
 """
+
 import subprocess
 import os
 
@@ -20,7 +21,11 @@ def _list_windows(filter_name: str | None) -> dict:
     try:
         result = subprocess.run(
             ["tasklist", "/FO", "CSV", "/NH"],
-            capture_output=True, text=True, timeout=10, encoding="gbk", errors="replace"
+            capture_output=True,
+            text=True,
+            timeout=10,
+            encoding="gbk",
+            errors="replace",
         )
         if result.returncode != 0:
             return {"ok": False, "error": f"tasklist 失败: {result.stderr.strip()}"}
@@ -49,11 +54,13 @@ def _list_windows(filter_name: str | None) -> dict:
                 if filter_name and filter_name.lower() not in name.lower():
                     continue
 
-                processes.append({
-                    "name": name,
-                    "pid": int(pid) if pid.isdigit() else 0,
-                    "memory_kb": mem_kb,
-                })
+                processes.append(
+                    {
+                        "name": name,
+                        "pid": int(pid) if pid.isdigit() else 0,
+                        "memory_kb": mem_kb,
+                    }
+                )
 
         return {
             "ok": True,
@@ -62,23 +69,28 @@ def _list_windows(filter_name: str | None) -> dict:
             "processes": sorted(processes, key=lambda p: -p["memory_kb"]),
         }
     except FileNotFoundError:
-        return proposal_reply(False, "tasklist 命令不可用",
-                              error="tasklist 不可用",
-                              options=["检查系统环境", "用 sys_snapshot 替代"],
-                              next_call={"tool": "sys_snapshot", "params": {}})
+        return proposal_reply(
+            False,
+            "tasklist 命令不可用",
+            error="tasklist 不可用",
+            options=["检查系统环境", "用 sys_snapshot 替代"],
+            next_call={"tool": "sys_snapshot", "params": {}},
+        )
     except Exception as e:
-        return proposal_reply(False, "tasklist 执行失败",
-                              error=str(e),
-                              options=["检查系统权限", "用 sys_snapshot 替代"],
-                              next_call={"tool": "sys_snapshot", "params": {}})
+        return proposal_reply(
+            False,
+            "tasklist 执行失败",
+            error=str(e),
+            options=["检查系统权限", "用 sys_snapshot 替代"],
+            next_call={"tool": "sys_snapshot", "params": {}},
+        )
 
 
 def _list_posix(filter_name: str | None) -> dict:
     """Linux/macOS: ps aux（跳过表头行）"""
     try:
         result = subprocess.run(
-            ["ps", "aux"],
-            capture_output=True, text=True, timeout=10
+            ["ps", "aux"], capture_output=True, text=True, timeout=10
         )
         if result.returncode != 0:
             return {"ok": False, "error": f"ps 失败: {result.stderr.strip()}"}
@@ -111,12 +123,18 @@ def _list_posix(filter_name: str | None) -> dict:
             "processes": sorted(processes, key=lambda p: -p["memory_kb"]),
         }
     except FileNotFoundError:
-        return proposal_reply(False, "ps 命令不可用",
-                              error="ps 不可用",
-                              options=["检查系统环境", "用 sys_snapshot 替代"],
-                              next_call={"tool": "sys_snapshot", "params": {}})
+        return proposal_reply(
+            False,
+            "ps 命令不可用",
+            error="ps 不可用",
+            options=["检查系统环境", "用 sys_snapshot 替代"],
+            next_call={"tool": "sys_snapshot", "params": {}},
+        )
     except Exception as e:
-        return proposal_reply(False, "ps 执行失败",
-                              error=str(e),
-                              options=["检查系统权限", "用 sys_snapshot 替代"],
-                              next_call={"tool": "sys_snapshot", "params": {}})
+        return proposal_reply(
+            False,
+            "ps 执行失败",
+            error=str(e),
+            options=["检查系统权限", "用 sys_snapshot 替代"],
+            next_call={"tool": "sys_snapshot", "params": {}},
+        )

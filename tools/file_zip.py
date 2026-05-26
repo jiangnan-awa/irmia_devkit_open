@@ -2,6 +2,7 @@
 file_zip — ZIP 打包/解压。
 纯 zipfile 标准库，压缩率可选。
 """
+
 import os
 import zipfile
 from pathlib import Path
@@ -48,8 +49,14 @@ def extract(zip_file: str, output_dir: str) -> dict:
             safe_out = out.resolve()
             for name in names:
                 member_path = (safe_out / name).resolve()
-                if not str(member_path).startswith(str(safe_out) + os.sep) and member_path != safe_out:
-                    return {"ok": False, "error": f"安全拦截：ZIP 条目试图逃逸目录 — {name}"}
+                if (
+                    not str(member_path).startswith(str(safe_out) + os.sep)
+                    and member_path != safe_out
+                ):
+                    return {
+                        "ok": False,
+                        "error": f"安全拦截：ZIP 条目试图逃逸目录 — {name}",
+                    }
             zf.extractall(out)
 
         return {

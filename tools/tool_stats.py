@@ -2,6 +2,7 @@
 tool_stats — 工具调用统计。
 纯内存计数器，零依赖。record() 静默失败，不影响工具调用。
 """
+
 from collections import defaultdict
 import time
 

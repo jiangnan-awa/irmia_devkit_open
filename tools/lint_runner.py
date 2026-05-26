@@ -2,6 +2,7 @@
 lint_runner — 代码质量检查（ruff/pylint/eslint）。
 与 syntax_check 互补：syntax_check 查"能不能跑"，lint_runner 查"写得好不好"。
 """
+
 import subprocess
 import json
 import shutil
@@ -29,7 +30,10 @@ def run(filepath: str, linter: str = "auto") -> dict:
     }
     runner = runners.get(linter)
     if not runner:
-        return {"ok": False, "error": f"不支持的 linter: {linter}，可选: {list(runners.keys())}"}
+        return {
+            "ok": False,
+            "error": f"不支持的 linter: {linter}，可选: {list(runners.keys())}",
+        }
 
     return runner(p)
 
@@ -53,7 +57,9 @@ def _run_ruff(p: Path) -> dict:
     try:
         r = subprocess.run(
             ["ruff", "check", "--output-format", "json", str(p)],
-            capture_output=True, text=True, timeout=30
+            capture_output=True,
+            text=True,
+            timeout=30,
         )
         if r.returncode == 0:
             return {"ok": True, "linter": "ruff", "issues": [], "count": 0}
@@ -64,7 +70,12 @@ def _run_ruff(p: Path) -> dict:
             r["options"] = ["逐个修复", "确认是否有意为之"]
         return r
     except json.JSONDecodeError:
-        return {"ok": True, "linter": "ruff", "raw": r.stdout.strip()[:2000], "count": 0}
+        return {
+            "ok": True,
+            "linter": "ruff",
+            "raw": r.stdout.strip()[:2000],
+            "count": 0,
+        }
     except subprocess.TimeoutExpired:
         return {"ok": False, "error": "ruff 超时"}
     except Exception as e:
@@ -77,7 +88,9 @@ def _run_pylint(p: Path) -> dict:
     try:
         r = subprocess.run(
             ["pylint", "--output-format", "json", str(p)],
-            capture_output=True, text=True, timeout=60
+            capture_output=True,
+            text=True,
+            timeout=60,
         )
         issues = json.loads(r.stdout) if r.stdout.strip() else []
         r = {"ok": True, "linter": "pylint", "issues": issues, "count": len(issues)}
@@ -86,7 +99,12 @@ def _run_pylint(p: Path) -> dict:
             r["options"] = ["逐个修复", "确认是否有意为之"]
         return r
     except json.JSONDecodeError:
-        return {"ok": True, "linter": "pylint", "raw": r.stdout.strip()[:2000], "count": 0}
+        return {
+            "ok": True,
+            "linter": "pylint",
+            "raw": r.stdout.strip()[:2000],
+            "count": 0,
+        }
     except subprocess.TimeoutExpired:
         return {"ok": False, "error": "pylint 超时"}
     except Exception as e:
@@ -99,19 +117,31 @@ def _run_eslint(p: Path) -> dict:
     try:
         r = subprocess.run(
             ["eslint", "--format", "json", str(p)],
-            capture_output=True, text=True, timeout=30
+            capture_output=True,
+            text=True,
+            timeout=30,
         )
         result = json.loads(r.stdout) if r.stdout.strip() else []
         if isinstance(result, list) and len(result) > 0:
             messages = result[0].get("messages", [])
-            r = {"ok": True, "linter": "eslint", "issues": messages, "count": len(messages)}
+            r = {
+                "ok": True,
+                "linter": "eslint",
+                "issues": messages,
+                "count": len(messages),
+            }
             if messages:
                 r["proposal"] = f"eslint发现{len(messages)}个问题"
                 r["options"] = ["逐个修复", "确认是否有意为之"]
             return r
         return {"ok": True, "linter": "eslint", "issues": [], "count": 0}
     except json.JSONDecodeError:
-        return {"ok": True, "linter": "eslint", "raw": r.stdout.strip()[:2000], "count": 0}
+        return {
+            "ok": True,
+            "linter": "eslint",
+            "raw": r.stdout.strip()[:2000],
+            "count": 0,
+        }
     except subprocess.TimeoutExpired:
         return {"ok": False, "error": "eslint 超时"}
     except Exception as e:

@@ -1,4 +1,5 @@
 """Tests for git_smart — commit guards and structured output."""
+
 import os
 import tempfile
 import subprocess
@@ -10,7 +11,9 @@ from tools.git_smart import commit, status
 def git_repo():
     d = tempfile.mkdtemp()
     subprocess.run(["git", "init"], cwd=d, capture_output=True)
-    subprocess.run(["git", "config", "user.email", "test@test.com"], cwd=d, capture_output=True)
+    subprocess.run(
+        ["git", "config", "user.email", "test@test.com"], cwd=d, capture_output=True
+    )
     subprocess.run(["git", "config", "user.name", "Test"], cwd=d, capture_output=True)
     # Create initial commit
     with open(os.path.join(d, "README.md"), "w") as f:
@@ -19,6 +22,7 @@ def git_repo():
     subprocess.run(["git", "commit", "-m", "init"], cwd=d, capture_output=True)
     yield d
     import shutil
+
     shutil.rmtree(d, ignore_errors=True)
 
 

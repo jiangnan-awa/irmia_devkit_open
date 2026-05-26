@@ -2,6 +2,7 @@
 json_schema_val — JSON Schema 校验。
 jsonschema 为可选依赖，未安装时返回错误提示。
 """
+
 import json
 
 from ._helpers import proposal_reply
@@ -26,6 +27,7 @@ def validate(data: str, schema: str) -> dict:
 
     try:
         import jsonschema
+
         validator = jsonschema.Draft7Validator(schema_obj)
         errors = sorted(validator.iter_errors(obj), key=lambda e: e.path)
         if errors:
@@ -33,12 +35,20 @@ def validate(data: str, schema: str) -> dict:
             for e in errors:
                 path = ".".join(str(p) for p in e.absolute_path) or "(root)"
                 error_list.append({"path": path, "message": e.message})
-            return proposal_reply(True, f"Schema校验失败——{len(errors)}个字段不符合规范",
-                                  evidence={"first_error": error_list[0], "count": len(errors)},
-                                  options=["根据 errors 逐个修复 JSON", "更新 schema"],
-                                  valid=False, errors=error_list, count=len(errors))
+            return proposal_reply(
+                True,
+                f"Schema校验失败——{len(errors)}个字段不符合规范",
+                evidence={"first_error": error_list[0], "count": len(errors)},
+                options=["根据 errors 逐个修复 JSON", "更新 schema"],
+                valid=False,
+                errors=error_list,
+                count=len(errors),
+            )
         return {"ok": True, "valid": True, "count": 0}
     except ImportError:
-        return {"ok": False, "error": "jsonschema 未安装，请运行: pip install jsonschema"}
+        return {
+            "ok": False,
+            "error": "jsonschema 未安装，请运行: pip install jsonschema",
+        }
     except Exception as e:
         return {"ok": False, "error": f"Schema 校验失败: {e}"}

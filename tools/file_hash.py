@@ -2,6 +2,7 @@
 file_hash — 文件哈希计算。
 md5/sha1/sha256，纯 hashlib 标准库。
 """
+
 import hashlib
 from pathlib import Path
 
@@ -19,7 +20,10 @@ def compute(filepath: str, algo: str = "sha256") -> dict:
         return {"ok": False, "error": f"文件不存在: {filepath}"}
 
     if algo not in ALGOS:
-        return {"ok": False, "error": f"不支持的算法: {algo}，可选: {list(ALGOS.keys())}"}
+        return {
+            "ok": False,
+            "error": f"不支持的算法: {algo}，可选: {list(ALGOS.keys())}",
+        }
 
     try:
         h = ALGOS[algo]()

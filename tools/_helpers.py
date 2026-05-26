@@ -1,6 +1,7 @@
 """
 _helpers — main.py 和 registry 共用的辅助函数。
 """
+
 import asyncio
 import json
 
@@ -24,17 +25,23 @@ async def run_sync(func, *args, **kwargs):
     return await loop.run_in_executor(None, lambda: func(*args, **kwargs))
 
 
-def proposal_reply(ok: bool, proposal: str, *,
-                   error: str = "", evidence: dict = None,
-                   options: list = None, next_call: dict = None,
-                   **extra) -> dict:
+def proposal_reply(
+    ok: bool,
+    proposal: str,
+    *,
+    error: str = "",
+    evidence: dict = None,
+    options: list = None,
+    next_call: dict = None,
+    **extra,
+) -> dict:
     """构建统一提案协议返回。
-    
+
     仅用于需要 LLM 做出选择或理解歧义的场景。
     ok:true 的正常路径不启用，保持精简。
 
     WARNING: next_call 是建议，LLM 应自行判断而非盲从。
-    
+
     extra 中的键值平铺合并到返回 dict。
     """
     result = {"ok": ok, "proposal": proposal, **extra}

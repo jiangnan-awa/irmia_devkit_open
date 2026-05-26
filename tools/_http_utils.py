@@ -2,6 +2,7 @@
 _http_utils — HTTP 安全校验共享代码。
 供 http_get / http_download 内部使用，不作为独立工具暴露。
 """
+
 import ipaddress
 import socket
 import urllib.request
@@ -21,7 +22,10 @@ _PRIVATE_NETS = [
 def validate_url(url: str) -> dict | None:
     parsed = urlparse(url)
     if parsed.scheme not in ("http", "https"):
-        return {"ok": False, "error": f"不支持的协议: {parsed.scheme}，仅允许 http/https"}
+        return {
+            "ok": False,
+            "error": f"不支持的协议: {parsed.scheme}，仅允许 http/https",
+        }
     hostname = parsed.hostname
     if not hostname:
         return {"ok": False, "error": "URL 缺少有效主机名"}
@@ -46,7 +50,10 @@ def validate_url(url: str) -> dict | None:
                 ip = ipaddress.ip_address(ip_str)
                 for net in _PRIVATE_NETS:
                     if ip in net:
-                        return {"ok": False, "error": f"禁止访问内网地址: {hostname} 解析到 {ip_str}"}
+                        return {
+                            "ok": False,
+                            "error": f"禁止访问内网地址: {hostname} 解析到 {ip_str}",
+                        }
             except ValueError:
                 pass
     except socket.gaierror:
@@ -63,4 +70,3 @@ class SafeRedirectHandler(urllib.request.HTTPRedirectHandler):
             raise urllib.error.URLError(f"重定向目标被拦截: {err['error']}")
         # urllib 默认 follow redirect——这里截获并重新校验后，交回父类继续
         return super().redirect_request(req, fp, code, msg, headers, newurl)
-

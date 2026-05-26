@@ -2,6 +2,7 @@
 project_init — 项目结构扫描与上下文生成。
 扫描项目根目录，detect 语言/框架/依赖，生成结构化 JSON 给 LLM。
 """
+
 import json
 import re
 from pathlib import Path
@@ -37,9 +38,15 @@ def scan(project_dir: str = ".") -> dict:
 
 def _detect_language(root: Path, ctx: dict):
     detectors = [
-        (".py", "python"), (".js", "javascript"), (".ts", "typescript"),
-        (".go", "go"), (".nim", "nim"), (".rs", "rust"),
-        (".java", "java"), (".rb", "ruby"), (".php", "php"),
+        (".py", "python"),
+        (".js", "javascript"),
+        (".ts", "typescript"),
+        (".go", "go"),
+        (".nim", "nim"),
+        (".rs", "rust"),
+        (".java", "java"),
+        (".rb", "ruby"),
+        (".php", "php"),
     ]
     scored = {}
     count = 0
@@ -59,7 +66,15 @@ def _detect_language(root: Path, ctx: dict):
 def _scan_directories(root: Path, ctx: dict):
     for entry in sorted(root.iterdir()):
         if entry.is_dir() and not entry.name.startswith((".", "__")):
-            if entry.name in ("src", "lib", "app", "tools", "utils", "modules", "handlers"):
+            if entry.name in (
+                "src",
+                "lib",
+                "app",
+                "tools",
+                "utils",
+                "modules",
+                "handlers",
+            ):
                 ctx["directories"][entry.name] = "source"
             elif entry.name in ("tests", "test", "spec", "__tests__"):
                 ctx["directories"][entry.name] = "test"
@@ -71,7 +86,14 @@ def _scan_directories(root: Path, ctx: dict):
                 ctx["directories"][entry.name] = "other"
 
     # detect entry point
-    for candidate in ("main.py", "index.js", "index.ts", "app.py", "main.go", "src/main.rs"):
+    for candidate in (
+        "main.py",
+        "index.js",
+        "index.ts",
+        "app.py",
+        "main.go",
+        "src/main.rs",
+    ):
         if (root / candidate).exists():
             ctx["entry"] = candidate
             break
@@ -81,7 +103,11 @@ def _read_package_files(root: Path, ctx: dict):
     # Python
     req = root / "requirements.txt"
     if req.exists():
-        ctx["dependencies"]["runtime"] = [l.strip() for l in req.read_text(encoding="utf-8").splitlines() if l.strip() and not l.startswith("#")]
+        ctx["dependencies"]["runtime"] = [
+            l.strip()
+            for l in req.read_text(encoding="utf-8").splitlines()
+            if l.strip() and not l.startswith("#")
+        ]
 
     # Node
     pkg = root / "package.json"
@@ -98,9 +124,13 @@ def _read_package_files(root: Path, ctx: dict):
     if ppt.exists():
         text = ppt.read_text(encoding="utf-8")
         # extract dependencies from [project] section
-        dep_match = re.search(r'dependencies\s*=\s*\[(.*?)\]', text, re.DOTALL)
+        dep_match = re.search(r"dependencies\s*=\s*\[(.*?)\]", text, re.DOTALL)
         if dep_match:
-            deps = [d.strip().strip('"').strip("'") for d in dep_match.group(1).split(",") if d.strip()]
+            deps = [
+                d.strip().strip('"').strip("'")
+                for d in dep_match.group(1).split(",")
+                if d.strip()
+            ]
             if deps:
                 ctx["dependencies"]["runtime"] = deps
 
@@ -116,14 +146,33 @@ def _read_package_files(root: Path, ctx: dict):
 
 def _git_info(root: Path, ctx: dict):
     import subprocess
+
     try:
-        r = subprocess.run(["git", "branch", "--show-current"], cwd=str(root), capture_output=True, text=True, timeout=5)
+        r = subprocess.run(
+            ["git", "branch", "--show-current"],
+            cwd=str(root),
+            capture_output=True,
+            text=True,
+            timeout=5,
+        )
         if r.returncode == 0:
             ctx["git"]["branch"] = r.stdout.strip()
-        r2 = subprocess.run(["git", "log", "-1", "--format=%h %s"], cwd=str(root), capture_output=True, text=True, timeout=5)
+        r2 = subprocess.run(
+            ["git", "log", "-1", "--format=%h %s"],
+            cwd=str(root),
+            capture_output=True,
+            text=True,
+            timeout=5,
+        )
         if r2.returncode == 0:
             ctx["git"]["last_commit"] = r2.stdout.strip()
-        r3 = subprocess.run(["git", "tag", "--sort=-creatordate"], cwd=str(root), capture_output=True, text=True, timeout=5)
+        r3 = subprocess.run(
+            ["git", "tag", "--sort=-creatordate"],
+            cwd=str(root),
+            capture_output=True,
+            text=True,
+            timeout=5,
+        )
         if r3.returncode == 0 and r3.stdout.strip():
             ctx["git"]["recent_tags"] = r3.stdout.strip().split("\n")[:5]
     except Exception:

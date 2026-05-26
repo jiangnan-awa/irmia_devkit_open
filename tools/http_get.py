@@ -3,6 +3,7 @@ http_get — 纯标准库 HTTP 客户端。
 快速 GET/POST，10s 超时，返回 status + body + size。
 用于取 raw GitHub 内容、API 调用等场景。
 """
+
 import urllib.request
 import urllib.error
 import json
@@ -60,7 +61,9 @@ def get(url: str, headers: dict | None = None, timeout: int = 10) -> dict:
         return {"ok": False, "error": str(e)}
 
 
-def post(url: str, data: Any = None, headers: dict | None = None, timeout: int = 10) -> dict:
+def post(
+    url: str, data: Any = None, headers: dict | None = None, timeout: int = 10
+) -> dict:
     """HTTP POST 请求。data 可以是 dict（自动 JSON）或 str。"""
     err = _validate_url(url)
     if err:

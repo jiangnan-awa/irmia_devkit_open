@@ -2,6 +2,7 @@
 dep_scan — 依赖分析。
 扫描 Python import，构建依赖图，检测循环引用。含超时保护。
 """
+
 import ast
 import time
 from pathlib import Path
@@ -37,7 +38,11 @@ def scan(project_dir: str = ".", timeout: int = 10) -> dict:
                 "partial": True,
                 "note": f"超时 ({timeout}s)，已扫描 {len(dep_graph)}/{scanned} 文件",
                 "proposal": f"依赖扫描部分完成——超时({timeout}s)仅扫描{len(dep_graph)}/{scanned}文件",
-                "options": ["接受部分结果", "增加 timeout 参数", "缩小 project_dir 范围"],
+                "options": [
+                    "接受部分结果",
+                    "增加 timeout 参数",
+                    "缩小 project_dir 范围",
+                ],
             }
         try:
             deps = _extract_imports(f)
@@ -58,8 +63,14 @@ def scan(project_dir: str = ".", timeout: int = 10) -> dict:
     }
     if cycles:
         first = cycles[0]
-        result["proposal"] = f"发现{len(cycles)}个循环引用：{'→'.join(first)}。建议提取共同逻辑到新文件或合并模块。"
-        result["options"] = ["提取共同依赖到新文件", "合并相关模块", "忽略(有时循环引用可接受)"]
+        result["proposal"] = (
+            f"发现{len(cycles)}个循环引用：{'→'.join(first)}。建议提取共同逻辑到新文件或合并模块。"
+        )
+        result["options"] = [
+            "提取共同依赖到新文件",
+            "合并相关模块",
+            "忽略(有时循环引用可接受)",
+        ]
     elif not dep_graph:
         result["proposal"] = "未扫描到 Python 文件——确认项目目录正确。"
         result["options"] = ["确认 project_dir", "用 dir_list 验证目录内容"]

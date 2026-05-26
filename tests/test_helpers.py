@@ -1,6 +1,6 @@
 """Tests for _helpers — proposal_reply factory and helpers."""
+
 import json
-import pytest
 from tools._helpers import proposal_reply, err_json, unwrap
 
 
@@ -14,22 +14,29 @@ class TestProposalReply:
         assert "options" not in r
 
     def test_with_evidence_and_options(self):
-        r = proposal_reply(False, "port not listening",
-                           error="connection refused",
-                           evidence={"host": "127.0.0.1", "port": 7860},
-                           options=["check service", "verify port"])
+        r = proposal_reply(
+            False,
+            "port not listening",
+            error="connection refused",
+            evidence={"host": "127.0.0.1", "port": 7860},
+            options=["check service", "verify port"],
+        )
         assert r["evidence"] == {"host": "127.0.0.1", "port": 7860}
         assert r["options"] == ["check service", "verify port"]
 
     def test_with_next_call(self):
-        r = proposal_reply(False, "es not found",
-                           error="es.exe missing",
-                           next_call={"tool": "dir_list", "params": {"path": "."}})
+        r = proposal_reply(
+            False,
+            "es not found",
+            error="es.exe missing",
+            next_call={"tool": "dir_list", "params": {"path": "."}},
+        )
         assert r["next_call"]["tool"] == "dir_list"
 
     def test_extra_kwargs_flattened(self):
-        r = proposal_reply(True, "found 3 issues",
-                           language="python", errors=[{"msg": "x"}])
+        r = proposal_reply(
+            True, "found 3 issues", language="python", errors=[{"msg": "x"}]
+        )
         assert r["language"] == "python"
         assert r["errors"] == [{"msg": "x"}]
 

@@ -2,14 +2,17 @@
 dir_list — 目录列表。
 纯 os.scandir，结构化返回，比 shell dir 快 10 倍。
 """
+
 import os
 from pathlib import Path
 
 
-def list_dir(path: str, pattern: str = "*", max_depth: int = 1, show_hidden: bool = False) -> dict:
+def list_dir(
+    path: str, pattern: str = "*", max_depth: int = 1, show_hidden: bool = False
+) -> dict:
     """
     列出目录内容。
-    
+
     Args:
         path: 目录路径
         pattern: 文件名匹配（支持 * ? [seq]），如 "*.py" "test_*"
@@ -23,6 +26,7 @@ def list_dir(path: str, pattern: str = "*", max_depth: int = 1, show_hidden: boo
         return {"ok": False, "error": f"不是目录: {path}"}
 
     import fnmatch
+
     entries = []
     # H9: symlink 循环检测
     visited_inodes: set[int] = set()

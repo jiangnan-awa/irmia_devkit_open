@@ -2,11 +2,14 @@
 file_watch — 文件变化监控。
 轮询 mtime/size，返回变更事件列表。不依赖 inotify/Watchdog。
 """
+
 import time
 from pathlib import Path
 
 
-def watch(path: str, duration_s: int = 10, interval_s: float = 1.0, pattern: str = "") -> dict:
+def watch(
+    path: str, duration_s: int = 10, interval_s: float = 1.0, pattern: str = ""
+) -> dict:
     """监控目录/文件变化。
 
     Args:
@@ -19,7 +22,9 @@ def watch(path: str, duration_s: int = 10, interval_s: float = 1.0, pattern: str
     if not p.exists():
         return {"ok": False, "error": f"路径不存在: {path}"}
 
-    target = [p] if p.is_file() else list(p.rglob("*") if not pattern else p.rglob(pattern))
+    target = (
+        [p] if p.is_file() else list(p.rglob("*") if not pattern else p.rglob(pattern))
+    )
     target = [f for f in target if f.is_file()]
 
     baseline = {}
@@ -50,12 +55,14 @@ def watch(path: str, duration_s: int = 10, interval_s: float = 1.0, pattern: str
                 old_mtime, old_size = baseline.get(key, (0, 0))
                 if st.st_mtime != old_mtime:
                     action = "created" if old_mtime == 0 else "modified"
-                    events.append({
-                        "file": key,
-                        "action": action,
-                        "size": st.st_size,
-                        "size_delta": st.st_size - old_size,
-                    })
+                    events.append(
+                        {
+                            "file": key,
+                            "action": action,
+                            "size": st.st_size,
+                            "size_delta": st.st_size - old_size,
+                        }
+                    )
                     baseline[key] = (st.st_mtime, st.st_size)
             except FileNotFoundError:
                 if str(f) in baseline:

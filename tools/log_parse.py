@@ -2,9 +2,9 @@
 log_parse — 日志解析器。
 支持 Nginx/Apache 访问日志、syslog、JSON Lines。
 """
+
 import re
 import json
-
 
 
 def parse(text: str, format: str = "auto", max_lines: int = 200) -> dict:
@@ -27,7 +27,10 @@ def parse(text: str, format: str = "auto", max_lines: int = 200) -> dict:
     }
     parser = parsers.get(format)
     if not parser:
-        return {"ok": False, "error": f"不支持的格式: {format}，可选: {list(parsers.keys())}"}
+        return {
+            "ok": False,
+            "error": f"不支持的格式: {format}，可选: {list(parsers.keys())}",
+        }
 
     results = []
     errors = 0
@@ -48,13 +51,15 @@ def parse(text: str, format: str = "auto", max_lines: int = 200) -> dict:
         "entries": results,
     }
     if errors > 0:
-        r["proposal"] = f"解析完成：{len(results)}条成功/{errors}条失败——格式={format}。尝试切换 format 参数。"
+        r["proposal"] = (
+            f"解析完成：{len(results)}条成功/{errors}条失败——格式={format}。尝试切换 format 参数。"
+        )
         r["options"] = ["尝试其他 format (nginx/apache/syslog/jsonl)"]
     return r
 
 
 _NGINX_RE = re.compile(
-    r'^(?P<ip>\S+) - (?P<user>\S+) \[(?P<time>[^\]]+)\] '
+    r"^(?P<ip>\S+) - (?P<user>\S+) \[(?P<time>[^\]]+)\] "
     r'"(?P<method>\S+) (?P<path>\S+) (?P<proto>[^"]+)" '
     r'(?P<status>\d+) (?P<size>\d+) "(?P<referer>[^"]*)" "(?P<ua>[^"]*)"'
 )
@@ -68,9 +73,9 @@ def _parse_nginx(line: str) -> dict:
 
 
 _APACHE_RE = re.compile(
-    r'^(?P<ip>\S+) \S+ \S+ \[(?P<time>[^\]]+)\] '
+    r"^(?P<ip>\S+) \S+ \S+ \[(?P<time>[^\]]+)\] "
     r'"(?P<method>\S+) (?P<path>\S+) (?P<proto>[^"]+)" '
-    r'(?P<status>\d+) (?P<size>\d+)'
+    r"(?P<status>\d+) (?P<size>\d+)"
 )
 
 
@@ -82,8 +87,8 @@ def _parse_apache(line: str) -> dict:
 
 
 _SYSLOG_RE = re.compile(
-    r'^(?P<timestamp>\w{3}\s+\d+\s+\d{2}:\d{2}:\d{2})\s+'
-    r'(?P<host>\S+)\s+(?P<app>\S+?)(?:\[(?P<pid>\d+)\])?:\s+(?P<message>.*)'
+    r"^(?P<timestamp>\w{3}\s+\d+\s+\d{2}:\d{2}:\d{2})\s+"
+    r"(?P<host>\S+)\s+(?P<app>\S+?)(?:\[(?P<pid>\d+)\])?:\s+(?P<message>.*)"
 )
 
 
@@ -105,6 +110,6 @@ def _detect(first_line: str) -> str:
         return "jsonl"
     if '"GET' in first_line or '"POST' in first_line or '"PUT' in first_line:
         return "nginx"
-    if re.match(r'\w{3}\s+\d+\s+\d{2}:\d{2}:\d{2}', first_line):
+    if re.match(r"\w{3}\s+\d+\s+\d{2}:\d{2}:\d{2}", first_line):
         return "syslog"
     return "syslog"
