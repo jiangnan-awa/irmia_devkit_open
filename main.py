@@ -37,10 +37,12 @@ class Main(star.Star):
         plug_dir = os.path.dirname(os.path.abspath(__file__))
         try:
             data_dir = StarTools.get_data_dir()
+            if not data_dir:
+                raise ValueError("get_data_dir() returned falsy")
             config_path = os.path.join(str(data_dir), "config.json")
         except Exception:
             config_path = os.path.join(plug_dir, "config.json")
-        # 向后兼容：若 data_dir 无配置，从插件目录迁移
+        # 向后兼容：data_dir 有配置时，优先读取；不存在则从插件目录迁移
         legacy_path = os.path.join(plug_dir, "config.json")
         if not os.path.exists(config_path) and os.path.exists(legacy_path):
             config_path = legacy_path

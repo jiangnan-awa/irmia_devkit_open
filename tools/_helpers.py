@@ -11,10 +11,16 @@ def err_json(error: str) -> str:
 
 
 def unwrap(result: dict) -> str:
-    """检测嵌套 ok:false 并展开；成功则正常包装。"""
+    """检测嵌套 ok:false 并展开；成功则正常包装。
+    若 ok:false 的结果已含 proposal/options/evidence 等协议字段，
+    则直接透传——不重建为只有 error 的扁平格式。
+    """
     if not isinstance(result, dict):
         return err_json(f"工具返回了非预期类型: {type(result).__name__}")
     if result.get("ok") is False:
+        # 如果有提案协议字段，直接透传；否则包装为扁平错误
+        if any(k in result for k in ("proposal", "options", "evidence", "next_call")):
+            return json.dumps(result, ensure_ascii=False)
         return err_json(result.get("error", "未知错误"))
     return json.dumps({"ok": True, "data": result}, ensure_ascii=False)
 
