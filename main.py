@@ -10,6 +10,7 @@ import os
 import copy
 
 from astrbot.api import logger, star
+from astrbot.api.star import StarTools
 
 from .tools import config as _tool_config
 
@@ -34,7 +35,12 @@ class Main(star.Star):
         self.context = context
 
         plug_dir = os.path.dirname(os.path.abspath(__file__))
-        config_path = os.path.join(plug_dir, "config.json")
+        data_dir = StarTools.get_data_dir()
+        config_path = os.path.join(str(data_dir), "config.json")
+        # 向后兼容：若 data_dir 无配置，从插件目录迁移
+        legacy_path = os.path.join(plug_dir, "config.json")
+        if not os.path.exists(config_path) and os.path.exists(legacy_path):
+            config_path = legacy_path
         _config = {}
         if os.path.exists(config_path):
             try:
@@ -45,6 +51,7 @@ class Main(star.Star):
         else:
             _config = copy.deepcopy(_DEFAULT_CONFIG)
             try:
+                os.makedirs(os.path.dirname(config_path), exist_ok=True)
                 with open(config_path, "w", encoding="utf-8") as f:
                     json.dump(_config, f, ensure_ascii=False, indent=2)
             except Exception:
@@ -83,6 +90,7 @@ class Main(star.Star):
                 changed = True
             if changed:
                 try:
+                    os.makedirs(os.path.dirname(config_path), exist_ok=True)
                     with open(config_path, "w", encoding="utf-8") as f:
                         json.dump(_config, f, ensure_ascii=False, indent=2)
                 except Exception:
