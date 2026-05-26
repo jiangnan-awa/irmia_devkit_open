@@ -49,7 +49,7 @@ def scan(project_dir: str = ".", timeout: int = 10) -> dict:
             if deps:
                 dep_graph[f.name] = deps
         except Exception:
-            pass
+            scanned -= 1  # 不计入成功扫描
 
     cycles = _find_cycles(dep_graph)
 

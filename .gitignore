@@ -13,3 +13,9 @@ build/
 wo/
 .pytest_cache/
 .ruff_cache/
+*.egg
+venv/
+.venv/
+.coverage*
+htmlcov/
+.mypy_cache/

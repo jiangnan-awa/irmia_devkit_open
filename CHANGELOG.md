@@ -5,7 +5,7 @@
 - **proposal 协议**: 新增 `proposal_reply()` 工厂函数，17 个工具的失败/歧义返回统一为 `{proposal, evidence, options, next_call}` 四字段结构化提案。覆盖 `safe_edit`、`git_commit`、`syntax_check`、`port_check`、`es_search`、`lint_runner`、`dep_scan`、`config_diff`、`log_parse`、`text_filter` 等
 - **测试**: 新建 `tests/` 目录，51 个 pytest 用例覆盖 SSRF、safe_edit 安全链、Zip-slip、SQL 注入、正则回溯、helpers 协议、git commit 守卫
 - **AstrBot 合规**: `requirements.txt`、`astrbot_version`、`short_desc`、`support_platforms`、`logo.png`
-- **ruff**: 全项目格式化 + `ruff.toml` 配置
+- **ruff**: 全项目格式化 + `pyproject.toml` 配置
 - **修复**: `_http_utils` 域名路径 NameError、`sys_snapshot` `_extract_mb` 缺失、`_conf_schema.json` trailing comma、`safe_edit` 接入 `backup_dir` 配置、HTTP redirect SSRF 重新校验、gh_cli try/finally 临时文件清理、`human_size` TB/PB 兜底、备份文件名微秒防撞
 
 ## v2.0 — 生态扩展 (60→63)
