@@ -1,3 +1,0 @@
-[lint]
-# Compact try/except is intentional style for thin tool wrappers
-ignore = ["E701", "E741"]
