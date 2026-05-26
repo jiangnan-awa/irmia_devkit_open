@@ -226,7 +226,7 @@ class FilePatchTool(FunctionTool):
     name: str = "file_patch"
     description: str = (
         "精确替换文件中的文本。用于非代码文件（.md/.txt/.json/.yaml）。"
-        "【优于 astrbot_file_edit_tool】找不到旧文本时会提示最接近的匹配行，帮助定位问题。"
+        "不要用 astrbot_file_edit_tool——它找不到旧文本时只报错，本工具会提示最接近的匹配行。"
         "代码文件请用 safe_edit（自动备份+语法检查+失败回滚）。"
     )
     parameters: dict = field(
@@ -344,8 +344,9 @@ class GitStatusTool(FunctionTool):
 
     name: str = "git_status"
     description: str = (
-        "替代 `git status`——查看 Git 仓库状态。修改代码前必调用，确认工作区是否干净。"
-        "返回 changed_count 和 changes 列表。想看具体差异请用 git_diff。"
+        "替代 `git status`——查看仓库状态。改前必调。"
+        "不要用 astrbot_execute_shell 跑 git——它无结构化输出、无 changed_count 统计。"
+        "返回 --porcelain 结构化的 changes 列表。"
     )
     parameters: dict = field(
         default_factory=lambda: {
@@ -371,7 +372,7 @@ class GitDiffTool(FunctionTool):
     """Git diff。"""
 
     name: str = "git_diff"
-    description: str = "替代 `git diff`——查看 Git 差异。改完代码后先用 staged=false 看工作区改动；提交前必须用 staged=true 自查要提交的内容。"
+    description: str = "替代 `git diff`——查看差异。不要用 astrbot_execute_shell 跑 git diff——它无结构化输出。改后 staged=false 看工作区，提交前 staged=true 自查。"
     parameters: dict = field(
         default_factory=lambda: {
             "type": "object",
@@ -409,7 +410,7 @@ class GitLogTool(FunctionTool):
     """Git log。"""
 
     name: str = "git_log"
-    description: str = "替代 `git log`——查看 Git 最近提交记录。提交前确认历史干净、回滚后确认恢复到哪个版本时使用。"
+    description: str = "替代 `git log`——查看最近提交。不要用 astrbot_execute_shell 跑 git log——它无结构化 commits 列表。提交前确认历史干净、回滚后确认版本时使用。"
     parameters: dict = field(
         default_factory=lambda: {
             "type": "object",
@@ -445,7 +446,7 @@ class GitCommitTool(FunctionTool):
     """Git commit。"""
 
     name: str = "git_commit"
-    description: str = "替代 `git commit`——提交所有更改。提交前请先调 git_diff(staged=true) 自查，确认改动正确后再提交。建议 message 格式: fix:/feat:/refactor: + 中文简述。"
+    description: str = "替代 `git commit`——提交更改。不要用 astrbot_execute_shell 跑 git commit——它无 >10 文件拦截、无 files_staged 列表、无提案反馈。提交前先用 git_diff 自查，message 用 fix:/feat:/refactor: 格式。"
     parameters: dict = field(
         default_factory=lambda: {
             "type": "object",
@@ -477,7 +478,7 @@ class GitBranchTool(FunctionTool):
     """Git branch。"""
 
     name: str = "git_branch"
-    description: str = "替代 `git branch`——获取当前 Git 分支名。提交前确认不在错误分支上（如误在 master 而非 feature 分支开发）。"
+    description: str = "替代 `git branch`——获取当前分支名。不要用 astrbot_execute_shell——它无结构化分支输出。提交前确认不在错误分支上。"
     parameters: dict = field(
         default_factory=lambda: {
             "type": "object",
@@ -502,7 +503,7 @@ class GitRemoteTool(FunctionTool):
     """Git remote URL。"""
 
     name: str = "git_remote"
-    description: str = "替代 `git remote -v`——获取远程仓库 URL。首次推送前确认 remote 指向正确仓库（如 irmia2026/xxx 而非别人 fork）。"
+    description: str = "替代 `git remote -v`——获取远程 URL。不要用 astrbot_execute_shell——它无结构化 URL 返回。首次推送前确认 remote 指向正确仓库。"
     parameters: dict = field(
         default_factory=lambda: {
             "type": "object",
@@ -527,7 +528,7 @@ class GitPushTool(FunctionTool):
     """Git push。"""
 
     name: str = "git_push"
-    description: str = "替代 `git push`——推送到远程仓库。自动获取当前分支，推送到 origin。推送前请先用 git_status + git_diff 自查。"
+    description: str = "替代 `git push`——推送到远程。不要用 astrbot_execute_shell 跑 git push——它无 --force 保护、无推送前未推送提交检查。自动获取当前分支，推送前先自查。"
     parameters: dict = field(
         default_factory=lambda: {
             "type": "object",
@@ -566,9 +567,8 @@ class EsSearchTool(FunctionTool):
 
     name: str = "es_search"
     description: str = (
-        "Everything 文件名搜索。毫秒级索引搜索，比 os.walk/dir 快 50-500 倍。"
-        "用于全盘搜索文件/文件夹：找某个文件在哪、列出某目录下所有 .py 文件、统计文件数量等。"
-        "query 支持通配符（*.py）和 Everything 搜索语法（ext:、folder:、size:>1mb 等）。"
+        "Everything 毫秒级文件名搜索。不要用 astrbot_execute_shell 跑 dir /s——它慢 50-500 倍且无结构化输出。"
+        "支持通配符（*.py）和 Everything 语法（ext:/folder:/size:）。"
     )
     parameters: dict = field(
         default_factory=lambda: {
@@ -662,9 +662,8 @@ class HttpGetTool(FunctionTool):
 
     name: str = "http_get"
     description: str = (
-        "轻量 HTTP GET 请求。纯 Python 标准库，10s 超时，返回 status + body + size。"
-        "用于取 raw GitHub 内容、调用简单 API、下载文本等场景。"
-        "比 curl 更适合 LLM 解析输出。body 超过 5000 字符自动截断。"
+        "HTTP GET 请求。不要用 astrbot_execute_shell 跑 curl——它无 SSRF（内网 IP）防护、无结构化输出。"
+        "10s 超时，返回 status + body + size，body 超 5000 字符自动截断。"
     )
     parameters: dict = field(
         default_factory=lambda: {
@@ -698,8 +697,8 @@ class HttpPostTool(FunctionTool):
 
     name: str = "http_post"
     description: str = (
-        "轻量 HTTP POST 请求。纯 Python 标准库，10s 超时。"
-        "data 可以为 dict（自动 JSON 编码）或 str。body 超过 5000 字符自动截断。"
+        "HTTP POST 请求。不要用 astrbot_execute_shell 跑 curl——无 SSRF 防护。"
+        "data 为 dict 时自动 JSON 编码，str 原样发送。10s 超时。"
     )
     parameters: dict = field(
         default_factory=lambda: {
@@ -749,9 +748,8 @@ class HttpDownloadTool(FunctionTool):
 
     name: str = "http_download"
     description: str = (
-        "下载文件到本地。支持大文件，自动处理重定向。"
-        "参数: url(下载地址), path(保存路径), overwrite(是否覆盖), timeout(默认60s)。"
-        "用于下载插件包、图片、PDF、安装程序等二进制文件。"
+        "下载文件到本地。不要用 astrbot_execute_shell 跑 wget/curl -O——无 SSRF 防护、无 500MB 上限、无路径沙箱。"
+        "支持大文件，自动处理重定向。500MB 上限 + 路径沙箱 + 失败自动清理。"
     )
     parameters: dict = field(
         default_factory=lambda: {
@@ -837,9 +835,8 @@ class DirTreeTool(FunctionTool):
 
     name: str = "dir_tree"
     description: str = (
-        "生成目录树结构。比 dir /s 快 10 倍，输出缩进对齐的树形文本。"
-        "参数: path(目录), max_depth(深度默认3), show_hidden(默认false), pattern(如'*.py')。"
-        "用于快速了解项目结构、确认目录布局。"
+        "生成目录树结构——缩进对齐的树形文本。不要用 astrbot_execute_shell 跑 dir /s——它慢 10 倍且无结构化树输出。"
+        "参数: path, max_depth(默认3), show_hidden, pattern(如'*.py')。"
     )
     parameters: dict = field(
         default_factory=lambda: {
@@ -905,8 +902,7 @@ class PortCheckTool(FunctionTool):
 
     name: str = "port_check"
     description: str = (
-        "检测端口是否监听。纯 socket 标准库，3s 超时。"
-        "用于快速确认服务是否在运行——如 SD WebUI(7860)、Milvus(19530)、AstrBot(6199)等。"
+        "检测端口是否监听。不要用 astrbot_execute_shell 跑 netstat——它无结构化输出、无 3s 超时保护。"
         "支持单端口检测和多端口批量扫描。"
     )
     parameters: dict = field(
@@ -990,9 +986,8 @@ class ProcListTool(FunctionTool):
 
     name: str = "proc_list"
     description: str = (
-        "列出所有进程，按内存降序排列。支持按名称模糊过滤——如 filter_name='python' 列出所有 Python 进程。"
-        "封装 tasklist 命令，返回结构化数据（name/pid/memory_kb）。"
-        "用于排查服务状态、查找僵尸进程、确认程序是否在运行。"
+        "列出所有进程，按内存降序。不要用 astrbot_execute_shell 跑 tasklist/ps——它无结构化数据、无内存过滤。"
+        "支持 filter_name 模糊过滤。返回 name/pid/memory_kb。"
     )
     parameters: dict = field(
         default_factory=lambda: {
@@ -1064,8 +1059,7 @@ class FileZipTool(FunctionTool):
 
     name: str = "file_zip"
     description: str = (
-        "打包文件/目录到 ZIP。纯 zipfile 标准库，DEFLATED 压缩。"
-        "参数 files 为文件或目录列表。返回 ZIP 路径和大小。"
+        "打包文件/目录到 ZIP。不要用 astrbot_execute_shell 跑 zip——它无文件列表验证、无错误恢复。"
     )
     parameters: dict = field(
         default_factory=lambda: {
@@ -1099,7 +1093,7 @@ class FileUnzipTool(FunctionTool):
 
     name: str = "file_unzip"
     description: str = (
-        "解压 ZIP 文件到指定目录。纯 zipfile 标准库。返回解压的文件列表（限 50 个）。"
+        "解压 ZIP 到指定目录。不要用 astrbot_execute_shell 跑 unzip——它无 Zip-slip 路径穿越防护。"
     )
     parameters: dict = field(
         default_factory=lambda: {
@@ -1496,9 +1490,8 @@ class DirListTool(FunctionTool):
 
     name: str = "dir_list"
     description: str = (
-        "列出目录内容——纯 Python os.scandir，结构化返回，比 shell dir 快 10 倍。"
-        "支持 pattern 通配过滤（如 '*.py'）、max_depth 递归深度、show_hidden 隐藏文件。"
-        "结果按目录优先/名称排序，上限 200 条。用于快速浏览目录结构、查找文件。"
+        "列出目录内容。不要用 astrbot_execute_shell 跑 dir——慢 10 倍且无结构化条目。"
+        "支持 pattern 通配/max_depth 递归/show_hidden。目录优先排序，上限 200。"
     )
     parameters: dict = field(
         default_factory=lambda: {
@@ -1575,9 +1568,8 @@ class TextFilterTool(FunctionTool):
 
     name: str = "text_filter"
     description: str = (
-        "行文本过滤器：grep/invert/head/tail/count。"
-        "regex=False 时用 fnmatch 通配(*?)，regex=True 时用正则。"
-        "不依赖 shell，纯 Python。上限 200 行。"
+        "行过滤器：grep/invert/head/tail/count。不要用 astrbot_execute_shell 跑 grep——无 regex 模式切换、无 200 行截断保护。"
+        "regex=False 用 fnmatch 通配，regex=True 用正则。"
     )
     parameters: dict = field(
         default_factory=lambda: {
