@@ -83,6 +83,9 @@ def search(
 
     args = [es_path]
 
+    if query.startswith(("/", "-")) and not regex:
+        return {"ok": False, "error": "query 不能以 / 或 - 开头（会被 es.exe 解释为选项）。regular 搜索请用 regex=True。"}
+
     if regex:
         args.extend(["-r", query])
     else:

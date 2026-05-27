@@ -106,6 +106,14 @@ def test(pattern: str, text: str, flags: str = "") -> dict:
 
 def replace(pattern: str, replacement: str, text: str, flags: str = "") -> dict:
     """在 text 中用 pattern 匹配并替换为 replacement。"""
+    # 复用 test() 的安全防护
+    if len(pattern) > _MAX_PATTERN_LEN:
+        return {"ok": False, "error": f"正则表达式过长（{len(pattern)} > {_MAX_PATTERN_LEN}）"}
+    if len(text) > _MAX_TEXT_LEN:
+        return {"ok": False, "error": f"待匹配文本过长（{len(text)} > {_MAX_TEXT_LEN}）"}
+    if _NESTED_RE.search(pattern):
+        return {"ok": False, "error": "正则包含嵌套量词，存在灾难性回溯风险，已被拒绝"}
+
     flag_map = {
         "i": re.IGNORECASE,
         "m": re.MULTILINE,

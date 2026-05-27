@@ -64,6 +64,9 @@ def edit(
     if not p.exists():
         return {"ok": False, "error": f"文件不存在: {filepath}"}
 
+    if p.stat().st_size > 20 * 1024 * 1024:
+        return {"ok": False, "error": "文件超过 20MB 上限，safe_edit 不支持大文件编辑。建议用外部编辑器。"}
+
     # 0. 读取文件内容 (H3: GBK fallback, H11: 保留原始换行符)
     content = None
     encoding = "utf-8"
