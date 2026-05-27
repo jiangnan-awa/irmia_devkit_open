@@ -4,6 +4,7 @@ safe_edit — 安全编辑工具（强制使用）。
 """
 
 import shutil
+import difflib
 from datetime import datetime
 from pathlib import Path
 
@@ -84,15 +85,26 @@ def edit(
     # 0.1 消歧：计数 old 出现次数
     old_count = content.count(old)
     if old_count == 0:
+        # 尝试给出最接近的匹配行（与 file_patch 一致）
+        lines = content.split("\n")
+        best = None
+        best_ratio = 0
+        for i, line in enumerate(lines):
+            ratio = difflib.SequenceMatcher(None, old.split("\n")[0], line).ratio()
+            if ratio > best_ratio:
+                best_ratio = ratio
+                best = (i + 1, line.strip()[:80])
+        hint = ""
+        if best and best_ratio > 0.3:
+            hint = f"最接近的行 #{best[0]}: {best[1]}——建议复制此行作为 old 参数重试。"
+        else:
+            hint = "old 文本在文件中未找到，检查是否包含完整且精确的文本片段（包括缩进和换行）。"
         return {
             "ok": False,
             "error": "未找到匹配文本，文件内容未修改",
-            "proposal": "old 文本在文件中未找到——检查是否包含完整且精确的文本片段（包括缩进和换行）。",
-            "options": [
-                "检查缩进是否匹配",
-                "用 file_preview 先预览",
-                "确认 old 文本来自文件的准确复制",
-            ],
+            "proposal": hint,
+            "evidence": {"closest_line": best[0], "closest_text": best[1]} if best else {},
+            "options": ["复制最接近的行作为 old", "用 file_preview 先预览", "确认缩进级别"],
         }
 
     # ── 消歧与替换 ──
