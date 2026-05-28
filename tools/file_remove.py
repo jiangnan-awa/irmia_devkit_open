@@ -80,12 +80,12 @@ def remove(path: str, confirm: bool = False, max_items: int = 50) -> dict:
                     dp = os.path.join(root, name)
                     try:
                         os.rmdir(dp)
-                    except OSError:
-                        pass
+                    except OSError as e:
+                        errors.append({"path": dp, "reason": str(e)})
             try:
                 os.rmdir(p)
-            except OSError:
-                pass
+            except OSError as e:
+                errors.append({"path": str(p), "reason": str(e)})
 
             return {
                 "ok": True,

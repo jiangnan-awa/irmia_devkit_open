@@ -128,6 +128,11 @@ def edit(
             "hint": f"请使用 occurrence=N 指定目标（1~{old_count}），或设 replace_all=True 替换全部",
         }
 
+    # 2. 执行替换前先校验 occurrence
+    if occurrence > 0 and not replace_all:
+        if occurrence > old_count:
+            return {"ok": False, "error": f"occurrence={occurrence} 超过匹配总数 {old_count}"}
+
     # 1. 备份（在任何修改之前）
     ts = datetime.now().strftime("%Y%m%d_%H%M%S_%f")
     backup_path = _backup_dir() / f"{p.name}.{ts}.bak"
@@ -142,11 +147,6 @@ def edit(
 
     # 2. 执行替换
     if occurrence > 0 and not replace_all:
-        if occurrence > old_count:
-            return {
-                "ok": False,
-                "error": f"occurrence={occurrence} 超过匹配总数 {old_count}",
-            }
         positions = _collect_positions(content, old)
         idx = positions[occurrence - 1]
         content = content[:idx] + new + content[idx + len(old) :]
