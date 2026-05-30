@@ -30,12 +30,13 @@ Python ≥ 3.10
 | `gh_pr` / `gh_issue` / `gh_release` / `gh_repo` | GitHub CLI | 返回错误提示 |
 | `html_extract` | `beautifulsoup4`，lxml 可选 | 缺 bs4 报错，缺 lxml 回退 html.parser |
 | `syntax_check` (Nim/Go/JS/TS) | 对应编译器 | 跳过 (skipped=true) |
-| `lint_runner` | ruff / pylint / eslint 任一 | 返回安装提示 |
+| `lint_runner` | ruff / pylint / eslint 任一（自动 fallback） | 返回安装提示 |
+| `rg_search` | ripgrep（可选），未安装时 Python fallback | 降级到纯标库扫描 |
 | `svg_render` | cairosvg（可选） | 返回安装提示 |
 | `json_schema_val` | jsonschema（可选） | 返回安装提示 |
 | `config_diff` (YAML) | pyyaml（可选） | 返回安装提示 |
 
-> 其余 40+ 工具为 Python 标准库实现，无外部依赖。
+> 其余 50+ 工具为 Python 标准库实现，无外部依赖。
 
 ## 设计说明
 
