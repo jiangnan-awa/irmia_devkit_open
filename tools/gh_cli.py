@@ -10,6 +10,7 @@ import shutil
 import tempfile
 
 from .config import get_config
+from ._helpers import _run_cmd
 
 
 def _find_gh() -> str:
@@ -25,32 +26,14 @@ def _find_gh() -> str:
 
 
 def _run_gh(args: list[str], cwd: str = None, timeout: int = 20) -> dict:
-    """执行 gh 命令，返回结构化结果。"""
     if not cwd:
         cwd = os.getcwd()
     gh_bin = _find_gh()
-    try:
-        result = subprocess.run(
-            [gh_bin] + args,
-            cwd=cwd,
-            capture_output=True,
-            text=True,
-            timeout=timeout,
-            encoding="utf-8",
-            errors="replace",
-        )
-        return {
-            "ok": result.returncode == 0,
-            "stdout": result.stdout.strip(),
-            "stderr": result.stderr.strip(),
-            "code": result.returncode,
-        }
-    except FileNotFoundError:
-        return {"ok": False, "error": f"gh 未找到: {gh_bin}"}
-    except subprocess.TimeoutExpired:
-        return {"ok": False, "error": f"gh 命令超时 ({timeout}s)"}
-    except Exception as e:
-        return {"ok": False, "error": str(e)}
+    result = _run_cmd([gh_bin] + args, cwd=cwd, timeout=timeout)
+    if not result["ok"] and "未安装" not in result.get("error", ""):
+        if gh_bin != "gh":
+            result["error"] = f"gh 未找到: {gh_bin}"
+    return result
 
 
 def _with_body_file(

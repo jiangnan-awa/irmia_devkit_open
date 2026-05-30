@@ -8,33 +8,20 @@ import urllib.error
 import time
 from pathlib import Path
 
-from ._http_utils import validate_url, SafeRedirectHandler
+from ._http_utils import check_url, make_opener
 from ._file_utils import human_size
 
-
-def _make_opener():
-    return urllib.request.build_opener(SafeRedirectHandler())
-
-
-# C4: 下载沙箱根目录
 _DOWNLOAD_SANDBOX = Path.home() / ".irmia" / "downloads"
 _MAX_DOWNLOAD_SIZE = 500 * 1024 * 1024  # H5: 500MB 上限
-
-
-def _validate_url(url: str) -> dict | None:
-    return validate_url(url)
 
 
 def _resolve_path(path: str) -> Path:
     """C4: 将下载路径限制在沙箱内，防止路径遍历。"""
     sandbox = _DOWNLOAD_SANDBOX.resolve()
-    # 提取用户指定的文件名，丢弃目录部分防止 ../
     safe_name = Path(path).name or "download"
     resolved = (sandbox / safe_name).resolve()
-    # 二次确认：resolved 必须在 sandbox 内
     if str(resolved).startswith(str(sandbox)):
         return resolved
-    # 异常情况：强制回退到沙箱根
     return sandbox / "download"
 
 
@@ -50,12 +37,10 @@ def download(url: str, path: str, overwrite: bool = False, timeout: int = 60) ->
     Returns:
         {"ok": True, "path": ..., "size": ..., "elapsed_s": ...} 或 {"ok": False, "error": ...}
     """
-    # C3: SSRF 防护
-    err = _validate_url(url)
+    err = check_url(url)
     if err:
         return err
 
-    # C4: 路径沙箱
     safe_path = _resolve_path(path)
     _DOWNLOAD_SANDBOX.mkdir(parents=True, exist_ok=True)
 
@@ -67,11 +52,9 @@ def download(url: str, path: str, overwrite: bool = False, timeout: int = 60) ->
 
     start = time.time()
     try:
-        req = urllib.request.Request(url, headers={"User-Agent": "IrmiaDevKit/1.6"})
-        opener = _make_opener()
-        with opener.open(req, timeout=timeout) as resp:
+        req = urllib.request.Request(url, headers={"User-Agent": "IrmiaDevKit/2.2"})
+        with make_opener().open(req, timeout=timeout) as resp:
             size = int(resp.headers.get("Content-Length", 0))
-            # H5: 下载大小上限
             if size > _MAX_DOWNLOAD_SIZE:
                 return {
                     "ok": False,
@@ -86,10 +69,9 @@ def download(url: str, path: str, overwrite: bool = False, timeout: int = 60) ->
                     if not chunk:
                         break
                     downloaded += len(chunk)
-                    # H5: 渐进式大小检查
                     if downloaded > _MAX_DOWNLOAD_SIZE:
                         f.close()
-                        safe_path.unlink(missing_ok=True)  # M5: 超限清理半完成文件
+                        safe_path.unlink(missing_ok=True)
                         return {
                             "ok": False,
                             "error": f"实际下载大小超过上限 {_MAX_DOWNLOAD_SIZE // 1024 // 1024}MB",
@@ -107,7 +89,6 @@ def download(url: str, path: str, overwrite: bool = False, timeout: int = 60) ->
             "elapsed_s": elapsed,
         }
     except urllib.error.HTTPError as e:
-        # M5: 下载失败清理半完成文件
         safe_path.unlink(missing_ok=True)
         return {"ok": False, "error": f"HTTP {e.code}: {e.reason}", "url": url}
     except urllib.error.URLError as e:

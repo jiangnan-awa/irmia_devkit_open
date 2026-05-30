@@ -7,10 +7,9 @@ import csv
 import io
 import os
 import shutil
-import subprocess
 from pathlib import Path
 from .config import get_config
-from ._helpers import proposal_reply
+from ._helpers import proposal_reply, _run_cmd
 
 
 def _get_es_path() -> str:
@@ -128,42 +127,31 @@ def search(
     )
 
     # --- 执行 ---
-    try:
-        proc = subprocess.run(
-            args,
-            capture_output=True,
-            text=True,
-            timeout=15,
-            encoding="utf-8",
-            errors="replace",
-        )
-    except subprocess.TimeoutExpired:
-        return proposal_reply(
-            False,
-            "Everything 搜索超时 (15s)——尝试缩小搜索范围",
-            error="es.exe 搜索超时（15s）",
-            evidence={"query": query, "timeout": 15},
-            options=["缩小 path 范围", "简化 query 通配符", "回退到 dir_list"],
-            next_call={"tool": "dir_list", "params": {"path": path or "."}},
-        )
-    except Exception as e:
-        return proposal_reply(
-            False,
-            "es.exe 执行失败",
-            error=f"es.exe 执行失败: {e}",
-            evidence={"query": query},
-            options=["检查 query 语法", "回退到 dir_list"],
-            next_call={"tool": "dir_list", "params": {"path": path or "."}},
-        )
-
-    if proc.returncode != 0:
-        return {
-            "ok": False,
-            "error": proc.stderr.strip() or f"es.exe 返回码 {proc.returncode}",
-        }
+    proc = _run_cmd(args, timeout=15)
+    if not proc["ok"]:
+        err_msg = proc.get("error", "")
+        if "超时" in err_msg:
+            return proposal_reply(
+                False,
+                "Everything 搜索超时 (15s)——尝试缩小搜索范围",
+                error="es.exe 搜索超时（15s）",
+                evidence={"query": query, "timeout": 15},
+                options=["缩小 path 范围", "简化 query 通配符", "回退到 dir_list"],
+                next_call={"tool": "dir_list", "params": {"path": path or "."}},
+            )
+        if "不存在" in err_msg or "未安装" in err_msg:
+            return proposal_reply(
+                False,
+                "es.exe 未找到",
+                error=err_msg,
+                evidence={"query": query},
+                options=["检查 query 语法", "回退到 dir_list"],
+                next_call={"tool": "dir_list", "params": {"path": path or "."}},
+            )
+        return {"ok": False, "error": proc.get("stderr", "") or f"es.exe 返回码 {proc.get('code')}"}
 
     # --- 解析 CSV ---
-    reader = csv.DictReader(io.StringIO(proc.stdout))
+    reader = csv.DictReader(io.StringIO(proc["stdout"]))
     items = []
     total_size = 0
     for row in reader:

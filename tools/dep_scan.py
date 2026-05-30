@@ -7,6 +7,8 @@ import ast
 import time
 from pathlib import Path
 
+from ._file_utils import read_file_with_encoding
+
 
 def scan(project_dir: str = ".", timeout: int = 10) -> dict:
     """扫描 Python 项目 import 依赖图，检测循环引用。
@@ -80,8 +82,9 @@ def scan(project_dir: str = ".", timeout: int = 10) -> dict:
 def _extract_imports(filepath: Path) -> set[str]:
     imports = set()
     try:
-        tree = ast.parse(filepath.read_text(encoding="utf-8"))
-    except (SyntaxError, UnicodeDecodeError):
+        source, _ = read_file_with_encoding(filepath)
+        tree = ast.parse(source)
+    except (SyntaxError, UnicodeDecodeError, OSError):
         return imports
 
     for node in ast.walk(tree):

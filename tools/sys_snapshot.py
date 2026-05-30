@@ -5,8 +5,9 @@ CPU/内存/进程数/开机时长。Windows: systeminfo+tasklist | Linux: /proc�
 
 import os
 import platform
-import subprocess
 from datetime import datetime, timedelta
+
+from ._helpers import _run_cmd
 
 
 def snapshot() -> dict:
@@ -32,16 +33,9 @@ def snapshot() -> dict:
 
 
 def _windows_info(info: dict) -> None:
-    try:
-        result = subprocess.run(
-            ["systeminfo"],
-            capture_output=True,
-            text=True,
-            timeout=15,
-            encoding="gbk",
-            errors="replace",
-        )
-        for line in result.stdout.split("\n"):
+    result = _run_cmd(["systeminfo"], timeout=15, encoding="gbk")
+    if result["ok"]:
+        for line in result["stdout"].split("\n"):
             line = line.strip()
             if "物理内存总量" in line or "Total Physical Memory" in line:
                 info["total_memory_mb"] = _extract_mb(line)
@@ -49,24 +43,15 @@ def _windows_info(info: dict) -> None:
                 info["available_memory_mb"] = _extract_mb(line)
             if "系统启动时间" in line or "System Boot Time" in line:
                 info["boot_time"] = line.split(":", 1)[-1].strip()
-    except Exception as e:
+    else:
         info["total_memory_mb"] = None
         info["available_memory_mb"] = None
-        info["_windows_mem_error"] = str(e)
 
-    try:
-        result = subprocess.run(
-            ["tasklist", "/FO", "CSV", "/NH"],
-            capture_output=True,
-            text=True,
-            timeout=10,
-            encoding="gbk",
-            errors="replace",
-        )
-        info["process_count"] = len([l for l in result.stdout.split("\n") if l.strip()])
-    except Exception as e:
+    result = _run_cmd(["tasklist", "/FO", "CSV", "/NH"], timeout=10, encoding="gbk")
+    if result["ok"]:
+        info["process_count"] = len([l for l in result["stdout"].split("\n") if l.strip()])
+    else:
         info["process_count"] = None
-        info["_windows_proc_error"] = str(e)
 
 
 def _linux_info(info: dict) -> None:

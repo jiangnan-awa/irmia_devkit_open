@@ -3,9 +3,10 @@ git_changelog — Git 日志语义分组。
 按 fix:/feat:/refactor: 等前缀分类 commit，输出结构化 changelog。
 """
 
-import subprocess
 import re
 from pathlib import Path
+
+from ._helpers import _run_cmd
 
 
 def changelog(cwd: str, count: int = 30) -> dict:
@@ -18,28 +19,11 @@ def changelog(cwd: str, count: int = 30) -> dict:
     if not Path(cwd).is_dir():
         return {"ok": False, "error": f"不是有效目录: {cwd}"}
 
-    try:
-        r = subprocess.run(
-            ["git", "log", f"-{count}", "--oneline", "--no-decorate"],
-            cwd=cwd,
-            capture_output=True,
-            text=True,
-            timeout=10,
-        )
-        if r.returncode != 0:
-            return {
-                "ok": False,
-                "error": f"git log 失败: {r.stderr.strip()}",
-                "cwd": cwd,
-            }
-    except FileNotFoundError:
-        return {"ok": False, "error": "git 未安装或不在 PATH 中"}
-    except subprocess.TimeoutExpired:
-        return {"ok": False, "error": "git log 超时"}
-    except Exception as e:
-        return {"ok": False, "error": str(e)}
+    r = _run_cmd(["git", "log", f"-{count}", "--oneline", "--no-decorate"], cwd=cwd, timeout=10)
+    if not r["ok"]:
+        return {"ok": False, "error": r.get("error", f"git log 失败: {r.get('stderr', '')}"), "cwd": cwd}
 
-    lines = [l.strip() for l in r.stdout.strip().split("\n") if l.strip()]
+    lines = [l.strip() for l in r["stdout"].strip().split("\n") if l.strip()]
     categories = {"features": [], "fixes": [], "refactors": [], "docs": [], "other": []}
 
     for line in lines:

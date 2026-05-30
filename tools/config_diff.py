@@ -6,6 +6,8 @@ config_diff — 配置文件结构化差异比较。
 import json
 from pathlib import Path
 
+from ._file_utils import read_file
+
 
 def diff(file_a: str, file_b: str) -> dict:
     """比较两个配置文件的结构化差异。
@@ -74,7 +76,7 @@ def diff(file_a: str, file_b: str) -> dict:
 
 
 def _load(p: Path) -> dict:
-    text = p.read_text(encoding="utf-8")
+    text = read_file(p)
     suffix = p.suffix.lower()
     if suffix == ".json":
         return json.loads(text)

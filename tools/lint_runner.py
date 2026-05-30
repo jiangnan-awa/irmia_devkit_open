@@ -42,7 +42,9 @@ def run(filepath: str, linter: str = "auto") -> dict:
     if isinstance(result, dict) and "fallback" in result:
         fallback = runners.get(result["fallback"])
         if fallback:
-            return fallback(p)
+            result = fallback(p)
+    if result.get("ok") and result.get("issues"):
+        _add_context(p, result["issues"])
     return result
 
 
@@ -55,6 +57,38 @@ def _detect(p: Path) -> str:
     if shutil.which("pylint"):
         return "pylint"
     return "ruff"
+
+
+def _get_line_context(p: Path, line_num: int, context_size: int = 2) -> list[str] | None:
+    """读取文件，返回指定行附近 context_size 行的上下文。"""
+    try:
+        lines = p.read_text(encoding="utf-8", errors="replace").split("\n")
+    except Exception:
+        return None
+    start = max(0, line_num - context_size - 1)
+    end = min(len(lines), line_num + context_size)
+    ctx = []
+    for i in range(start, end):
+        actual = i + 1
+        marker = "→" if actual == line_num else " "
+        ctx.append(f"{marker}{actual:>4}: {lines[i].rstrip()[:120]}")
+    return ctx
+
+
+def _add_context(p: Path, issues: list, max_issues: int = 5) -> None:
+    """为前 max_issues 个问题附加代码上下文。"""
+    for issue in issues[:max_issues]:
+        line_num = issue.get("line") or (issue.get("location", {}).get("row") if isinstance(issue.get("location"), dict) else None)
+        if not line_num:
+            # 尝试从 message 中提取 (line N) 模式（eslint 风格）
+            import re as _re
+            m = _re.search(r"\(line (\d+)\)", issue.get("message", ""))
+            if m:
+                line_num = int(m.group(1))
+        if line_num:
+            ctx = _get_line_context(p, line_num)
+            if ctx:
+                issue["context"] = ctx
 
 
 def _find_ruff() -> list:

@@ -4,6 +4,7 @@ _file_utils — 文件读取共享代码。
 """
 
 import difflib
+import os
 from pathlib import Path
 
 
@@ -63,3 +64,59 @@ def find_closest_line(content: str, old: str, threshold: float = 0.3) -> dict | 
     if best and best_ratio > threshold:
         return {"line": best[0], "text": best[1]}
     return None
+
+
+def align_whitespace(content: str, old: str, new: str) -> tuple[str, str] | None:
+    """Whitespace-tolerant fallback matching (P0-1).
+    当精确匹配失败时，尝试对齐 old/new 的行首空白与 content 中匹配的位置。
+    返回 (aligned_old, aligned_new) 或 None。
+    对标 Aider 的 replace_part_with_missing_leading_whitespace()。
+    """
+    old_lines = old.split("\n")
+    content_lines = content.split("\n")
+    # 去掉行首空白后的 old 文本
+    old_stripped = [l.lstrip() for l in old_lines]
+    if not old_stripped or not old_stripped[0]:
+        return None
+    # 在 content 中逐行查找匹配的第一个 stripped 行
+    for i, cl in enumerate(content_lines):
+        if cl.lstrip() == old_stripped[0]:
+            # 检查后续行是否匹配
+            if i + len(old_lines) > len(content_lines):
+                continue
+            match = True
+            for j in range(1, len(old_lines)):
+                if content_lines[i + j].lstrip() != old_stripped[j]:
+                    match = False
+                    break
+            if match:
+                # 对齐 new 的行首空白到 content 中匹配位置
+                aligned_old = "\n".join(content_lines[i:i + len(old_lines)])
+                new_lines = new.split("\n")
+                aligned_new_lines = []
+                for j, nl in enumerate(new_lines):
+                    content_idx = i + j if j < len(old_lines) else i + len(old_lines) - 1
+                    content_indent = content_lines[content_idx][:len(content_lines[content_idx]) - len(content_lines[content_idx].lstrip())]
+                    new_stripped = nl.lstrip()
+                    aligned_new_lines.append(content_indent + new_stripped)
+                aligned_new = "\n".join(aligned_new_lines)
+                return (aligned_old, aligned_new)
+    return None
+
+
+class SymlinkGuard:
+    """Symlink 循环检测复用组件。供 dir_tree / dir_list 共享。"""
+
+    def __init__(self):
+        self._visited: set[tuple[int, int]] = set()
+
+    def is_seen(self, path: str) -> bool:
+        try:
+            st = os.stat(path)
+            key = (st.st_dev, st.st_ino)
+            if key in self._visited:
+                return True
+            self._visited.add(key)
+            return False
+        except OSError:
+            return False

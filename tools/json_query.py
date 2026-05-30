@@ -35,7 +35,7 @@ def query(data: str, path: str) -> dict:
         )
 
     try:
-        result = _resolve(obj, path)
+        result = _resolve(obj, path, 0)
         return {"ok": True, "path": path, "result": result}
     except (KeyError, IndexError, TypeError, ValueError) as e:
         return proposal_reply(
@@ -47,39 +47,41 @@ def query(data: str, path: str) -> dict:
         )
 
 
-def _resolve(obj, path: str):
+def _resolve(obj, path: str, depth: int = 0):
+    if depth > 50:
+        raise RecursionError("JSON 路径深度超过上限 (50)")
     if not path:
         return obj
     import re
 
     if path.startswith("["):
-        m = re.match(r"^\[(-?\d+|\*)\]", path)
+        m = re.match(r'^\[(-?\d+|\*)\]', path)
         if not m:
             raise ValueError(f"无法解析路径段: {path}")
         seg = m.group(0)
-        rest = path[len(seg) :]
+        rest = path[len(seg):]
         if rest.startswith("."):
             rest = rest[1:]
         inner = m.group(1)
         if inner == "*":
             if not isinstance(obj, list):
-                raise TypeError("不能对非数组使用 [*]")
+                raise TypeError(f"不能对非数组使用 [*]")
             if not rest:
                 return obj
-            return [_resolve(item, rest) for item in obj]
+            return [_resolve(item, rest, depth + 1) for item in obj]
         else:
             idx = int(inner)
             if not isinstance(obj, list):
-                raise TypeError("不能对非数组使用索引")
-            return _resolve(obj[idx], rest)
+                raise TypeError(f"不能对非数组使用索引")
+            return _resolve(obj[idx], rest, depth + 1)
     else:
-        m = re.match(r"^(\w+)", path)
+        m = re.match(r'^(\w+)', path)
         if not m:
             raise ValueError(f"无法解析路径段: {path}")
         seg = m.group(0)
-        rest = path[len(seg) :]
+        rest = path[len(seg):]
         if rest.startswith("."):
             rest = rest[1:]
         if not isinstance(obj, dict):
-            raise TypeError("不能对非对象使用 .key")
-        return _resolve(obj[seg], rest)
+            raise TypeError(f"不能对非对象使用 .key")
+        return _resolve(obj[seg], rest, depth + 1)

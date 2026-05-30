@@ -10,7 +10,7 @@ from pathlib import Path
 from .config import get_config
 from .file_patch import patch
 from .syntax_check import check as syntax_check
-from ._file_utils import read_file_with_encoding, find_closest_line, SAFE_EDIT_MAX_SIZE
+from ._file_utils import read_file_with_encoding, find_closest_line, SAFE_EDIT_MAX_SIZE, align_whitespace
 
 
 def _backup_dir() -> Path:
@@ -77,19 +77,28 @@ def edit(
     # 0.1 消歧
     old_count = content.count(old)
     if old_count == 0:
-        closest = find_closest_line(content, old)
-        hint = (
-            f"最接近的行 #{closest['line']}: {closest['text']}——建议复制此行作为 old 参数重试。"
-            if closest
-            else "old 文本在文件中未找到，检查是否包含完整且精确的文本片段（包括缩进和换行）。"
-        )
-        return {
-            "ok": False,
-            "error": "未找到匹配文本，文件内容未修改",
-            "proposal": hint,
-            "evidence": closest or {},
-            "options": ["复制最接近的行作为 old", "用 file_preview 先预览", "确认缩进级别"],
-        }
+        # P0-1: whitespace-tolerant fallback before giving up
+        aligned = align_whitespace(content, old, new)
+        if aligned and not replace_all:
+            old, new = aligned
+            old_count = content.count(old)
+            result_extra = {"whitespace_aligned": True}
+        else:
+            closest = find_closest_line(content, old)
+            hint = (
+                f"最接近的行 #{closest['line']}: {closest['text']}——建议复制此行作为 old 参数重试。"
+                if closest
+                else "old 文本在文件中未找到，检查是否包含完整且精确的文本片段（包括缩进和换行）。"
+            )
+            return {
+                "ok": False,
+                "error": "未找到匹配文本，文件内容未修改",
+                "proposal": hint,
+                "evidence": closest or {},
+                "options": ["复制最接近的行作为 old", "用 file_preview 先预览", "确认缩进级别"],
+            }
+    else:
+        result_extra = {}
 
     # ── 消歧与替换 ──
 
@@ -118,15 +127,23 @@ def edit(
             return {"ok": False, "error": f"occurrence={occurrence} 超过匹配总数 {old_count}"}
 
     # 1. 备份（在任何修改之前）
+    backup_root = _backup_dir()
+    try:
+        usage = shutil.disk_usage(backup_root)
+        if usage.free < 100 * 1024 * 1024:
+            return {"ok": False, "error": f"备份目录磁盘空间不足（剩余 {usage.free // 1024 // 1024}MB < 100MB），无法创建备份"}
+    except OSError:
+        pass  # 无法检测磁盘空间，继续尝试
     ts = datetime.now().strftime("%Y%m%d_%H%M%S_%f")
-    backup_path = _backup_dir() / f"{p.name}.{ts}.bak"
-    _backup_dir().mkdir(parents=True, exist_ok=True)
+    backup_path = backup_root / f"{p.name}.{ts}.bak"
+    backup_root.mkdir(parents=True, exist_ok=True)
     shutil.copy2(filepath, str(backup_path))
 
     result = {
         "file": filepath,
         "backup": str(backup_path),
         "timestamp": ts,
+        **result_extra,
     }
 
     # 2. 执行替换

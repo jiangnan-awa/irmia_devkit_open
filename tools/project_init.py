@@ -7,6 +7,9 @@ import json
 import re
 from pathlib import Path
 
+from ._helpers import _run_cmd
+from ._file_utils import read_file
+
 
 def scan(project_dir: str = ".") -> dict:
     """扫描项目目录，返回结构化上下文。
@@ -103,17 +106,13 @@ def _read_package_files(root: Path, ctx: dict):
     # Python
     req = root / "requirements.txt"
     if req.exists():
-        ctx["dependencies"]["runtime"] = [
-            l.strip()
-            for l in req.read_text(encoding="utf-8").splitlines()
-            if l.strip() and not l.startswith("#")
-        ]
+        ctx["dependencies"]["runtime"] = [l.strip() for l in read_file(req).splitlines() if l.strip() and not l.startswith("#")]
 
     # Node
     pkg = root / "package.json"
     if pkg.exists():
         try:
-            data = json.loads(pkg.read_text(encoding="utf-8"))
+            data = json.loads(read_file(pkg))
             ctx["dependencies"]["runtime"] = list(data.get("dependencies", {}).keys())
             ctx["dependencies"]["dev"] = list(data.get("devDependencies", {}).keys())
         except (json.JSONDecodeError, OSError):
@@ -122,7 +121,7 @@ def _read_package_files(root: Path, ctx: dict):
     # Python pyproject.toml
     ppt = root / "pyproject.toml"
     if ppt.exists():
-        text = ppt.read_text(encoding="utf-8")
+        text = read_file(ppt)
         # extract dependencies from [project] section
         dep_match = re.search(r"dependencies\s*=\s*\[(.*?)\]", text, re.DOTALL)
         if dep_match:
@@ -145,35 +144,15 @@ def _read_package_files(root: Path, ctx: dict):
 
 
 def _git_info(root: Path, ctx: dict):
-    import subprocess
-
     try:
-        r = subprocess.run(
-            ["git", "branch", "--show-current"],
-            cwd=str(root),
-            capture_output=True,
-            text=True,
-            timeout=5,
-        )
-        if r.returncode == 0:
-            ctx["git"]["branch"] = r.stdout.strip()
-        r2 = subprocess.run(
-            ["git", "log", "-1", "--format=%h %s"],
-            cwd=str(root),
-            capture_output=True,
-            text=True,
-            timeout=5,
-        )
-        if r2.returncode == 0:
-            ctx["git"]["last_commit"] = r2.stdout.strip()
-        r3 = subprocess.run(
-            ["git", "tag", "--sort=-creatordate"],
-            cwd=str(root),
-            capture_output=True,
-            text=True,
-            timeout=5,
-        )
-        if r3.returncode == 0 and r3.stdout.strip():
-            ctx["git"]["recent_tags"] = r3.stdout.strip().split("\n")[:5]
+        r = _run_cmd(["git", "branch", "--show-current"], cwd=str(root), timeout=5)
+        if r["ok"]:
+            ctx["git"]["branch"] = r["stdout"]
+        r2 = _run_cmd(["git", "log", "-1", "--format=%h %s"], cwd=str(root), timeout=5)
+        if r2["ok"]:
+            ctx["git"]["last_commit"] = r2["stdout"]
+        r3 = _run_cmd(["git", "tag", "--sort=-creatordate"], cwd=str(root), timeout=5)
+        if r3["ok"] and r3["stdout"]:
+            ctx["git"]["recent_tags"] = r3["stdout"].split("\n")[:5]
     except Exception:
         pass

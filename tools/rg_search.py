@@ -47,6 +47,43 @@ def _parse_rg_output(stdout: str) -> list[dict]:
     return matches
 
 
+_RG_CTX_RE = re.compile(r"^(.*?)([-:])(\d+)([-:])(.*)$")
+
+
+def _parse_rg_with_context(stdout: str) -> list[dict]:
+    """解析 rg -C N 输出，将匹配行和上下文行分组为 match 对象。
+    匹配行: file:line:content（冒号分隔）
+    上下文行: file-line-content（横线分隔）
+    """
+    matches = []
+    current = None
+    for line in stdout.split("\n"):
+        if not line or line.strip() == "--":
+            if current:
+                matches.append(current)
+                current = None
+            continue
+        m = _RG_CTX_RE.match(line)
+        if not m:
+            continue
+        file = m.group(1)
+        sep1 = m.group(2)  # : for match, - for context
+        lineno = m.group(3)
+        sep2 = m.group(4)  # : for match, - for context
+        text = m.group(5)
+        if sep1 == ":" and sep2 == ":":
+            # This is a match line: file:line:content
+            if current:
+                matches.append(current)
+            current = {"file": file, "line": int(lineno), "content": text, "context": []}
+        elif current is not None:
+            # Context line: append to current match
+            current["context"].append({"line": int(lineno), "content": text})
+    if current:
+        matches.append(current)
+    return matches
+
+
 def _python_fallback(
     pattern: str,
     search_path: str,
@@ -140,6 +177,7 @@ def search(
     case_sensitive: bool = False,
     whole_word: bool = False,
     list_files: bool = False,
+    context_lines: int = 0,
 ) -> dict:
     """
     文件内容搜索。优先 ripgrep，未安装时 Python fallback。
@@ -152,6 +190,7 @@ def search(
         case_sensitive: 区分大小写
         whole_word: 全词匹配
         list_files: True 时只返回匹配的文件名列表，不展示匹配行
+        context_lines: 匹配行周围展示的上下文行数，默认 0（rg -C N）
 
     Returns:
         {"ok": true, "engine": "rg"|"python", "count": N, "matches": [...], ...}
@@ -177,6 +216,9 @@ def search(
 
             for ext in exts:
                 args.extend(["-g", f"*.{ext}"])
+
+            if context_lines > 0 and not list_files:
+                args.extend(["-C", str(context_lines)])
 
             args.extend(["--", pattern, search_path])
 
@@ -207,7 +249,10 @@ def search(
                     "files_searched": len(files),
                 }
 
-            all_matches = _parse_rg_output(stdout)
+            if context_lines > 0:
+                all_matches = _parse_rg_with_context(stdout)
+            else:
+                all_matches = _parse_rg_output(stdout)
             truncated = len(all_matches) > max_results
             return {
                 "ok": True,

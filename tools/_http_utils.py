@@ -68,5 +68,14 @@ class SafeRedirectHandler(urllib.request.HTTPRedirectHandler):
         err = validate_url(newurl)
         if err:
             raise urllib.error.URLError(f"重定向目标被拦截: {err['error']}")
-        # urllib 默认 follow redirect——这里截获并重新校验后，交回父类继续
         return super().redirect_request(req, fp, code, msg, headers, newurl)
+
+
+def make_opener():
+    """创建带 SSRF 重定向校验的 URL opener。"""
+    return urllib.request.build_opener(SafeRedirectHandler())
+
+
+def check_url(url: str) -> dict | None:
+    """SSRF 校验的便捷封装。"""
+    return validate_url(url)

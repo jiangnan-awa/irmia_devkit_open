@@ -3,35 +3,17 @@ git_smart — Git 操作封装。
 常用 git 命令的结构化输出。不要用 shell 直接执行 git 命令——用此工具。
 """
 
+import re
 import subprocess
 
-from ._helpers import proposal_reply
+from ._helpers import proposal_reply, _run_cmd
+
+# 解析 git diff --stat 最后一行: "1 file changed, 5 insertions(+), 2 deletions(-)"
+_RE_STAT = re.compile(r"(\d+)\s+files?\s+changed(?:,\s+(\d+)\s+insertions?\(\+\))?(?:,\s+(\d+)\s+deletions?\(\-\))?")
 
 
 def _run_git(cwd: str, args: list[str], timeout: int = 15) -> dict:
-    """执行 git 命令，返回结构化结果。"""
-    try:
-        result = subprocess.run(
-            ["git"] + args,
-            cwd=cwd,
-            capture_output=True,
-            text=True,
-            timeout=timeout,
-            encoding="utf-8",
-            errors="replace",
-        )
-        return {
-            "ok": result.returncode == 0,
-            "stdout": result.stdout.strip(),
-            "stderr": result.stderr.strip(),
-            "code": result.returncode,
-        }
-    except FileNotFoundError:
-        return {"ok": False, "error": "git 未安装或不在 PATH 中"}
-    except subprocess.TimeoutExpired:
-        return {"ok": False, "error": f"git 命令超时 ({timeout}s)"}
-    except Exception as e:
-        return {"ok": False, "error": str(e)}
+    return _run_cmd(["git"] + args, cwd=cwd, timeout=timeout)
 
 
 def status(cwd: str) -> dict:
@@ -49,14 +31,44 @@ def status(cwd: str) -> dict:
 
 
 def diff(cwd: str, staged: bool = False, filepath: str = None) -> dict:
-    """查看差异。提交前必调用 --staged。"""
+    """查看差异。提交前必调用 --staged。返回结构化统计 + raw diff。"""
     args = ["diff"]
     if staged:
         args.append("--staged")
     if filepath:
         args.append("--")
         args.append(filepath)
-    return _run_git(cwd, args)
+    r = _run_git(cwd, args)
+    if not r["ok"]:
+        return r
+    # 额外跑 git diff --stat 获取结构化统计
+    stat_args = ["diff", "--stat"]
+    if staged:
+        stat_args.append("--staged")
+    if filepath:
+        stat_args.extend(["--", filepath])
+    stat = _run_git(cwd, stat_args)
+    result = {"ok": True, "diff": r["stdout"], "stderr": r["stderr"]}
+    # 解析 --stat 最后一行: "1 file changed, 5 insertions(+), 2 deletions(-)"
+    if stat["ok"] and stat["stdout"]:
+        lines = stat["stdout"].strip().split("\n")
+        if lines:
+            last = lines[-1]
+            files_match = _RE_STAT.search(last)
+            if files_match:
+                result["files_changed"] = int(files_match.group(1))
+                try:
+                    insertions = int(files_match.group(2)) if files_match.group(2) else 0
+                except (ValueError, IndexError):
+                    insertions = 0
+                try:
+                    deletions = int(files_match.group(3)) if files_match.group(3) else 0
+                except (ValueError, IndexError):
+                    deletions = 0
+                result["added"] = insertions
+                result["removed"] = deletions
+                result["total_changes"] = insertions + deletions
+    return result
 
 
 def log(cwd: str, count: int = 5) -> dict:

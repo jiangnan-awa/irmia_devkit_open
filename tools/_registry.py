@@ -685,6 +685,7 @@ class RgSearchTool(FunctionTool):
                 "case_sensitive": {"type": "boolean", "description": "区分大小写"},
                 "whole_word": {"type": "boolean", "description": "全词匹配"},
                 "list_files": {"type": "boolean", "description": "是否只返回文件名列表"},
+                "context_lines": {"type": "integer", "description": "匹配行周围展示的上下文行数，默认 0。设 2 则返回前后各 2 行", "default": 0},
             },
             "required": ["pattern"],
         }
@@ -700,11 +701,12 @@ class RgSearchTool(FunctionTool):
         case_sensitive: bool = False,
         whole_word: bool = False,
         list_files: bool = False,
+        context_lines: int = 0,
         **kwargs,
     ) -> ToolExecResult:
         _tool_stats.record(self.name)
         try:
-            result = await _run_sync(_rg_search, pattern, path, file_exts, max_results, case_sensitive, whole_word, list_files)
+            result = await _run_sync(_rg_search, pattern, path, file_exts, max_results, case_sensitive, whole_word, list_files, context_lines)
             return _unwrap(result)
         except Exception as e:
             return _err(f"rg_search 失败: {e}")

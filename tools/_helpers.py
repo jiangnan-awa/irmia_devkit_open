@@ -4,6 +4,41 @@ _helpers — main.py 和 registry 共用的辅助函数。
 
 import asyncio
 import json
+import subprocess
+
+
+def _run_cmd(
+    cmd_args: list[str],
+    cwd: str = "",
+    timeout: int = 15,
+    encoding: str = "utf-8",
+) -> dict:
+    """统一 subprocess.run 封装。返回 {"ok": bool, "stdout": str, "stderr": str, "code": int}"""
+    if not cwd:
+        cwd = "."
+    try:
+        result = subprocess.run(
+            cmd_args,
+            cwd=cwd,
+            capture_output=True,
+            text=True,
+            timeout=timeout,
+            encoding=encoding,
+            errors="replace",
+        )
+        return {
+            "ok": result.returncode == 0,
+            "stdout": result.stdout.strip(),
+            "stderr": result.stderr.strip(),
+            "code": result.returncode,
+        }
+    except FileNotFoundError:
+        cmd_name = cmd_args[0] if cmd_args else "command"
+        return {"ok": False, "error": f"{cmd_name} 未安装或不在 PATH 中"}
+    except subprocess.TimeoutExpired:
+        return {"ok": False, "error": f"命令超时 ({timeout}s)"}
+    except Exception as e:
+        return {"ok": False, "error": str(e)}
 
 
 def err_json(error: str) -> str:
