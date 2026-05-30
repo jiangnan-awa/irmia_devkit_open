@@ -64,12 +64,21 @@ def _check_python(p: Path) -> dict:
             hint = "文件末尾缺少闭合符号——检查是否有未闭合的引号、括号或三引号。"
         else:
             hint = f"第{e.lineno}行语法错误: {e.msg}"
+        # 构建上下文：错误行前后各 2 行
+        lines = source.split("\n")
+        context = []
+        start = max(0, e.lineno - 3)  # lineno 是 1-based
+        end = min(len(lines), e.lineno + 2)
+        for i in range(start, end):
+            marker = "→" if i == e.lineno - 1 else " "
+            context.append(f"{marker}{i + 1:>4}: {lines[i].rstrip()[:120]}")
         errors = [
             {
                 "line": e.lineno,
                 "col": e.offset,
                 "msg": e.msg,
                 "text": e.text.strip() if e.text else "",
+                "context": context,
             }
         ]
         return proposal_reply(

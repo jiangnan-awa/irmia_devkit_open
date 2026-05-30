@@ -41,6 +41,7 @@ from .safe_edit import (
     rollback as _rollback,
 )
 from .es_search import search as _es_search
+from .rg_search import search as _rg_search
 from .http_get import get as _http_get, post as _http_post
 from .http_download import download as _http_download
 from .html_extract import extract as _html_extract
@@ -660,6 +661,52 @@ class EsSearchTool(FunctionTool):
             return _unwrap(result)
         except Exception as e:
             return _err(f"es_search 失败: {e}")
+
+
+@dataclass
+class RgSearchTool(FunctionTool):
+    """文件内容搜索。ripgrep + Python fallback。"""
+
+    name: str = "rg_search"
+    description: str = (
+        "【替代 grep/findstr——首选】文件内容级代码搜索引擎，查找函数引用、import 出现位置、变量使用点。"
+        "优先 ripgrep（毫秒级），备 Python 纯标库扫描。不要用 astrbot_execute_shell 跑 findstr/grep。"
+        "file_exts 逗号分隔如 'py,js,ts'，list_files=True 只列文件名不展示匹配行。"
+    )
+    parameters: dict = field(
+        default_factory=lambda: {
+            "type": "object",
+            "properties": {
+                "pattern": {"type": "string", "description": "搜索模式，正则或字面量"},
+                "path": {"type": "string", "description": "搜索起始目录，默认当前目录"},
+                "file_exts": {"type": "string", "description": "逗号分隔扩展名，如 'py,js,ts'（无点号）"},
+                "max_results": {"type": "integer", "description": "最大结果数，默认 40"},
+                "case_sensitive": {"type": "boolean", "description": "区分大小写"},
+                "whole_word": {"type": "boolean", "description": "全词匹配"},
+                "list_files": {"type": "boolean", "description": "是否只返回文件名列表"},
+            },
+            "required": ["pattern"],
+        }
+    )
+
+    async def call(
+        self,
+        context: ContextWrapper[AstrAgentContext],
+        pattern: str,
+        path: str = ".",
+        file_exts: str = "",
+        max_results: int = 40,
+        case_sensitive: bool = False,
+        whole_word: bool = False,
+        list_files: bool = False,
+        **kwargs,
+    ) -> ToolExecResult:
+        _tool_stats.record(self.name)
+        try:
+            result = await _run_sync(_rg_search, pattern, path, file_exts, max_results, case_sensitive, whole_word, list_files)
+            return _unwrap(result)
+        except Exception as e:
+            return _err(f"rg_search 失败: {e}")
 
 
 # ══ 网络 (3) ══
@@ -2469,6 +2516,7 @@ TOOL_GROUPS: dict[str, list[str]] = {
     ],
     "文件系统": [
         "es_search",
+        "rg_search",
         "dir_tree",
         "dir_list",
         "file_diff",
@@ -2532,6 +2580,7 @@ _ALL_TOOLS = {
     "gh_release": GhReleaseTool,
     "gh_repo": GhRepoTool,
     "es_search": EsSearchTool,
+    "rg_search": RgSearchTool,
     "dir_tree": DirTreeTool,
     "dir_list": DirListTool,
     "file_diff": FileDiffTool,

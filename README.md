@@ -43,9 +43,9 @@ Python ≥ 3.10
 
 部分工具（`git_commit`、`syntax_check`、`port_check`、`es_search`、`lint_runner`、`dep_scan` 等 17 个）在失败或歧义时返回 `{proposal, evidence, options, next_call}` 结构化信息，替代纯文本错误。
 
-60 个工具按 9 组管理，可在 `config.json` 中按组或按单个工具关闭。
+61 个工具按 9 组管理，可在 `config.json` 中按组或按单个工具关闭。
 
-## 工具列表 (60)
+## 工具列表 (61)
 
 ### 🔒 安全编辑链 (7)
 
@@ -75,11 +75,12 @@ Python ≥ 3.10
 | `gh_release` | Release：创建/列出 |
 | `gh_repo` | 仓库：创建/查看/CI/认证 |
 
-### 📁 文件系统 (11)
+### 📁 文件系统 (12)
 
 | 工具 | 用途 |
 |------|------|
 | `es_search` | Everything 文件名搜索 (Windows) |
+| `rg_search` | 文件内容搜索（ripgrep + Python fallback） |
 | `dir_tree` | 目录树 |
 | `dir_list` | 目录列表 |
 | `file_diff` | 文件差异比较 |
