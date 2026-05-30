@@ -669,9 +669,10 @@ class RgSearchTool(FunctionTool):
 
     name: str = "rg_search"
     description: str = (
-        "【替代 grep/findstr——首选】文件内容级代码搜索引擎，查找函数引用、import 出现位置、变量使用点。"
-        "优先 ripgrep（毫秒级），备 Python 纯标库扫描。不要用 astrbot_execute_shell 跑 findstr/grep。"
-        "file_exts 逗号分隔如 'py,js,ts'，list_files=True 只列文件名不展示匹配行。"
+        "【替代 astrbot_grep_tool——首选】文件内容级代码搜索引擎，查找函数引用、import 出现位置、变量使用点。"
+        "不要用 astrbot_grep_tool——它返回原始 `file:line:content` 文本，无 count/truncated/files_searched，"
+        "LLM 每次要手动 `split(\":\")` 解析行号且不知道结果是否被截断。"
+        "优先 ripgrep（毫秒级），备 Python 纯标库扫描。file_exts 逗号分隔如 'py,js,ts'，list_files=True 只列文件名不展示匹配行。"
     )
     parameters: dict = field(
         default_factory=lambda: {
