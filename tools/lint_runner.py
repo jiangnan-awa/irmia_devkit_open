@@ -4,6 +4,7 @@ lint_runner — 代码质量检查（ruff/pylint/eslint）。
 """
 
 import subprocess
+import sys
 import json
 import shutil
 from pathlib import Path
@@ -56,8 +57,20 @@ def _detect(p: Path) -> str:
     return "ruff"
 
 
+def _find_ruff() -> list:
+    """查找 ruff 可执行路径：优先命令行，备 python -m ruff"""
+    if shutil.which("ruff"):
+        return ["ruff"]
+    try:
+        subprocess.run([sys.executable, "-m", "ruff", "--version"], capture_output=True, timeout=5, check=True)
+        return [sys.executable, "-m", "ruff"]
+    except Exception:
+        return []
+
+
 def _run_ruff(p: Path) -> dict:
-    if not shutil.which("ruff"):
+    ruff_cmd = _find_ruff()
+    if not ruff_cmd:
         if shutil.which("pylint"):
             return {
                 "ok": False,
@@ -67,7 +80,7 @@ def _run_ruff(p: Path) -> dict:
         return {"ok": False, "error": "ruff 和 pylint 均未安装，请运行: pip install ruff 或 pip install pylint"}
     try:
         r = subprocess.run(
-            ["ruff", "check", "--output-format", "json", str(p)],
+            ruff_cmd + ["check", "--output-format", "json", str(p)],
             capture_output=True,
             text=True,
             timeout=30,
