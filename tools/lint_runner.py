@@ -11,6 +11,8 @@ from pathlib import Path
 
 def run(filepath: str, linter: str = "auto") -> dict:
     """对文件运行 linter，返回结构化 issues。
+    当首选 linter 未安装时自动回退到备用 linter。
+    参照 rg_search 的三层 fallback 模式。
 
     Args:
         filepath: 文件路径
@@ -35,25 +37,34 @@ def run(filepath: str, linter: str = "auto") -> dict:
             "error": f"不支持的 linter: {linter}，可选: {list(runners.keys())}",
         }
 
-    return runner(p)
+    result = runner(p)
+    if isinstance(result, dict) and "fallback" in result:
+        fallback = runners.get(result["fallback"])
+        if fallback:
+            return fallback(p)
+    return result
 
 
 def _detect(p: Path) -> str:
     suffix = p.suffix.lower()
     if suffix in (".js", ".ts", ".jsx", ".tsx", ".mjs", ".cjs"):
-        if shutil.which("eslint"):
-            return "eslint"
-        return "eslint"  # fallback, will get "not installed" error
+        return "eslint"
     if shutil.which("ruff"):
         return "ruff"
     if shutil.which("pylint"):
         return "pylint"
-    return "ruff"  # roll the dice
+    return "ruff"
 
 
 def _run_ruff(p: Path) -> dict:
     if not shutil.which("ruff"):
-        return {"ok": False, "error": "ruff 未安装，请运行: pip install ruff"}
+        if shutil.which("pylint"):
+            return {
+                "ok": False,
+                "error": "ruff 未安装，自动回退到 pylint",
+                "fallback": "pylint",
+            }
+        return {"ok": False, "error": "ruff 和 pylint 均未安装，请运行: pip install ruff 或 pip install pylint"}
     try:
         r = subprocess.run(
             ["ruff", "check", "--output-format", "json", str(p)],
@@ -84,7 +95,13 @@ def _run_ruff(p: Path) -> dict:
 
 def _run_pylint(p: Path) -> dict:
     if not shutil.which("pylint"):
-        return {"ok": False, "error": "pylint 未安装，请运行: pip install pylint"}
+        if shutil.which("ruff"):
+            return {
+                "ok": False,
+                "error": "pylint 未安装，自动回退到 ruff",
+                "fallback": "ruff",
+            }
+        return {"ok": False, "error": "pylint 和 ruff 均未安装，请运行: pip install ruff 或 pip install pylint"}
     try:
         r = subprocess.run(
             ["pylint", "--output-format", "json", str(p)],
