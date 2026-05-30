@@ -7,10 +7,7 @@ file_diff — 文件差异比较。
 import difflib
 from pathlib import Path
 
-from ._file_utils import read_file
-
-# C5: 文件大小上限 50MB，防止 OOM
-_MAX_FILE_SIZE = 50 * 1024 * 1024
+from ._file_utils import read_file, FILE_DIFF_MAX_SIZE
 
 
 def compare(file_a: str, file_b: str) -> dict:
@@ -24,10 +21,10 @@ def compare(file_a: str, file_b: str) -> dict:
         return {"ok": False, "error": f"文件不存在: {file_b}"}
 
     # C5: 大小检查
-    if pa.stat().st_size > _MAX_FILE_SIZE or pb.stat().st_size > _MAX_FILE_SIZE:
+    if pa.stat().st_size > FILE_DIFF_MAX_SIZE or pb.stat().st_size > FILE_DIFF_MAX_SIZE:
         return {
             "ok": False,
-            "error": f"文件过大（上限 {_MAX_FILE_SIZE // 1024 // 1024}MB），请使用外部 diff 工具",
+            "error": f"文件过大（上限 {FILE_DIFF_MAX_SIZE // 1024 // 1024}MB），请使用外部 diff 工具",
         }
 
     try:

@@ -33,8 +33,8 @@ def extract(html: str, what: str = "text", selector: str = "") -> dict:
 
     try:
         if what == "text":
-            # 移除 script/style
-            for tag in soup(["script", "style", "nav", "footer", "header"]):
+            # 仅移除脚本和样式，保留语义标签中的正文
+            for tag in soup(["script", "style"]):
                 tag.decompose()
             text = soup.get_text(separator="\n", strip=True)
             # 合并多余空行
@@ -74,13 +74,13 @@ def extract(html: str, what: str = "text", selector: str = "") -> dict:
                 return {"ok": False, "error": "what='query' 需要 selector 参数"}
             elements = soup.select(selector)
             if not elements:
-                return proposal_reply(
-                    True,
-                    f"CSS 选择器 '{selector}' 未匹配任何元素",
-                    evidence={"selector": selector},
-                    options=["简化选择器(去掉层级)", "尝试 what='text' 提取全文"],
-                    data={"results": [], "count": 0},
-                )
+                return {
+                    "ok": True,
+                    "data": {"results": [], "count": 0},
+                    "proposal": f"CSS 选择器 '{selector}' 未匹配任何元素",
+                    "evidence": {"selector": selector},
+                    "options": ["简化选择器(去掉层级)", "尝试 what='text' 提取全文"],
+                }
             results = [el.get_text(strip=True)[:200] for el in elements]
             html_snippets = []
             for el in elements[:5]:

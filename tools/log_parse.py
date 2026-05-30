@@ -107,7 +107,10 @@ def _parse_syslog(line: str) -> dict:
 
 
 def _parse_jsonl(line: str) -> dict:
-    return json.loads(line)
+    parsed = json.loads(line)
+    if isinstance(parsed, dict):
+        return parsed
+    return {"_value": parsed}
 
 
 def _detect(first_line: str) -> str:

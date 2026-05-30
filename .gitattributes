@@ -1,1 +1,6 @@
-metadata.yaml text eol=lf  
+metadata.yaml text eol=lf
+*.py text eol=lf
+*.json text eol=lf
+*.yaml text eol=lf
+*.yml text eol=lf
+*.md text eol=lf

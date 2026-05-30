@@ -4,13 +4,13 @@ safe_edit — 安全编辑工具（强制使用）。
 """
 
 import shutil
-import difflib
 from datetime import datetime
 from pathlib import Path
 
 from .config import get_config
 from .file_patch import patch
 from .syntax_check import check as syntax_check
+from ._file_utils import read_file_with_encoding, find_closest_line, SAFE_EDIT_MAX_SIZE
 
 
 def _backup_dir() -> Path:
@@ -65,45 +65,29 @@ def edit(
     if not p.exists():
         return {"ok": False, "error": f"文件不存在: {filepath}"}
 
-    if p.stat().st_size > 20 * 1024 * 1024:
+    if p.stat().st_size > SAFE_EDIT_MAX_SIZE:
         return {"ok": False, "error": "文件超过 20MB 上限，safe_edit 不支持大文件编辑。建议用外部编辑器。"}
 
-    # 0. 读取文件内容 (H3: GBK fallback, H11: 保留原始换行符)
-    content = None
-    encoding = "utf-8"
+    # 0. 读取文件内容
     try:
-        with open(filepath, "r", encoding="utf-8", newline="") as f:
-            content = f.read()
-    except UnicodeDecodeError:
-        try:
-            with open(filepath, "r", encoding="gbk", newline="") as f:
-                content = f.read()
-                encoding = "gbk"
-        except Exception as e:
-            return {"ok": False, "error": f"无法解码文件: {e}"}
+        content, encoding = read_file_with_encoding(p)
+    except Exception as e:
+        return {"ok": False, "error": f"无法解码文件: {e}"}
 
-    # 0.1 消歧：计数 old 出现次数
+    # 0.1 消歧
     old_count = content.count(old)
     if old_count == 0:
-        # 尝试给出最接近的匹配行（与 file_patch 一致）
-        lines = content.split("\n")
-        best = None
-        best_ratio = 0
-        for i, line in enumerate(lines):
-            ratio = difflib.SequenceMatcher(None, old.split("\n")[0], line).ratio()
-            if ratio > best_ratio:
-                best_ratio = ratio
-                best = (i + 1, line.strip()[:80])
-        hint = ""
-        if best and best_ratio > 0.3:
-            hint = f"最接近的行 #{best[0]}: {best[1]}——建议复制此行作为 old 参数重试。"
-        else:
-            hint = "old 文本在文件中未找到，检查是否包含完整且精确的文本片段（包括缩进和换行）。"
+        closest = find_closest_line(content, old)
+        hint = (
+            f"最接近的行 #{closest['line']}: {closest['text']}——建议复制此行作为 old 参数重试。"
+            if closest
+            else "old 文本在文件中未找到，检查是否包含完整且精确的文本片段（包括缩进和换行）。"
+        )
         return {
             "ok": False,
             "error": "未找到匹配文本，文件内容未修改",
             "proposal": hint,
-            "evidence": {"closest_line": best[0], "closest_text": best[1]} if best else {},
+            "evidence": closest or {},
             "options": ["复制最接近的行作为 old", "用 file_preview 先预览", "确认缩进级别"],
         }
 

@@ -6,7 +6,6 @@ port_check — 端口检测。
 import socket
 
 
-from ._helpers import proposal_reply
 
 
 def check(host: str = "127.0.0.1", port: int = 7860) -> dict:
@@ -17,20 +16,16 @@ def check(host: str = "127.0.0.1", port: int = 7860) -> dict:
         sock.connect((host, port))
         return {"ok": True, "host": host, "port": port, "listening": True}
     except (socket.timeout, ConnectionRefusedError, OSError):
-        return proposal_reply(
-            True,
-            f"端口 {port} 未监听",
-            evidence={"host": host, "port": port, "timeout": 3},
-            options=[
-                "确认服务是否已启动",
-                "检查端口号是否正确",
-                "用 proc_list 确认进程",
-            ],
-            next_call={"tool": "proc_list", "params": {"filter_name": str(port)}},
-            host=host,
-            port=port,
-            listening=False,
-        )
+        return {
+            "ok": True,
+            "host": host,
+            "port": port,
+            "listening": False,
+            "proposal": f"端口 {port} 未监听",
+            "evidence": {"host": host, "port": port, "timeout": 3},
+            "options": ["确认服务是否已启动", "检查端口号是否正确", "用 proc_list 确认进程"],
+            "next_call": {"tool": "proc_list", "params": {"filter_name": str(port)}},
+        }
     finally:
         sock.close()
 

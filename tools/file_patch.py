@@ -4,10 +4,9 @@ file_patch — 精确文本替换工具。
 支持单次替换和全局替换。
 """
 
-import difflib
 from pathlib import Path
 
-from ._file_utils import read_file, read_file_with_encoding
+from ._file_utils import read_file, read_file_with_encoding, find_closest_line
 
 
 def patch(filepath: str, old: str, new: str, replace_all: bool = False) -> dict:
@@ -37,20 +36,8 @@ def patch(filepath: str, old: str, new: str, replace_all: bool = False) -> dict:
         return {"ok": False, "error": f"无法读取文件: {e}"}
 
     if old not in content:
-        # 尝试给出最接近的匹配
-        lines = content.split("\n")
-        best = None
-        best_ratio = 0
-        for i, line in enumerate(lines):
-            ratio = difflib.SequenceMatcher(None, old.split("\n")[0], line).ratio()
-            if ratio > best_ratio:
-                best_ratio = ratio
-                best = (i + 1, line.strip()[:80])
-
-        hint = ""
-        if best and best_ratio > 0.3:
-            hint = f" 最接近的行 #{best[0]}: {best[1]}"
-
+        closest = find_closest_line(content, old)
+        hint = f" 最接近的行 #{closest['line']}: {closest['text']}" if closest else ""
         return {
             "ok": False,
             "error": f"旧文本在文件中未找到。{hint}",

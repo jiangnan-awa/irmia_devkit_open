@@ -42,10 +42,10 @@ class Main(star.Star):
             config_path = os.path.join(str(data_dir), "config.json")
         except Exception:
             config_path = os.path.join(plug_dir, "config.json")
-        # 向后兼容：data_dir 有配置时，优先读取；不存在则从插件目录迁移
         legacy_path = os.path.join(plug_dir, "config.json")
         if not os.path.exists(config_path) and os.path.exists(legacy_path):
             config_path = legacy_path
+
         _config = {}
         if os.path.exists(config_path):
             try:
@@ -65,22 +65,14 @@ class Main(star.Star):
         # AstrBot WebUI 配置优先于 config.json
         if config:
             changed = False
-            # paths 嵌套（工具路径）
             paths = config.get("paths", {})
-            for key in ("es_path", "gh_path", "state_dir", "backup_dir"):
+            for key in ("es_path", "gh_path", "backup_dir"):
                 if paths.get(key):
                     _config[key] = paths[key]
                     changed = True
             if paths.get("lock_dirs"):
-                raw = paths["lock_dirs"]
-                if isinstance(raw, str):
-                    _config["lock_dirs"] = [
-                        d.strip() for d in raw.split(",") if d.strip()
-                    ]
-                elif isinstance(raw, list):
-                    _config["lock_dirs"] = raw
+                _config["lock_dirs"] = [d.strip() for d in paths["lock_dirs"].split(",") if d.strip()]
                 changed = True
-            # tool_groups / disabled_tools（顶层 key）
             web_groups = config.get("tool_groups", {})
             if web_groups and isinstance(web_groups, dict):
                 stored = _config.setdefault("tool_groups", {})
@@ -89,9 +81,7 @@ class Main(star.Star):
                 changed = True
             web_disabled = config.get("disabled_tools", "")
             if web_disabled:
-                _config["disabled_tools"] = [
-                    t.strip() for t in web_disabled.split(",") if t.strip()
-                ]
+                _config["disabled_tools"] = [t.strip() for t in web_disabled.split(",") if t.strip()]
                 changed = True
             if changed:
                 try:

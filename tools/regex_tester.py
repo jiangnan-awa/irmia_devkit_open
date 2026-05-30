@@ -67,12 +67,15 @@ def test(pattern: str, text: str, flags: str = "") -> dict:
             "pattern": pattern,
         }
 
-    # C6: 超时保护（Unix 用 signal，Windows 用简单最大匹配数限制）
+    # C6: 超时保护（Unix 主线程用 signal，线程池中 fallback 到最大匹配数限制）
     matches = []
     try:
         if hasattr(signal, "SIGALRM"):
-            signal.signal(signal.SIGALRM, _timeout_handler)
-            signal.alarm(_REGEX_TIMEOUT)
+            try:
+                signal.signal(signal.SIGALRM, _timeout_handler)
+                signal.alarm(_REGEX_TIMEOUT)
+            except ValueError:
+                pass  # 线程池中 signal 不可用，靠 500 匹配上限保护
         for m in compiled.finditer(text):
             match_info = {
                 "match": m.group(0),
@@ -84,14 +87,17 @@ def test(pattern: str, text: str, flags: str = "") -> dict:
             elif compiled.groups > 0:
                 match_info["groups"] = {str(i): g for i, g in enumerate(m.groups(), 1)}
             matches.append(match_info)
-            # C6: 最大匹配数保护（Windows fallback）
+            # C6: 最大匹配数保护
             if len(matches) >= 500:
                 break
     except TimeoutError:
         matches.append({"match": "[TIMEOUT]", "start": -1, "end": -1})
     finally:
         if hasattr(signal, "SIGALRM"):
-            signal.alarm(0)
+            try:
+                signal.alarm(0)
+            except ValueError:
+                pass
 
     return {
         "ok": True,

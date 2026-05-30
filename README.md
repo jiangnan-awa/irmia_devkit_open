@@ -43,9 +43,9 @@ Python ≥ 3.10
 
 部分工具（`git_commit`、`syntax_check`、`port_check`、`es_search`、`lint_runner`、`dep_scan` 等 17 个）在失败或歧义时返回 `{proposal, evidence, options, next_call}` 结构化信息，替代纯文本错误。
 
-68 个工具按 9 组管理，可在 `config.json` 中按组或按单个工具关闭。
+60 个工具按 9 组管理，可在 `config.json` 中按组或按单个工具关闭。
 
-## 工具列表 (63)
+## 工具列表 (60)
 
 ### 🔒 安全编辑链 (7)
 
@@ -123,25 +123,21 @@ Python ≥ 3.10
 | `md_strip` | Markdown → 纯文本 |
 | `log_parse` | Nginx/Apache/syslog/JSON Lines |
 
-### 🔤 编码 (9)
+### 🔤 编码 (3)
 
 | 工具 | 用途 |
 |------|------|
 | `base64_` | Base64 编解码（action: encode/decode） |
 | `hex_` | 十六进制编解码（action: encode/decode） |
 | `url_` | URL 编解码（action: encode/decode） |
-| `base64_encode` / `_decode` | Base64（兼容别名，建议用 base64_） |
-| `url_encode` / `_decode` | URL（兼容别名，建议用 url_） |
-| `hex_encode` / `_decode` | Hex（兼容别名，建议用 hex_） |
 
-### ⏱ 时间 (5)
+### ⏱ 时间 (3)
 
 | 工具 | 用途 |
 |------|------|
 | `time_now` | 当前时间 |
 | `time_convert` | 时间戳↔ISO 互转（direction: to_iso/to_ts） |
 | `time_diff` | 时间差 |
-| `ts_to_iso` / `iso_to_ts` | 兼容别名，建议用 time_convert |
 
 ### 🧩 扩展 (8)
 

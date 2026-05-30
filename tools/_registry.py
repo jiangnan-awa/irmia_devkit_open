@@ -8,10 +8,16 @@ from __future__ import annotations
 import json
 from dataclasses import dataclass, field
 
-from astrbot.api import FunctionTool
+from astrbot.api import FunctionTool as _AstrBotFunctionTool
 from astrbot.core.agent.run_context import ContextWrapper
 from astrbot.core.agent.tool import ToolExecResult
 from astrbot.core.astr_agent_context import AstrAgentContext
+
+
+@dataclass
+class FunctionTool(_AstrBotFunctionTool):
+    """AstrBot v4.16+ 兼容基类：显式声明 func_type 防止 LLM 权限被拒。"""
+    func_type: str = "tool"
 
 from ._helpers import err_json as _err, unwrap as _unwrap, run_sync as _run_sync
 from . import tool_stats as _tool_stats
@@ -738,7 +744,7 @@ class HttpPostTool(FunctionTool):
                     json_failed = True
             if json_failed and data.strip():
                 if data.strip()[0] in ("{", "["):
-                    return _err(f"data 看起来是 JSON 但解析失败——请检查 JSON 语法后重试")
+                    return _err("data 看起来是 JSON 但解析失败——请检查 JSON 语法后重试")
             result = await _run_sync(_http_post, url, body if body else None, headers)
             return _unwrap(result)
         except Exception as e:
@@ -1151,7 +1157,7 @@ class SysSnapshotTool(FunctionTool):
             return _err(f"sys_snapshot 失败: {e}")
 
 
-# ══ 编码 (6) ══
+# ══ 编码 (3) ══
 @dataclass
 class Base64Tool(FunctionTool):
     name: str = "base64_"
@@ -1173,7 +1179,6 @@ class Base64Tool(FunctionTool):
             "required": ["action", "data"],
         }
     )
-
     async def call(
         self, context: ContextWrapper[AstrAgentContext], action: str, data: str,
         as_uri: bool = False, strip_uri: bool = False, **kwargs
@@ -1183,33 +1188,6 @@ class Base64Tool(FunctionTool):
             if action == "encode": return _unwrap(b64_encode(data, as_uri))
             return _unwrap(b64_decode(data, strip_uri))
         except Exception as e: return _err(f"base64_ 失败: {e}")
-
-
-# 向后兼容别名（1 版本后移除）
-@dataclass
-class Base64EncodeTool(FunctionTool):
-    name: str = "base64_encode"
-    description: str = "Base64 编码。[已合并到 base64_，新调用请用 base64_ with action=encode]"
-    parameters: dict = field(default_factory=lambda: {
-        "type": "object", "properties": {"data": {"type": "string"}}, "required": ["data"]
-    })
-    async def call(self, context: ContextWrapper[AstrAgentContext], data: str, **kwargs) -> ToolExecResult:
-        _tool_stats.record(self.name)
-        try: return _unwrap(b64_encode(data, False))
-        except Exception as e: return _err(f"base64_encode 失败: {e}")
-
-
-@dataclass
-class Base64DecodeTool(FunctionTool):
-    name: str = "base64_decode"
-    description: str = "Base64 解码。[已合并到 base64_，新调用请用 base64_ with action=decode]"
-    parameters: dict = field(default_factory=lambda: {
-        "type": "object", "properties": {"data": {"type": "string"}}, "required": ["data"]
-    })
-    async def call(self, context: ContextWrapper[AstrAgentContext], data: str, **kwargs) -> ToolExecResult:
-        _tool_stats.record(self.name)
-        try: return _unwrap(b64_decode(data, False))
-        except Exception as e: return _err(f"base64_decode 失败: {e}")
 
 
 @dataclass
@@ -1238,32 +1216,6 @@ class HexTool(FunctionTool):
 
 
 @dataclass
-class HexEncodeTool(FunctionTool):
-    name: str = "hex_encode"
-    description: str = "十六进制编码。[已合并到 hex_，新调用请用 hex_ with action=encode]"
-    parameters: dict = field(default_factory=lambda: {
-        "type": "object", "properties": {"data": {"type": "string"}}, "required": ["data"]
-    })
-    async def call(self, context: ContextWrapper[AstrAgentContext], data: str, **kwargs) -> ToolExecResult:
-        _tool_stats.record(self.name)
-        try: return _unwrap(hex_encode(data))
-        except Exception as e: return _err(f"hex_encode 失败: {e}")
-
-
-@dataclass
-class HexDecodeTool(FunctionTool):
-    name: str = "hex_decode"
-    description: str = "十六进制解码。[已合并到 hex_，新调用请用 hex_ with action=decode]"
-    parameters: dict = field(default_factory=lambda: {
-        "type": "object", "properties": {"data": {"type": "string"}}, "required": ["data"]
-    })
-    async def call(self, context: ContextWrapper[AstrAgentContext], data: str, **kwargs) -> ToolExecResult:
-        _tool_stats.record(self.name)
-        try: return _unwrap(hex_decode(data))
-        except Exception as e: return _err(f"hex_decode 失败: {e}")
-
-
-@dataclass
 class UrlTool(FunctionTool):
     name: str = "url_"
     description: str = "URL 编解码。action: encode(编码) / decode(解码)。比手写 urllib.parse 少 4 行样板。"
@@ -1285,33 +1237,7 @@ class UrlTool(FunctionTool):
         except Exception as e: return _err(f"url_ 失败: {e}")
 
 
-@dataclass
-class UrlEncodeTool(FunctionTool):
-    name: str = "url_encode"
-    description: str = "URL 编码。[已合并到 url_，新调用请用 url_ with action=encode]"
-    parameters: dict = field(default_factory=lambda: {
-        "type": "object", "properties": {"data": {"type": "string"}}, "required": ["data"]
-    })
-    async def call(self, context: ContextWrapper[AstrAgentContext], data: str, **kwargs) -> ToolExecResult:
-        _tool_stats.record(self.name)
-        try: return _unwrap(url_encode(data))
-        except Exception as e: return _err(f"url_encode 失败: {e}")
-
-
-@dataclass
-class UrlDecodeTool(FunctionTool):
-    name: str = "url_decode"
-    description: str = "URL 解码。[已合并到 url_，新调用请用 url_ with action=decode]"
-    parameters: dict = field(default_factory=lambda: {
-        "type": "object", "properties": {"data": {"type": "string"}}, "required": ["data"]
-    })
-    async def call(self, context: ContextWrapper[AstrAgentContext], data: str, **kwargs) -> ToolExecResult:
-        _tool_stats.record(self.name)
-        try: return _unwrap(url_decode(data))
-        except Exception as e: return _err(f"url_decode 失败: {e}")
-
-
-# ══ 时间 (4) ══
+# ══ 时间 (3) ══
 @dataclass
 class TimeNowTool(FunctionTool):
     name: str = "time_now"
@@ -1319,7 +1245,6 @@ class TimeNowTool(FunctionTool):
     parameters: dict = field(
         default_factory=lambda: {"type": "object", "properties": {}, "required": []}
     )
-
     async def call(
         self, context: ContextWrapper[AstrAgentContext], **kwargs
     ) -> ToolExecResult:
@@ -1333,7 +1258,7 @@ class TimeNowTool(FunctionTool):
 @dataclass
 class TimeConvertTool(FunctionTool):
     name: str = "time_convert"
-    description: str = "【替代手动乘除——首选】Unix 时间戳与 ISO 互转。direction: to_iso(时间戳→ISO) / to_ts(ISO→时间戳)。ms=True 表示毫秒。比 Python datetime.fromtimestamp 少 3 行。"
+    description: str = "【替代手动乘除——首选】Unix 时间戳与 ISO 互转。direction: to_iso(时间戳→ISO) / to_ts(ISO→时间戳)。ms=True 表示毫秒。"
     parameters: dict = field(
         default_factory=lambda: {
             "type": "object",
@@ -1359,32 +1284,6 @@ class TimeConvertTool(FunctionTool):
 
 
 @dataclass
-class TsToIsoTool(FunctionTool):
-    name: str = "ts_to_iso"
-    description: str = "时间戳→ISO。[已合并到 time_convert，新调用请用 time_convert with direction=to_iso]"
-    parameters: dict = field(default_factory=lambda: {
-        "type": "object", "properties": {"ts": {"type": "integer"}}, "required": ["ts"]
-    })
-    async def call(self, context: ContextWrapper[AstrAgentContext], ts: int, **kwargs) -> ToolExecResult:
-        _tool_stats.record(self.name)
-        try: return _unwrap(ts_to_iso(ts, False))
-        except Exception as e: return _err(f"ts_to_iso 失败: {e}")
-
-
-@dataclass
-class IsoToTsTool(FunctionTool):
-    name: str = "iso_to_ts"
-    description: str = "ISO→时间戳。[已合并到 time_convert，新调用请用 time_convert with direction=to_ts]"
-    parameters: dict = field(default_factory=lambda: {
-        "type": "object", "properties": {"iso": {"type": "string"}}, "required": ["iso"]
-    })
-    async def call(self, context: ContextWrapper[AstrAgentContext], iso: str, **kwargs) -> ToolExecResult:
-        _tool_stats.record(self.name)
-        try: return _unwrap(iso_to_ts(iso))
-        except Exception as e: return _err(f"iso_to_ts 失败: {e}")
-
-
-@dataclass
 class TimeDiffTool(FunctionTool):
     name: str = "time_diff"
     description: str = "计算两个 ISO 时间的差值（秒/分/时）。"
@@ -1398,7 +1297,6 @@ class TimeDiffTool(FunctionTool):
             "required": ["iso1", "iso2"],
         }
     )
-
     async def call(
         self, context: ContextWrapper[AstrAgentContext], iso1: str, iso2: str, **kwargs
     ) -> ToolExecResult:
@@ -1444,7 +1342,7 @@ class RegexTestTool(FunctionTool):
     ) -> ToolExecResult:
         _tool_stats.record(self.name)
         try:
-            return _unwrap(_regex_test(pattern, text, flags))
+            return _unwrap(await _run_sync(_regex_test, pattern, text, flags))
         except Exception as e:
             return _err(f"regex_test 失败: {e}")
 
@@ -1487,7 +1385,7 @@ class RegexReplaceTool(FunctionTool):
     ) -> ToolExecResult:
         _tool_stats.record(self.name)
         try:
-            return _unwrap(_regex_replace(pattern, replacement, text, flags))
+            return _unwrap(await _run_sync(_regex_replace, pattern, replacement, text, flags))
         except Exception as e:
             return _err(f"regex_replace 失败: {e}")
 
@@ -1595,7 +1493,8 @@ class TextFilterTool(FunctionTool):
                 },
                 "n": {
                     "type": "integer",
-                    "description": "head/tail 时取的行数，默认 10",
+                    "description": "head/tail 时取的行数",
+                    "default": 10,
                 },
                 "case_sensitive": {
                     "type": "boolean",
@@ -2599,14 +2498,8 @@ TOOL_GROUPS: dict[str, list[str]] = {
         "base64_",
         "hex_",
         "url_",
-        "base64_encode",
-        "base64_decode",
-        "url_encode",
-        "url_decode",
-        "hex_encode",
-        "hex_decode",
     ],
-    "时间": ["time_now", "time_convert", "time_diff", "ts_to_iso", "iso_to_ts"],
+    "时间": ["time_now", "time_convert", "time_diff"],
     "扩展": [
         "svg_render",
         "json_schema_val",
@@ -2669,16 +2562,8 @@ _ALL_TOOLS = {
     "base64_": Base64Tool,
     "hex_": HexTool,
     "url_": UrlTool,
-    "base64_encode": Base64EncodeTool,
-    "base64_decode": Base64DecodeTool,
-    "url_encode": UrlEncodeTool,
-    "url_decode": UrlDecodeTool,
-    "hex_encode": HexEncodeTool,
-    "hex_decode": HexDecodeTool,
     "time_now": TimeNowTool,
     "time_convert": TimeConvertTool,
-    "ts_to_iso": TsToIsoTool,
-    "iso_to_ts": IsoToTsTool,
     "time_diff": TimeDiffTool,
     "svg_render": SvgRenderTool,
     "json_schema_val": JsonSchemaValTool,

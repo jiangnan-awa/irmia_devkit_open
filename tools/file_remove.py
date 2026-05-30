@@ -27,7 +27,8 @@ def remove(path: str, confirm: bool = False, max_items: int = 50) -> dict:
     """
     p = Path(path).resolve()
 
-    if ".." in str(Path(path)):  # 原始路径含 .. 穿越
+    raw = str(Path(path))
+    if any(part == ".." for part in raw.replace("\\", "/").split("/")):
         return {"ok": False, "error": "路径包含 .. 穿越，已被拒绝"}
 
     if not p.exists():
