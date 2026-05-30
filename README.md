@@ -46,6 +46,15 @@ Python ≥ 3.10
 
 61 个工具按 9 组管理，可在 `config.json` 中按组或按单个工具关闭。
 
+## 架构
+
+详见 [ARCHITECTURE.md](ARCHITECTURE.md)，包含：
+- 模块依赖关系图和初始化流程
+- 如何新增工具的完整步骤
+- 响应协议规范（三种 JSON shape）
+- 安全设计架构（SSRF 四层、safe_edit 防御链、ReDoS 三重盾）
+- 异步执行模型和测试策略
+
 ## 工具列表 (61)
 
 ### 🔒 安全编辑链 (7)
@@ -160,6 +169,23 @@ Python ≥ 3.10
 |------|------|
 | `dev-workflow` | 编码/改代码/修 bug/重构任务 |
 
+## 快速上手
+
+改代码的标准流程：
+
+```
+git_status(cwd=".")               # 确认工作区干净
+rg_search(pattern="old_func", file_exts="py")  # 找到所有引用
+safe_edit(filepath="main.py",     # 执行编辑
+          old="x = 1",
+          new="x = 42")
+syntax_check(filepath="main.py")  # 验证语法
+lint_runner(filepath="main.py")   # 检查代码质量
+git_diff(cwd=".", staged=true)    # 自查改动
+git_commit(cwd=".",               # 提交
+           message="refactor: replace old_func with new_func")
+```
+
 ## 测试
 
 ```bash
@@ -167,7 +193,11 @@ pip install pytest
 python -m pytest tests/ -v
 ```
 
-51 用例，覆盖 SSRF、safe_edit、Zip-slip、SQL 注入、正则回溯、协议工厂、git commit 守卫。
+100 用例，覆盖 SSRF、safe_edit 防御链、Zip-slip、SQL 注入、ReDoS、注册表一致性、linter fallback 等。
+
+## 英文文档
+
+[English README](README_EN.md)
 
 ## 版本
 

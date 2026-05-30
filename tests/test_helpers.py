@@ -72,8 +72,38 @@ class TestHelpers:
         assert data["ok"] is True
         assert data["data"] == {"ok": True, "data": [1, 2, 3]}
 
-    def test_unwrap_non_dict(self):
-        result = unwrap("not a dict")
+    def test_unwrap_ok_true_with_proposal_pass_through(self):
+        """ok=True 含 proposal→直接透传，不包 data 层（防 data.data 嵌套）"""
+        result = unwrap({"ok": True, "proposal": "found 3 files", "count": 3})
+        data = json.loads(result)
+        assert data["ok"] is True
+        assert data["proposal"] == "found 3 files"
+        assert data["count"] == 3
+        assert "data" not in data  # 不嵌套
+
+    def test_unwrap_ok_false_with_proposal_pass_through(self):
+        """ok=False 含 proposal→直接透传（已有行为，确保不倒退）"""
+        result = unwrap({"ok": False, "proposal": "retry", "error": "timeout"})
         data = json.loads(result)
         assert data["ok"] is False
-        assert "非预期类型" in data["error"]
+        assert data["proposal"] == "retry"
+        assert data["error"] == "timeout"
+
+    def test_unwrap_proposal_priority_over_ok(self):
+        """proposal 字段优先级高于 ok 值——先检查 proposal"""
+        # ok=True + proposal → pass through
+        r1 = unwrap({"ok": True, "proposal": "x", "data": [1,2]})
+        d1 = json.loads(r1)
+        assert d1["data"] == [1,2]
+        assert d1["ok"] is True
+        # ok=False + proposal → pass through
+        r2 = unwrap({"ok": False, "proposal": "x", "error": "y"})
+        d2 = json.loads(r2)
+        assert d2["proposal"] == "x"
+
+    def test_unwrap_ok_true_plain_wraps_in_data(self):
+        """纯 ok=True 无 proposal→正常包入 data"""
+        result = unwrap({"ok": True, "count": 5})
+        data = json.loads(result)
+        assert data["ok"] is True
+        assert data["data"]["count"] == 5

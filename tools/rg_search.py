@@ -27,20 +27,23 @@ def _find_rg() -> str | None:
     return shutil.which("rg")
 
 
+_RG_LINE_RE = re.compile(r"^(.*?):(\d+):(.*)$")
+
+
 def _parse_rg_output(stdout: str) -> list[dict]:
     """解析 rg --line-number --no-heading 输出 file:line:content"""
     matches = []
     for line in stdout.strip().split("\n"):
         if not line:
             continue
-        parts = line.rsplit(":", 2)
-        if len(parts) != 3:
+        m = _RG_LINE_RE.match(line)
+        if not m:
             continue
         try:
-            lineno = int(parts[1])
+            lineno = int(m.group(2))
         except ValueError:
             continue
-        matches.append({"file": parts[0], "line": lineno, "content": parts[2]})
+        matches.append({"file": m.group(1), "line": lineno, "content": m.group(3)})
     return matches
 
 
