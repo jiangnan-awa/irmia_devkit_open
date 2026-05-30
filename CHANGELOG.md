@@ -1,5 +1,20 @@
 # Changelog
 
+## v2.3.0 — 基础层补完 (60→61)
+
+- **新工具**: `rg_search` — 文件内容级代码搜索引擎（ripgrep + Python fallback），支持正则、全词匹配、文件类型过滤、上下文展示
+- **编辑增强 (P0)**: `safe_edit`/`file_patch` 加 whitespace-tolerant 匹配（对标 Aider），精确匹配失败时自动对齐行首空白重试
+- **上下文赋能 (P0)**: `rg_search` 支持 `context_lines` 参数（rg -C），`lint_runner` 返回错误行前后代码片段，`syntax_check` 语法错误附带上下文标记
+- **Git 增强 (P0)**: `git_diff` 返回结构化统计（files_changed/added/removed/total_changes）
+- **linter fallback**: `lint_runner` 的 ruff↔pylint 互 fallback——首选未安装时自动切换备用 linter
+- **架构重构 (P1)**: 提取 `_run_cmd()` 统一 subprocess 封装，7 个文件收口；`http_get`/`http_download` 共享 `make_opener`/`check_url`；`config_diff`/`project_init`/`dep_scan` 统一 encoding fallback
+- **psutil 条件引入 (P1)**: `proc_list` 优先使用 psutil（跨平台 + 性能优化），不可用时 fallback 原有实现
+- **防御加固 (P2)**: `json_query` 加递归深度限制 (50)、`dir_tree`/`dir_list` 共享 `SymlinkGuard`、`safe_edit` 备份前预检磁盘空间、`db_query` SQLite URI 跨平台路径修复
+- **测试**: 从 51 用例扩展到 100 用例（+rg_search、+lint_runner fallback、+file_remove 沙箱、+syntax_check context、+registry 一致性检查、+helpers unwrap 透传）
+- **文档**: 新增 `ARCHITECTURE.md`（模块图/数据流/新增工具指南/安全架构）、`README_EN.md`
+- **修复**: `file_patch` 缺 `difflib` import → NameError、`_registry` `TimeDiffTool` 重复定义、`_parse_rg_output` 冒号解析跨平台 bug、`main.py` config 路径改用 `StarTools.get_data_dir()`
+- **依赖**: 新增 `rg_search` 可选依赖 ripgrep（未安装时 Python fallback）
+
 ## v2.2.0 — 统一交互协议
 
 - **proposal 协议**: 新增 `proposal_reply()` 工厂函数，17 个工具的失败/歧义返回统一为 `{proposal, evidence, options, next_call}` 四字段结构化提案。覆盖 `safe_edit`、`git_commit`、`syntax_check`、`port_check`、`es_search`、`lint_runner`、`dep_scan`、`config_diff`、`log_parse`、`text_filter` 等

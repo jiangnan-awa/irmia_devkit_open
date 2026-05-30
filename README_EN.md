@@ -40,9 +40,11 @@ Place the plugin folder into AstrBot's `data/plugins/` directory and restart Ast
 
 ## Design
 
-`safe_edit` enforces a defensive editing workflow: backup → exact replacement → syntax check → auto-rollback on failure. Multi-match ambiguity is resolved through `occurrence=N` with line-by-line previews.
+`safe_edit` enforces a defensive editing workflow: backup → exact replacement → whitespace-tolerant fallback → syntax check → auto-rollback on failure. When the LLM's `old` string is off by a level of indentation, whitespace alignment automatically retries before failing. Multi-match ambiguity is resolved through `occurrence=N` with line-by-line previews.
 
 17 tools return structured `{proposal, evidence, options, next_call}` on failure or ambiguity instead of plain error text.
+
+`syntax_check`/`lint_runner`/`rg_search` include surrounding code context in their results, enabling the LLM to locate issues without an extra file read.
 
 61 tools organized into 9 groups. Disable entire groups or individual tools via `config.json`.
 
@@ -181,7 +183,7 @@ python -m pytest tests/ -v
 
 ## Version
 
-2.2.0 · [Changelog](CHANGELOG.md)
+2.3.0 · [Changelog](CHANGELOG.md)
 
 ## Author
 

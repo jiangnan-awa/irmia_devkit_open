@@ -40,9 +40,11 @@ Python ≥ 3.10
 
 ## 设计说明
 
-`safe_edit` 提供了备份→精确替换→语法检查→失败自动回滚的编辑流程。多处匹配时返回所有位置的 `{行号, 列号, 预览}` 并提示用 `occurrence=N` 消歧。
+`safe_edit` 提供了备份→精确替换→whitespace-tolerant 模糊匹配→语法检查→失败自动回滚的五步编辑流程。当 LLM 传的 old 文本差一两格缩进时，自动对齐行首空白后重试匹配（对标 Aider），避免多一轮交互。多处匹配时返回所有位置的 `{行号, 列号, 预览}` 并提示用 `occurrence=N` 消歧。
 
 部分工具（`git_commit`、`syntax_check`、`port_check`、`es_search`、`lint_runner`、`dep_scan` 等 17 个）在失败或歧义时返回 `{proposal, evidence, options, next_call}` 结构化信息，替代纯文本错误。
+
+`syntax_check`/`lint_runner`/`rg_search` 在返回结果中附带代码上下文片段，帮助 LLM 直接定位问题，无需额外读文件。
 
 61 个工具按 9 组管理，可在 `config.json` 中按组或按单个工具关闭。
 
@@ -201,7 +203,7 @@ python -m pytest tests/ -v
 
 ## 版本
 
-2.2.0 · [Changelog](CHANGELOG.md)
+2.3.0 · [Changelog](CHANGELOG.md)
 
 ## 作者
 
