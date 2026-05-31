@@ -104,7 +104,7 @@ from .file_remove import remove as _file_remove
 # ═══════════════════════════════════════════════════════════
 
 
-# ══ 安全编辑链 (7) ══
+# ══ 安全编辑链 ══
 @dataclass
 class SafeEditTool(FunctionTool):
     """安全编辑：自动备份→精确替换→语法检查→通过保留/失败回滚。"""
@@ -345,7 +345,7 @@ class SyntaxCheckTool(FunctionTool):
             return _err(f"syntax_check 失败: {e}")
 
 
-# ══ Git & GitHub (11) ══
+# ══ Git & GitHub ══
 @dataclass
 class GitStatusTool(FunctionTool):
     """Git 状态。"""
@@ -567,7 +567,7 @@ class GitPushTool(FunctionTool):
             return _err(f"git_push 失败: {e}")
 
 
-# ══ 文件系统 (10) ══
+# ══ 文件系统 ══
 @dataclass
 class EsSearchTool(FunctionTool):
     """Everything 文件名极速搜索。"""
@@ -712,7 +712,7 @@ class RgSearchTool(FunctionTool):
             return _err(f"rg_search 失败: {e}")
 
 
-# ══ 网络 (3) ══
+# ══ 网络 ══
 @dataclass
 class HttpGetTool(FunctionTool):
     """HTTP GET 请求。"""
@@ -844,7 +844,7 @@ class HttpDownloadTool(FunctionTool):
             return _err(f"http_download 失败: {e}")
 
 
-# ══ 文本处理 (10) ══
+# ══ 文本处理 ══
 @dataclass
 class HtmlExtractTool(FunctionTool):
     """HTML 内容提取。"""
@@ -956,7 +956,7 @@ class DiskInfoTool(FunctionTool):
             return _err(f"disk_info 失败: {e}")
 
 
-# ══ 系统信息 (4) ══
+# ══ 系统信息 ══
 @dataclass
 class PortCheckTool(FunctionTool):
     """端口检测。"""
@@ -1207,7 +1207,7 @@ class SysSnapshotTool(FunctionTool):
             return _err(f"sys_snapshot 失败: {e}")
 
 
-# ══ 编码 (3) ══
+# ══ 编码 ══
 @dataclass
 class Base64Tool(FunctionTool):
     name: str = "base64_"
@@ -1235,8 +1235,8 @@ class Base64Tool(FunctionTool):
     ) -> ToolExecResult:
         _tool_stats.record(self.name)
         try:
-            if action == "encode": return _unwrap(b64_encode(data, as_uri))
-            return _unwrap(b64_decode(data, strip_uri))
+            if action == "encode": return _unwrap(await _run_sync(b64_encode, data, as_uri))
+            return _unwrap(await _run_sync(b64_decode, data, strip_uri))
         except Exception as e: return _err(f"base64_ 失败: {e}")
 
 
@@ -1260,8 +1260,8 @@ class HexTool(FunctionTool):
     async def call(self, context: ContextWrapper[AstrAgentContext], action: str, data: str, **kwargs) -> ToolExecResult:
         _tool_stats.record(self.name)
         try:
-            if action == "encode": return _unwrap(hex_encode(data))
-            return _unwrap(hex_decode(data))
+            if action == "encode": return _unwrap(await _run_sync(hex_encode, data))
+            return _unwrap(await _run_sync(hex_decode, data))
         except Exception as e: return _err(f"hex_ 失败: {e}")
 
 
@@ -1282,12 +1282,12 @@ class UrlTool(FunctionTool):
     async def call(self, context: ContextWrapper[AstrAgentContext], action: str, data: str, **kwargs) -> ToolExecResult:
         _tool_stats.record(self.name)
         try:
-            if action == "encode": return _unwrap(url_encode(data))
-            return _unwrap(url_decode(data))
+            if action == "encode": return _unwrap(await _run_sync(url_encode, data))
+            return _unwrap(await _run_sync(url_decode, data))
         except Exception as e: return _err(f"url_ 失败: {e}")
 
 
-# ══ 时间 (3) ══
+# ══ 时间 ══
 @dataclass
 class TimeNowTool(FunctionTool):
     name: str = "time_now"
@@ -1300,7 +1300,7 @@ class TimeNowTool(FunctionTool):
     ) -> ToolExecResult:
         _tool_stats.record(self.name)
         try:
-            return _unwrap(_time_now())
+            return _unwrap(await _run_sync(_time_now))
         except Exception as e:
             return _err(f"time_now 失败: {e}")
 
@@ -1327,9 +1327,9 @@ class TimeConvertTool(FunctionTool):
         try:
             if direction == "to_iso":
                 if ts is None: return _err("to_iso 需要 ts 参数")
-                return _unwrap(ts_to_iso(ts, ms))
+                return _unwrap(await _run_sync(ts_to_iso, ts, ms))
             if not iso: return _err("to_ts 需要 iso 参数")
-            return _unwrap(iso_to_ts(iso))
+            return _unwrap(await _run_sync(iso_to_ts, iso))
         except Exception as e: return _err(f"time_convert 失败: {e}")
 
 
@@ -1352,7 +1352,7 @@ class TimeDiffTool(FunctionTool):
     ) -> ToolExecResult:
         _tool_stats.record(self.name)
         try:
-            return _unwrap(time_diff(iso1, iso2))
+            return _unwrap(await _run_sync(time_diff, iso1, iso2))
         except Exception as e:
             return _err(f"time_diff 失败: {e}")
 
@@ -1480,7 +1480,7 @@ class DirListTool(FunctionTool):
     ) -> ToolExecResult:
         _tool_stats.record(self.name)
         try:
-            return _unwrap(_list_dir(path, pattern, max_depth, show_hidden))
+            return _unwrap(await _run_sync(_list_dir, path, pattern, max_depth, show_hidden))
         except Exception as e:
             return _err(f"dir_list 失败: {e}")
 
@@ -1514,7 +1514,7 @@ class JsonQueryTool(FunctionTool):
     ) -> ToolExecResult:
         _tool_stats.record(self.name)
         try:
-            return _unwrap(_json_query(data, path))
+            return _unwrap(await _run_sync(_json_query, data, path))
         except Exception as e:
             return _err(f"json_query 失败: {e}")
 
@@ -1572,9 +1572,9 @@ class TextFilterTool(FunctionTool):
     ) -> ToolExecResult:
         _tool_stats.record(self.name)
         try:
-            return _unwrap(
-                _text_filter(text, action, pattern, n, case_sensitive, regex)
-            )
+            return _unwrap(await _run_sync(
+                _text_filter, text, action, pattern, n, case_sensitive, regex
+            ))
         except Exception as e:
             return _err(f"text_filter 失败: {e}")
 
@@ -1614,7 +1614,7 @@ class DiffStringsTool(FunctionTool):
     ) -> ToolExecResult:
         _tool_stats.record(self.name)
         try:
-            return _unwrap(_diff_strings(a, b, context_lines))
+            return _unwrap(await _run_sync(_diff_strings, a, b, context_lines))
         except Exception as e:
             return _err(f"diff_strings 失败: {e}")
 
@@ -1657,7 +1657,7 @@ class CsvParseTool(FunctionTool):
     ) -> ToolExecResult:
         _tool_stats.record(self.name)
         try:
-            return _unwrap(_csv_parse(text, delimiter, has_header))
+            return _unwrap(await _run_sync(_csv_parse, text, delimiter, has_header))
         except Exception as e:
             return _err(f"csv_parse 失败: {e}")
 
@@ -1695,12 +1695,12 @@ class CsvGenTool(FunctionTool):
         _tool_stats.record(self.name)
         try:
             parsed = json.loads(rows)
-            return _unwrap(_csv_gen(parsed, delimiter))
+            return _unwrap(await _run_sync(_csv_gen, parsed, delimiter))
         except Exception as e:
             return _err(f"csv_gen 失败: {e}")
 
 
-# ══ 扩展 (8) ══
+# ══ 扩展 ══
 @dataclass
 class UuidGenTool(FunctionTool):
     """UUID/随机字符串生成。"""
@@ -1737,7 +1737,7 @@ class UuidGenTool(FunctionTool):
     ) -> ToolExecResult:
         _tool_stats.record(self.name)
         try:
-            return _unwrap(_uuid_gen(kind, length))
+            return _unwrap(await _run_sync(_uuid_gen, kind, length))
         except Exception as e:
             return _err(f"uuid_gen 失败: {e}")
 
@@ -1767,7 +1767,7 @@ class SemverTool(FunctionTool):
     ) -> ToolExecResult:
         _tool_stats.record(self.name)
         try:
-            return _unwrap(_semver_compare(v1, v2))
+            return _unwrap(await _run_sync(_semver_compare, v1, v2))
         except Exception as e:
             return _err(f"semver_compare 失败: {e}")
 
@@ -1794,7 +1794,7 @@ class MdStripTool(FunctionTool):
     ) -> ToolExecResult:
         _tool_stats.record(self.name)
         try:
-            return _unwrap(_md_strip(text))
+            return _unwrap(await _run_sync(_md_strip, text))
         except Exception as e:
             return _err(f"md_strip 失败: {e}")
 

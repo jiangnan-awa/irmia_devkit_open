@@ -136,8 +136,11 @@ def edit(
         pass  # 无法检测磁盘空间，继续尝试
     ts = datetime.now().strftime("%Y%m%d_%H%M%S_%f")
     backup_path = backup_root / f"{p.name}.{ts}.bak"
-    backup_root.mkdir(parents=True, exist_ok=True)
-    shutil.copy2(filepath, str(backup_path))
+    try:
+        backup_root.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(filepath, str(backup_path))
+    except PermissionError as e:
+        return {"ok": False, "error": f"权限不足，无法创建备份：{e}"}
 
     result = {
         "file": filepath,
@@ -151,8 +154,11 @@ def edit(
         positions = _collect_positions(content, old)
         idx = positions[occurrence - 1]
         content = content[:idx] + new + content[idx + len(old) :]
-        with open(filepath, "w", encoding=encoding, newline="") as f:
-            f.write(content)
+        try:
+            with open(filepath, "w", encoding=encoding, newline="") as f:
+                f.write(content)
+        except PermissionError as e:
+            return {"ok": False, "error": f"权限不足，无法写入文件：{e}"}
         result["replaced"] = 1
         result["occurrence"] = occurrence
     else:

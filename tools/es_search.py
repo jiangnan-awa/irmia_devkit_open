@@ -1,11 +1,14 @@
 """
-es_search — Everything 搜索引擎封装。
-使用 es.exe 进行毫秒级文件名搜索，比 os.walk/dir 快 50-500 倍。
+es_search — 文件名搜索引擎封装。
+Windows: Everything + es.exe 毫秒级搜索。
+Linux/macOS: locate → fd → Python os.walk 三层 fallback。
 """
 
 import csv
+import fnmatch
 import io
 import os
+import re
 import shutil
 from pathlib import Path
 from .config import get_config
@@ -34,6 +37,158 @@ SORT_MAP = {
     "date_accessed": "date-accessed",
     "run_count": "run-count",
 }
+
+# Linux/macOS 跳过目录（对标 Everything 跳过系统目录）
+_POSIX_SKIP_DIRS = {
+    "/proc", "/sys", "/dev", "/run", "/snap", "/var/lib/lxcfs", "/var/lib/docker",
+    ".git", "__pycache__", "node_modules", ".venv", "venv", ".tox", ".mypy_cache",
+}
+
+_MAX_POSIX_FILES = 10000
+
+
+def _posix_search(
+    query: str, path: str | None = None, max_results: int = 100,
+    case_sensitive: bool = False, file_type: str = "all", ext: str | None = None,
+) -> dict:
+    """Linux/macOS 文件名搜索：locate → fd → os.walk 三层 fallback。"""
+    search_root = path or "/"
+
+    # --- Layer 1: locate ---
+    locate_path = shutil.which("locate")
+    if locate_path:
+        try:
+            loc_query = query.replace("*", "").replace("?", "")
+            if not loc_query:
+                loc_query = query
+            args = [locate_path, "-l", str(max_results), "-i" if not case_sensitive else "", loc_query]
+            args = [a for a in args if a]
+            r = _run_cmd(args, timeout=10)
+            if r["ok"] and r["stdout"]:
+                items = _parse_locate_output(r["stdout"], max_results, search_root,
+                                              file_type, ext, case_sensitive)
+                if items:
+                    return {"ok": True, "count": len(items), "total_size": 0, "items": items,
+                            "engine": "locate"}
+        except Exception:
+            pass
+
+    # --- Layer 2: fd ---
+    fd_path = shutil.which("fd")
+    if fd_path:
+        try:
+            args = [fd_path, "--max-results", str(max_results), "--type", "f" if file_type == "file" else ("d" if file_type == "folder" else "f")]
+            if ext:
+                args.extend(["-e", ext])
+            if case_sensitive:
+                args.append("--case-sensitive")
+            args.append(query)
+            if search_root != "/":
+                args.append(search_root)
+            r = _run_cmd(args, timeout=15)
+            if r["ok"] and r["stdout"]:
+                items = _parse_locate_output(r["stdout"], max_results, search_root,
+                                              file_type, ext, case_sensitive)
+                if items:
+                    return {"ok": True, "count": len(items), "total_size": 0, "items": items,
+                            "engine": "fd", "note": "Linux 搜索模式：搜索语法有限（不支持 ext: folder: 等 Everything 语法）"}
+        except Exception:
+            pass
+
+    # --- Layer 3: Python os.walk ---
+    return _python_fallback_search(query, search_root, max_results, case_sensitive, file_type, ext)
+
+
+def _parse_locate_output(stdout: str, max_results: int, search_root: str,
+                         file_type: str, ext: str, case_sensitive: bool) -> list[dict]:
+    """解析 locate/fd 输出（每行一个绝对路径），转成 es_search 统一格式。"""
+    items = []
+    for line in stdout.strip().split("\n"):
+        line = line.strip()
+        if not line:
+            continue
+        p = Path(line)
+        # 限定搜索目录
+        if search_root != "/" and not str(p.resolve()).startswith(str(Path(search_root).resolve())):
+            continue
+        # 过滤文件/目录
+        try:
+            if file_type == "file" and not p.is_file():
+                continue
+            if file_type == "folder" and not p.is_dir():
+                continue
+        except OSError:
+            continue
+        # 扩展名过滤
+        if ext and p.suffix.lstrip(".") != ext.lstrip("."):
+            continue
+        # 大小写过滤（locate -i 已处理，fd --case-sensitive 已处理）
+        try:
+            st = p.stat()
+            size = st.st_size
+            date_mod = str(st.st_mtime)
+        except OSError:
+            size = 0
+            date_mod = ""
+        items.append({
+            "name": p.name,
+            "path": str(p.parent),
+            "full": str(p),
+            "size": size,
+            "date_modified": date_mod,
+        })
+        if len(items) >= max_results:
+            break
+    return items
+
+
+def _python_fallback_search(query: str, search_root: str, max_results: int,
+                            case_sensitive: bool, file_type: str, ext: str) -> dict:
+    """Python os.walk 兜底搜索（最慢，但一定可用）。"""
+    items = []
+    files_scanned = 0
+    rp = Path(search_root).resolve()
+    try:
+        for root, dirs, files in os.walk(search_root):
+            dirs[:] = [d for d in dirs if d not in _POSIX_SKIP_DIRS and not d.startswith(".")]
+            if files_scanned >= _MAX_POSIX_FILES:
+                break
+            entries = []
+            if file_type == "folder":
+                entries = dirs
+            elif file_type == "file":
+                entries = files
+            else:
+                entries = files + dirs
+            for entry in entries:
+                files_scanned += 1
+                ep = Path(root) / entry
+                try:
+                    st = ep.stat()
+                except OSError:
+                    continue
+                if ext and ep.suffix.lstrip(".") != ext.lstrip("."):
+                    continue
+                name_lower = ep.name.lower() if not case_sensitive else ep.name
+                q_lower = query.lower() if not case_sensitive else query
+                if q_lower not in name_lower and not fnmatch.fnmatch(name_lower, q_lower):
+                    continue
+                items.append({
+                    "name": ep.name,
+                    "path": str(ep.parent),
+                    "full": str(ep),
+                    "size": st.st_size,
+                    "date_modified": str(st.st_mtime),
+                })
+                if len(items) >= max_results:
+                    break
+            if len(items) >= max_results:
+                break
+    except PermissionError:
+        pass
+
+    note = "Linux 搜索模式（Python 扫描较慢）。建议安装 locate（sudo apt install mlocate）或 fd（sudo apt install fd-find）"
+    return {"ok": True, "count": len(items), "total_size": 0, "items": items, "engine": "python", "note": note}
 
 
 def search(
@@ -67,18 +222,7 @@ def search(
     """
     es_path = _get_es_path()
     if not Path(es_path).exists():
-        return proposal_reply(
-            False,
-            f"Everything (es.exe) 未找到: {es_path}",
-            error=f"es.exe 不存在: {es_path}",
-            evidence={"configured": get_config().get("es_path"), "fallback": es_path},
-            options=[
-                "安装 Everything 并确保 es.exe 在 PATH 中",
-                "配置 es_path",
-                "回退到 dir_list",
-            ],
-            next_call={"tool": "dir_list", "params": {"path": path or "."}},
-        )
+        return _posix_search(query, path, max_results, case_sensitive, file_type, ext)
 
     args = [es_path]
 
