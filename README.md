@@ -14,6 +14,8 @@ Python ≥ 3.10
 
 | 字段 | 说明 |
 |------|------|
+| `owner_sid` | 管理员会话 ID（可不填，插件自动读取 AstrBot 管理员列表） |
+| `allowed_ids` | 额外允许的用户 ID（逗号分隔，平台无关） |
 | `tool_groups` | 9 组 bool 开关，`false` = 关闭整组 |
 | `disabled_tools` | 逗号分隔单独禁用的工具名 |
 | `es_path` | Everything CLI 路径，空自动检测 |
@@ -41,6 +43,8 @@ Python ≥ 3.10
 ## 设计说明
 
 `safe_edit` 提供了备份→精确替换→whitespace-tolerant 模糊匹配→语法检查→失败自动回滚的五步编辑流程。当 LLM 传的 old 文本差一两格缩进时，自动对齐行首空白后重试匹配（对标 Aider），避免多一轮交互。多处匹配时返回所有位置的 `{行号, 列号, 预览}` 并提示用 `occurrence=N` 消歧。
+
+**权限控制**: 插件采用双层防线：`on_llm_request` 钩子从 `req.func_tool` 中移除本插件工具（非管理员 LLM 不可见）+ `protect_tool` 在每个工具的 `call()` 入口做二次鉴权。自动读取 AstrBot 全局管理员列表，无需重复配置。
 
 部分工具（`git_commit`、`syntax_check`、`port_check`、`es_search`、`lint_runner`、`dep_scan` 等 17 个）在失败或歧义时返回 `{proposal, evidence, options, next_call}` 结构化信息，替代纯文本错误。
 
@@ -195,7 +199,7 @@ pip install pytest
 python -m pytest tests/ -v
 ```
 
-100 用例，覆盖 SSRF、safe_edit 防御链、Zip-slip、SQL 注入、ReDoS、注册表一致性、linter fallback 等。
+120 用例，覆盖 SSRF、safe_edit 防御链、Zip-slip、SQL 注入、ReDoS、注册表一致性、linter fallback、权限鉴权等。
 
 ## 英文文档
 
@@ -203,7 +207,7 @@ python -m pytest tests/ -v
 
 ## 版本
 
-2.3.0 · [Changelog](CHANGELOG.md)
+2.3.5 · [Changelog](CHANGELOG.md)
 
 ## 作者
 

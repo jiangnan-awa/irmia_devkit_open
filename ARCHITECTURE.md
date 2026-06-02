@@ -29,13 +29,15 @@ irmia_devkit_open/
 │   ├── test_regex.py            # ReDoS protection
 │   ├── test_http_utils.py       # SSRF validation
 │   ├── test_db_query.py         # SQL injection, read-only enforcement
-│   └── test_file_zip.py         # Zip-slip protection
+│   ├── test_file_zip.py         # Zip-slip protection
+│   └── test_auth.py             # protect_tool, build_allowed_ids, Layer 1 filtering
 └── tools/
     ├── __init__.py              # Package marker
     ├── _registry.py             # Tool class definitions + TOOL_GROUPS + _ALL_TOOLS
     ├── _helpers.py              # err_json, unwrap, run_sync, proposal_reply
     ├── _file_utils.py           # read_file, find_closest_line, size limits
     ├── _http_utils.py           # SSRF validate_url, SafeRedirectHandler
+    ├── _auth.py                 # protect_tool wrapper + build_allowed_ids
     ├── config.py                # Module-level config singleton
     ├── tool_stats.py            # In-memory call counter
     │
@@ -99,9 +101,26 @@ AstrBot loads plugin
             ├─ Reads config.json (→ data_dir or plugin_dir)
             ├─ Merges WebUI config (if present)
             ├─ Calls config.set_config() to inject global config
+            ├─ Calls build_allowed_ids() to merge allowed_ids + AstrBot admins_id
             ├─ Filters tools: TOOL_GROUPS minus disabled_tools
             ├─ Instantiates enabled tool classes from _ALL_TOOLS
+            ├─ Wraps each tool with protect_tool(tool, allowed_ids) — Layer 2 guard
             └─ Calls context.add_llm_tools(*tools) to register with AstrBot
+```
+
+## Auth Flow
+
+```
+LLM request arrives
+  ├─ _auth_guard (on_llm_request hook)          ← Layer 1
+  │    ├─ sender_id in allowed_ids? → pass
+  │    ├─ event.role == "admin"?     → pass
+  │    └─ else → remove plugin tools from req.func_tool
+  │
+  └─ Tool.call()                                  ← Layer 2
+       ├─ guarded_call() wraps original call()
+       ├─ sender in allowed_ids or admin? → delegate
+       └─ else → JSON error: "权限不足"
 ```
 
 ## Tool Execution Flow
@@ -292,6 +311,21 @@ Layer 4: SafeRedirectHandler re-validates on every HTTP redirect
 2. For each ZIP entry, compute (target_dir / entry_name).resolve()
 3. Verify resolved path starts with target directory path + os.sep
 4. Reject entries that escape the target directory
+```
+
+### Admin Permission Enforcement (_auth.py)
+```
+Layer 1 — on_llm_request hook (_auth_guard):
+  1. Get sender_id from event, check against allowed_ids + event.role
+  2. If unauthorized → iterate req.func_tool.tools
+  3. Remove all tools whose handler_module_path starts with plugin prefix
+  4. Rebuild ToolSet with remaining tools
+
+Layer 2 — tool call() wrapper (protect_tool):
+  1. Wrap original call() with guarded_call()
+  2. Check event.role == "admin" or sender_id in allowed_ids
+  3. If unauthorized → return JSON error, logger.warning
+  4. Any exception in guard → deny access, logger.error
 ```
 
 ## Testing Strategy

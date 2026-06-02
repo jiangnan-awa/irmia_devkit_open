@@ -16,6 +16,8 @@ Place the plugin folder into AstrBot's `data/plugins/` directory and restart Ast
 
 | Field | Description |
 |------|------|
+| `owner_sid` | Admin session ID (optional; plugin auto-reads AstrBot admin list) |
+| `allowed_ids` | Additional allowed user IDs (comma-separated, platform-agnostic) |
 | `tool_groups` | 9 group bool switches (`false` = disable entire group) |
 | `disabled_tools` | Comma-separated names of individually disabled tools |
 | `es_path` | Everything CLI path (auto-detect if empty) |
@@ -41,6 +43,8 @@ Place the plugin folder into AstrBot's `data/plugins/` directory and restart Ast
 ## Design
 
 `safe_edit` enforces a defensive editing workflow: backup → exact replacement → whitespace-tolerant fallback → syntax check → auto-rollback on failure. When the LLM's `old` string is off by a level of indentation, whitespace alignment automatically retries before failing. Multi-match ambiguity is resolved through `occurrence=N` with line-by-line previews.
+
+**Permission control**: Two-layer defense — `on_llm_request` hook removes plugin tools from `req.func_tool` (LLM cannot see them) + `protect_tool` wraps each tool's `call()` with admin check. Automatically reads AstrBot's global admin list; no duplicate configuration needed.
 
 17 tools return structured `{proposal, evidence, options, next_call}` on failure or ambiguity instead of plain error text.
 
@@ -179,11 +183,11 @@ pip install pytest
 python -m pytest tests/ -v
 ```
 
-100 test cases covering SSRF, safe_edit, Zip-slip, SQL injection, ReDoS, registry consistency, linter fallback, and tool correctness.
+120 test cases covering SSRF, safe_edit, Zip-slip, SQL injection, ReDoS, registry consistency, linter fallback, auth permission checks, and tool correctness.
 
 ## Version
 
-2.3.0 · [Changelog](CHANGELOG.md)
+2.3.5 · [Changelog](CHANGELOG.md)
 
 ## Author
 

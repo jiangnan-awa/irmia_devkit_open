@@ -1,5 +1,14 @@
 # Changelog
 
+## v2.3.5 — 双层权限防线 + 代码审查修复
+
+- **权限防线 (P0)**: 新增 `tools/_auth.py` 模块 — `protect_tool()` 包裹每个工具的 `call()` 执行前鉴权；`build_allowed_ids()` 自动读取 AstrBot 全局管理员列表 + 插件额外配置
+- **钩子清理 (P0)**: `main.py` 新增 `_auth_guard` — `on_llm_request` 钩子按 `handler_module_path` 清空本插件工具，非管理员 LLM 不可见
+- **配置**: `config.json` / `_conf_schema.json` 新增 `owner_sid`、`allowed_ids` 字段
+- **测试**: 新增 `test_auth.py` — 20 用例覆盖 `protect_tool` 放行/拦截/异常、`build_allowed_ids` 合并/降级、Layer 1 过滤逻辑（共 120 用例）
+- **代码审查修复**: 三轮审查修复 18 项问题 — `_allowed_ids` 缓存同步、`_rebuild_func_tool` 静默失败→告警、`http_download` 反模式消除、`syntax_check` 异常限窄+TimeoutExpired、`rg_search` whole_word `re.escape`、死 import 清理、`flag_map` 提取常量等
+- **缺陷**: 零存量已知缺陷
+
 ## v2.3.0 — 基础层补完 (60→61)
 
 - **新工具**: `rg_search` — 文件内容级代码搜索引擎（ripgrep + Python fallback），支持正则、全词匹配、文件类型过滤、上下文展示
