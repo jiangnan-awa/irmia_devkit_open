@@ -17,9 +17,11 @@ from astrbot.api.provider import ProviderRequest
 from .tools import config as _tool_config
 
 from .tools._registry import TOOL_GROUPS, _ALL_TOOLS
+from .tools._auth import protect_tool, build_allowed_ids
 
 _DEFAULT_CONFIG = {
     "owner_sid": "",
+    "allowed_ids": "",
     "tool_groups": {g: True for g in TOOL_GROUPS},
     "disabled_tools": [],
     "es_path": "",
@@ -28,6 +30,8 @@ _DEFAULT_CONFIG = {
     "lock_dirs": [],
     "backup_dir": "",
 }
+
+_PLUGIN_MODULE_PREFIX = "astrbot_plugin_irmia_devkit"
 
 
 class Main(star.Star):
@@ -68,12 +72,14 @@ class Main(star.Star):
         # AstrBot WebUI 配置优先于 config.json
         if config:
             changed = False
-            # owner_sid
             web_owner = config.get("owner_sid", "")
             if web_owner:
                 _config["owner_sid"] = web_owner
                 changed = True
-            # paths 嵌套（工具路径）
+            web_allowed = config.get("allowed_ids", "")
+            if web_allowed:
+                _config["allowed_ids"] = web_allowed
+                changed = True
             paths = config.get("paths", {})
             for key in ("es_path", "gh_path", "backup_dir"):
                 if paths.get(key):
@@ -102,7 +108,10 @@ class Main(star.Star):
 
         _tool_config.set_config(_config, plug_dir)
 
-        # 过滤已启用的工具并注册
+        # 构建允许列表 + 注册工具
+        allowed_ids = build_allowed_ids(context, _config)
+        self._allowed_ids_cache = allowed_ids
+
         tool_groups = _config.get("tool_groups", {})
         disabled = _config.get("disabled_tools", [])
         enabled = set()
@@ -113,24 +122,47 @@ class Main(star.Star):
             enabled.discard(t)
 
         tools = [_ALL_TOOLS[name]() for name in enabled if name in _ALL_TOOLS]
+        tools = [protect_tool(t, allowed_ids) for t in tools]
         context.add_llm_tools(*tools)
-        logger.info(f"🔧 弥亚开发工具箱已就绪 — {len(tools)} 个工具注册完毕")
+        allowed_count = len(allowed_ids)
+        logger.info(f"devkit ready — {len(tools)} tools registered, {allowed_count} allowed user{'s' if allowed_count != 1 else ''}")
 
     @filter.on_llm_request()
-    async def _on_llm_request(self, event: AstrMessageEvent, req: ProviderRequest):
-        owner_sid = _tool_config.get_owner_sid()
-        current_sid = event.get_session_id()
-
-        # 主人匹配 → 全权限
-        if owner_sid and current_sid == owner_sid:
+    async def _auth_guard(self, event: AstrMessageEvent, req: ProviderRequest):
+        sender_id = str(event.get_sender_id() or "").strip()
+        if sender_id in self._allowed_ids or getattr(event, "role", "") == "admin":
             return
 
-        # 未配置 owner_sid → 仅私聊放行
-        if not owner_sid and "group" not in current_sid.lower():
-            return
+        if req.func_tool:
+            removed = []
+            kept = []
+            for tool in req.func_tool.tools:
+                mp = getattr(tool, "handler_module_path", "")
+                if mp and mp.startswith(_PLUGIN_MODULE_PREFIX):
+                    removed.append(tool.name)
+                else:
+                    kept.append(tool)
+            if removed:
+                self._rebuild_func_tool(req, kept)
+                logger.info(
+                    "devkit L1 auth: removed %d tools for sender=%s",
+                    len(removed), sender_id,
+                )
 
-        # 非主人或群聊 → 清空工具
-        if hasattr(req, 'functions') and req.functions:
-            original_count = len(req.functions)
-            req.functions = []
-            logger.info(f"🔒 未授权会话 {current_sid} — {original_count} 个工具已拦截")
+    @staticmethod
+    def _rebuild_func_tool(req, kept: list) -> None:
+        try:
+            from astrbot.core.agent.tool import ToolSet
+            new_set = ToolSet()
+            for tool in kept:
+                new_set.add_tool(tool)
+            req.func_tool = new_set
+        except ImportError:
+            logger.warning(
+                "devkit L1 auth: failed to import ToolSet — tool removal skipped, "
+                "non-admin may retain access to plugin tools"
+            )
+
+    @property
+    def _allowed_ids(self) -> set:
+        return self._allowed_ids_cache
