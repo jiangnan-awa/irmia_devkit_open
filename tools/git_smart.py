@@ -4,7 +4,6 @@ git_smart — Git 操作封装。
 """
 
 import re
-import subprocess
 
 from ._helpers import proposal_reply, _run_cmd
 

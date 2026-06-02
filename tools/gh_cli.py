@@ -3,7 +3,6 @@ gh_cli — GitHub CLI 封装。
 通过 gh 命令直接操作 GitHub，无需浏览器。
 """
 
-import subprocess
 import json
 import os
 import shutil

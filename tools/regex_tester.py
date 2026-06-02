@@ -11,6 +11,14 @@ import signal
 _MAX_PATTERN_LEN = 2000
 _MAX_TEXT_LEN = 100_000
 _REGEX_TIMEOUT = 3  # 秒
+# Windows 上 signal.SIGALRM 存在但 alarm() 为 no-op，靠 500 匹配上限兜底
+
+_FLAG_MAP = {
+    "i": re.IGNORECASE,
+    "m": re.MULTILINE,
+    "s": re.DOTALL,
+    "x": re.VERBOSE,
+}
 
 # S2: 嵌套量词检测 — 防灾难性回溯
 _NESTED_RE = re.compile(r"\([^)]*\)[\*\+]\s*[\*\+]|\([^)]*[\*\+]\s*\)[\*\+]")
@@ -41,21 +49,14 @@ def test(pattern: str, text: str, flags: str = "") -> dict:
             "error": "正则包含嵌套量词（如 (a+)+），存在灾难性回溯风险，已被拒绝",
         }
 
-    flag_map = {
-        "i": re.IGNORECASE,
-        "m": re.MULTILINE,
-        "s": re.DOTALL,
-        "x": re.VERBOSE,
-    }
-
     re_flags = 0
     for ch in flags:
-        if ch in flag_map:
-            re_flags |= flag_map[ch]
+        if ch in _FLAG_MAP:
+            re_flags |= _FLAG_MAP[ch]
         else:
             return {
                 "ok": False,
-                "error": f"不支持的 flag: '{ch}'，可选: {list(flag_map.keys())}",
+                "error": f"不支持的 flag: '{ch}'，可选: {list(_FLAG_MAP.keys())}",
             }
 
     try:
@@ -120,21 +121,14 @@ def replace(pattern: str, replacement: str, text: str, flags: str = "") -> dict:
     if _NESTED_RE.search(pattern):
         return {"ok": False, "error": "正则包含嵌套量词，存在灾难性回溯风险，已被拒绝"}
 
-    flag_map = {
-        "i": re.IGNORECASE,
-        "m": re.MULTILINE,
-        "s": re.DOTALL,
-        "x": re.VERBOSE,
-    }
-
     re_flags = 0
     for ch in flags:
-        if ch in flag_map:
-            re_flags |= flag_map[ch]
+        if ch in _FLAG_MAP:
+            re_flags |= _FLAG_MAP[ch]
         else:
             return {
                 "ok": False,
-                "error": f"不支持的 flag: '{ch}'，可选: {list(flag_map.keys())}",
+                "error": f"不支持的 flag: '{ch}'，可选: {list(_FLAG_MAP.keys())}",
             }
 
     try:

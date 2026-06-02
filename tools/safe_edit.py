@@ -95,7 +95,7 @@ def edit(
                 "error": "未找到匹配文本，文件内容未修改",
                 "proposal": hint,
                 "evidence": closest or {},
-                "options": ["复制最接近的行作为 old", "用 file_preview 先预览", "确认缩进级别"],
+                "options": ["复制最接近的行作为 old", "确认缩进级别"],
             }
     else:
         result_extra = {}

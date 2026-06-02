@@ -6,6 +6,7 @@ lint_runner — 代码质量检查（ruff/pylint/eslint）。
 import subprocess
 import sys
 import json
+import re as _re
 import shutil
 from pathlib import Path
 
@@ -78,10 +79,13 @@ def _get_line_context(p: Path, line_num: int, context_size: int = 2) -> list[str
 def _add_context(p: Path, issues: list, max_issues: int = 5) -> None:
     """为前 max_issues 个问题附加代码上下文。"""
     for issue in issues[:max_issues]:
-        line_num = issue.get("line") or (issue.get("location", {}).get("row") if isinstance(issue.get("location"), dict) else None)
+        line_num = issue.get("line")
+        if not line_num:
+            loc = issue.get("location")
+            if isinstance(loc, dict):
+                line_num = loc.get("row")
         if not line_num:
             # 尝试从 message 中提取 (line N) 模式（eslint 风格）
-            import re as _re
             m = _re.search(r"\(line (\d+)\)", issue.get("message", ""))
             if m:
                 line_num = int(m.group(1))

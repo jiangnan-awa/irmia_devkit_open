@@ -1,6 +1,12 @@
 {
   "owner_sid": {
-    "description": "主人会话ID（留空则仅私聊可用）。可设为你的 session_id 或 unified_msg_origin。",
+    "description": "管理员会话 ID（可不填）。插件会自动读取 AstrBot 「管理员 ID」列表，此处仅在需要额外放行时填写。",
+    "type": "string",
+    "default": ""
+  },
+  "allowed_ids": {
+    "description": "额外允许使用开发工具箱的管理员 ID（逗号分隔）。插件自动读取 AstrBot 全局管理员列表，此处仅填写额外用户。平台无关，适用于所有接入平台。",
+    "hint": "逗号分隔。",
     "type": "string",
     "default": ""
   },

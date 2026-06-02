@@ -56,9 +56,16 @@ def remove(path: str, confirm: bool = False, max_items: int = 50) -> dict:
                 error="目录删除需二次确认",
                 options=["confirm_delete", "cancel"])
 
-        # 单次 rglob 获取文件列表（计数+大小）
-        files_in_dir = [f for f in p.rglob("*") if f.is_file()]
-        file_count = len(files_in_dir)
+        # 单次遍历：计数 + 累加大小
+        file_count = 0
+        total_size = 0
+        for f in p.rglob("*"):
+            if f.is_file():
+                file_count += 1
+                try:
+                    total_size += f.stat().st_size
+                except OSError:
+                    pass
         if file_count > max_items:
             return proposal_reply(False,
                 f"目录含 {file_count} 个文件，超过上限 {max_items}。确认删除？",
@@ -66,7 +73,6 @@ def remove(path: str, confirm: bool = False, max_items: int = 50) -> dict:
                 evidence={"file_count": file_count, "directory": str(p)},
                 options=["confirm_batch_delete", "cancel"])
 
-        total_size = sum(f.stat().st_size for f in files_in_dir)
         errors = []
 
         try:

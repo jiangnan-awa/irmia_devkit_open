@@ -90,8 +90,8 @@ def _check_python(p: Path) -> dict:
             language="python",
             errors=errors,
         )
-    except Exception:
-        # 回退到 py_compile
+    except (TypeError, ValueError, UnicodeError):
+        # ast.parse 可能因非语法问题失败（如编码/类型错误），回退到 py_compile
         try:
             subprocess.run(
                 [sys.executable, "-m", "py_compile", "--", str(p)],
@@ -103,6 +103,8 @@ def _check_python(p: Path) -> dict:
             return {"ok": True, "language": "python"}
         except subprocess.CalledProcessError as e:
             return _parse_py_compile_error(e.stderr, "python")
+        except subprocess.TimeoutExpired:
+            return {"ok": False, "language": "python", "error": "py_compile 超时 (10s)"}
 
 
 def _check_nim(p: Path) -> dict:

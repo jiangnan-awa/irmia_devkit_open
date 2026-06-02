@@ -70,13 +70,14 @@ def download(url: str, path: str, overwrite: bool = False, timeout: int = 60) ->
                         break
                     downloaded += len(chunk)
                     if downloaded > _MAX_DOWNLOAD_SIZE:
-                        f.close()
-                        safe_path.unlink(missing_ok=True)
-                        return {
-                            "ok": False,
-                            "error": f"实际下载大小超过上限 {_MAX_DOWNLOAD_SIZE // 1024 // 1024}MB",
-                        }
+                        break
                     f.write(chunk)
+            if downloaded > _MAX_DOWNLOAD_SIZE:
+                safe_path.unlink(missing_ok=True)
+                return {
+                    "ok": False,
+                    "error": f"实际下载大小超过上限 {_MAX_DOWNLOAD_SIZE // 1024 // 1024}MB",
+                }
 
         elapsed = round(time.time() - start, 2)
         actual_size = safe_path.stat().st_size

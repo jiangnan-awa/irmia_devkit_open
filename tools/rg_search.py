@@ -96,7 +96,7 @@ def _python_fallback(
     """Python 纯标准库内容搜索 fallback。"""
     flags = 0 if case_sensitive else re.IGNORECASE
     if whole_word:
-        pattern = rf"\b{pattern}\b"
+        pattern = rf"\b{re.escape(pattern)}\b"
     try:
         compiled = re.compile(pattern, flags)
     except re.error as e:
