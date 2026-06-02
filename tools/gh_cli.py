@@ -29,7 +29,7 @@ def _run_gh(args: list[str], cwd: str = None, timeout: int = 20) -> dict:
         cwd = os.getcwd()
     gh_bin = _find_gh()
     result = _run_cmd([gh_bin] + args, cwd=cwd, timeout=timeout)
-    if not result["ok"] and "未安装" not in result.get("error", ""):
+    if not result["ok"] and gh_bin not in result.get("error", ""):
         if gh_bin != "gh":
             result["error"] = f"gh 未找到: {gh_bin}"
     return result
@@ -44,8 +44,16 @@ def _with_body_file(
     f = tempfile.NamedTemporaryFile(
         mode="w", suffix=".md", delete=False, encoding="utf-8"
     )
-    f.write(body)
-    f.close()
+    try:
+        f.write(body)
+        f.close()
+    except Exception:
+        f.close()
+        try:
+            os.unlink(f.name)
+        except OSError:
+            pass
+        raise
     args.extend([flag, f.name])
     return f.name
 

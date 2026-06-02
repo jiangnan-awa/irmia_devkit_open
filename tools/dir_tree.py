@@ -3,6 +3,7 @@ dir_tree — 目录树可视化。
 用 os.scandir 递归扫描目录，生成缩进树结构。
 """
 
+import fnmatch
 import os
 
 from ._file_utils import human_size
@@ -63,8 +64,6 @@ def tree(
 
         # 模式过滤
         if pattern:
-            import fnmatch
-
             entries = [
                 e for e in entries if e.is_dir() or fnmatch.fnmatch(e.name, pattern)
             ]

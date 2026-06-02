@@ -16,8 +16,7 @@ from astrbot.core.astr_agent_context import AstrAgentContext
 
 @dataclass
 class FunctionTool(_AstrBotFunctionTool):
-    """AstrBot v4.16+ 兼容基类：显式声明 func_type 防止 LLM 权限被拒。"""
-    func_type: str = "tool"
+    """AstrBot v4.16+ 兼容基类。"""
 
 from ._helpers import err_json as _err, unwrap as _unwrap, run_sync as _run_sync
 from . import tool_stats as _tool_stats

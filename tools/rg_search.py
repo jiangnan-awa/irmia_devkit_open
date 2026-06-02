@@ -271,9 +271,11 @@ def search(
                 evidence={"pattern": pattern, "path": search_path},
                 options=["缩小 path 范围", "指定 file_exts 过滤", "回退到 Python 扫描"],
             )
-        except Exception as e:
-            # rg 失败，fallback 到 Python
+        except FileNotFoundError:
+            # rg not installed — fallback to Python
             pass
+        except Exception as e:
+            return {"ok": False, "error": f"rg 执行失败: {e}"}
 
     # ── Layer 2 & 3: Python fallback ──
     return _python_fallback(

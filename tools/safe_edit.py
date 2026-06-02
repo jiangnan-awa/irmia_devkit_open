@@ -139,8 +139,8 @@ def edit(
     try:
         backup_root.mkdir(parents=True, exist_ok=True)
         shutil.copy2(filepath, str(backup_path))
-    except PermissionError as e:
-        return {"ok": False, "error": f"权限不足，无法创建备份：{e}"}
+    except OSError as e:
+        return {"ok": False, "error": f"无法创建备份：{e}"}
 
     result = {
         "file": filepath,
@@ -157,8 +157,8 @@ def edit(
         try:
             with open(filepath, "w", encoding=encoding, newline="") as f:
                 f.write(content)
-        except PermissionError as e:
-            return {"ok": False, "error": f"权限不足，无法写入文件：{e}"}
+        except OSError as e:
+            return {"ok": False, "error": f"无法写入文件：{e}"}
         result["replaced"] = 1
         result["occurrence"] = occurrence
     else:
@@ -183,7 +183,17 @@ def edit(
                 result["syntax_ok"] = None
                 result["syntax_check"] = check_result
             else:
-                shutil.copy2(str(backup_path), filepath)
+                try:
+                    shutil.copy2(str(backup_path), filepath)
+                except OSError as e:
+                    return {
+                        **result,
+                        "ok": False,
+                        "rolled_back": False,
+                        "error": f"语法检查失败且回滚失败: {e}",
+                        "proposal": f"文件已被修改，备份在 {backup_path}，请手动恢复",
+                        "options": ["restore_backup", "retry_edit"],
+                    }
                 syntax_errors = check_result.get("errors", [])
                 hint = "已自动回滚。"
                 if syntax_errors:

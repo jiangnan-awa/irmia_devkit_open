@@ -41,7 +41,7 @@ def compare(v1: str, v2: str) -> dict:
 
 def _parse(v: str) -> tuple | None:
     """解析 semver 为可比较元组。H7: 数字预发布字段按数值比较。"""
-    v = v.strip()
+    v = v.strip().lstrip("v")
     # H7: 剥离 build metadata (+xxx)，不影响优先级
     build_split = v.split("+", 1)
     v = build_split[0]

@@ -234,7 +234,7 @@ def search(
     else:
         args.append(query)
 
-    if ext:
+    if ext and not regex:
         args[-1] = f"{args[-1]} *.{ext}"
     if path:
         args.extend(["-path", path])

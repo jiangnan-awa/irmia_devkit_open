@@ -126,11 +126,11 @@ def _run_ruff(p: Path) -> dict:
         if r.returncode == 0:
             return {"ok": True, "linter": "ruff", "issues": [], "count": 0}
         issues = json.loads(r.stdout) if r.stdout.strip() else []
-        r = {"ok": True, "linter": "ruff", "issues": issues, "count": len(issues)}
+        result = {"ok": True, "linter": "ruff", "issues": issues, "count": len(issues)}
         if issues:
-            r["proposal"] = f"ruff发现{len(issues)}个问题"
-            r["options"] = ["逐个修复", "确认是否有意为之"]
-        return r
+            result["proposal"] = f"ruff发现{len(issues)}个问题"
+            result["options"] = ["逐个修复", "确认是否有意为之"]
+        return result
     except json.JSONDecodeError:
         return {
             "ok": True,

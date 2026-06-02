@@ -26,7 +26,7 @@ def protect_tool(tool, allowed_ids):
             tool_name = tool.name
 
             if (
-                getattr(event, "role", "") == "admin"
+                event.is_admin()
                 or sender_id in allowed_ids
             ):
                 return await original_call(context, **kwargs)
@@ -86,6 +86,17 @@ def build_allowed_ids(context, plugin_config):
         admins = astrbot_cfg.get("admins_id", [])
         if isinstance(admins, list):
             ids.update(str(x).strip() for x in admins if str(x).strip())
+
+        # 也读取非默认配置中的 admins_id（多配置场景）
+        try:
+            acm = getattr(context, "astrbot_config_mgr", None)
+            if acm:
+                for conf in getattr(acm, "confs", {}).values():
+                    other_admins = conf.get("admins_id", [])
+                    if isinstance(other_admins, list):
+                        ids.update(str(x).strip() for x in other_admins if str(x).strip())
+        except Exception:
+            pass
     except Exception:
         logger.debug("devkit: failed to read AstrBot admins_id from context")
 

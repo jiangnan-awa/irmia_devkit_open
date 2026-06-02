@@ -118,7 +118,7 @@ def _detect(first_line: str) -> str:
         return "syslog"
     if first_line.strip().startswith("{"):
         return "jsonl"
-    if '"GET' in first_line or '"POST' in first_line or '"PUT' in first_line:
+    if re.match(r'^\S+\s+\S+\s+\S+\s+\[', first_line):
         return "nginx"
     if re.match(r"\w{3}\s+\d+\s+\d{2}:\d{2}:\d{2}", first_line):
         return "syslog"

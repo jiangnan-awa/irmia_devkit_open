@@ -53,7 +53,12 @@ def parse(text: str, delimiter: str = "auto", has_header: bool = True) -> dict:
         data_start = 1
 
     data_rows = []
+    _MAX_ROWS = 50000
+    truncated = False
     for r in rows[data_start:]:
+        if len(data_rows) >= _MAX_ROWS:
+            truncated = True
+            break
         row_data = {}
         for i, val in enumerate(r):
             key = headers[i] if i < len(headers) else f"col_{i}"
@@ -66,7 +71,7 @@ def parse(text: str, delimiter: str = "auto", has_header: bool = True) -> dict:
         "headers": headers,
         "rows": data_rows[:200],
         "count": len(data_rows),
-        "truncated": len(data_rows) > 200,
+        "truncated": truncated or len(data_rows) > 200,
     }
     if len(data_rows) > 200:
         r["proposal"] = f"CSV 解析成功，{len(data_rows)} 行数据，已截断至200行"

@@ -101,9 +101,10 @@ def commit(cwd: str, message: str) -> dict:
         return proposal_reply(
             False,
             f"{changed}个文件待提交——Python:{len(groups['Python'])} Config:{len(groups['Config'])} Other:{len(groups['Other'])}。建议分批。",
-            error=f"未暂存文件过多 ({changed} 个)。请先用 git_status 和 git_diff 确认后分批提交。",
+            error=f"文件过多 ({changed})——建议分批提交",
             evidence={"file_groups": {k: v for k, v in groups.items() if v}},
             options=["commit_python_only", "show_all_files", "force_all"],
+            reason="too_many_files",
         )
 
     files_to_stage = s.get("changes", [])

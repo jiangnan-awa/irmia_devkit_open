@@ -68,9 +68,10 @@ def download(url: str, path: str, overwrite: bool = False, timeout: int = 60) ->
                     chunk = resp.read(8192)
                     if not chunk:
                         break
-                    downloaded += len(chunk)
-                    if downloaded > _MAX_DOWNLOAD_SIZE:
+                    if downloaded + len(chunk) > _MAX_DOWNLOAD_SIZE:
+                        downloaded += len(chunk)
                         break
+                    downloaded += len(chunk)
                     f.write(chunk)
             if downloaded > _MAX_DOWNLOAD_SIZE:
                 safe_path.unlink(missing_ok=True)

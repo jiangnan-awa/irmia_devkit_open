@@ -97,6 +97,7 @@ def test(pattern: str, text: str, flags: str = "") -> dict:
         if hasattr(signal, "SIGALRM"):
             try:
                 signal.alarm(0)
+                signal.signal(signal.SIGALRM, signal.SIG_DFL)
             except ValueError:
                 pass
 
@@ -138,12 +139,33 @@ def replace(pattern: str, replacement: str, text: str, flags: str = "") -> dict:
 
     count = 0
 
+    if hasattr(signal, "SIGALRM"):
+        try:
+            signal.signal(signal.SIGALRM, _timeout_handler)
+            signal.alarm(_REGEX_TIMEOUT)
+        except ValueError:
+            pass
+
     def replacer(m):
         nonlocal count
+        if count >= 500:
+            raise StopIteration()
         count += 1
         return m.expand(replacement)
 
-    result_text = compiled.sub(replacer, text)
+    try:
+        result_text = compiled.sub(replacer, text)
+    except TimeoutError:
+        return {"ok": False, "error": "正则替换超时", "replacements": count}
+    except StopIteration:
+        result_text = ""
+    finally:
+        if hasattr(signal, "SIGALRM"):
+            try:
+                signal.alarm(0)
+                signal.signal(signal.SIGALRM, signal.SIG_DFL)
+            except ValueError:
+                pass
 
     return {
         "ok": True,

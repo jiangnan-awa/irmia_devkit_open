@@ -10,9 +10,10 @@ import socket
 
 def check(host: str = "127.0.0.1", port: int = 7860) -> dict:
     """检测端口是否可连接。返回是否监听 + 延迟。"""
-    sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-    sock.settimeout(3)
+    sock = None
     try:
+        sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        sock.settimeout(3)
         sock.connect((host, port))
         return {"ok": True, "host": host, "port": port, "listening": True}
     except (socket.timeout, ConnectionRefusedError, OSError):
@@ -27,7 +28,8 @@ def check(host: str = "127.0.0.1", port: int = 7860) -> dict:
             "next_call": {"tool": "proc_list", "params": {"filter_name": str(port)}},
         }
     finally:
-        sock.close()
+        if sock:
+            sock.close()
 
 
 def scan(ports: list[int], host: str = "127.0.0.1") -> dict:

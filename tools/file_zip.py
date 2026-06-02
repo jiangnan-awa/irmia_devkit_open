@@ -7,17 +7,20 @@ import os
 import zipfile
 from pathlib import Path
 
+from ._file_utils import SymlinkGuard
+
 
 def compress(files_or_dir: list[str], output: str) -> dict:
     """打包文件/目录到 ZIP。"""
     output_path = Path(output)
+    guard = SymlinkGuard()
     try:
         with zipfile.ZipFile(output_path, "w", zipfile.ZIP_DEFLATED) as zf:
             for path in files_or_dir:
                 p = Path(path)
                 if p.is_dir():
                     for f in p.rglob("*"):
-                        if f.is_file():
+                        if f.is_file() and not guard.is_seen(str(f)):
                             zf.write(f, f.relative_to(p))
                 elif p.is_file():
                     zf.write(p, p.name)

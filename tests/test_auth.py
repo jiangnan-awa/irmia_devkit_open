@@ -28,6 +28,7 @@ def _make_context(role="member", sender_id="999"):
     ctx = MagicMock()
     event = MagicMock()
     event.role = role
+    event.is_admin.return_value = (role == "admin")
     event.get_sender_id.return_value = sender_id
     ctx.context = MagicMock()
     ctx.context.event = event

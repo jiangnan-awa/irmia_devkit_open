@@ -130,7 +130,7 @@ class Main(star.Star):
     @filter.on_llm_request()
     async def _auth_guard(self, event: AstrMessageEvent, req: ProviderRequest):
         sender_id = str(event.get_sender_id() or "").strip()
-        if sender_id in self._allowed_ids or getattr(event, "role", "") == "admin":
+        if sender_id in self._allowed_ids or event.is_admin():
             return
 
         if req.func_tool:
