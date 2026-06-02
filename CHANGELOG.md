@@ -7,6 +7,8 @@
 - **配置**: `config.json` / `_conf_schema.json` 新增 `owner_sid`、`allowed_ids` 字段
 - **测试**: 新增 `test_auth.py` — 20 用例覆盖 `protect_tool` 放行/拦截/异常、`build_allowed_ids` 合并/降级、Layer 1 过滤逻辑（共 120 用例）
 - **代码审查修复**: 三轮审查修复 18 项问题 — `_allowed_ids` 缓存同步、`_rebuild_func_tool` 静默失败→告警、`http_download` 反模式消除、`syntax_check` 异常限窄+TimeoutExpired、`rg_search` whole_word `re.escape`、死 import 清理、`flag_map` 提取常量等
+- **交叉验证修复**: 第五轮全量审查 + AstrBot 源码交叉比对，修复 25 项 — `safe_edit` 回滚+备份异常捕获、`regex_tester` `replace()` 超时保护、`gh_cli` 临时文件泄漏、`es_search` regex+ext 冲突、`file_zip` 符号链接 SymlinkGuard、`rg_search` 错误区分、`_auth` 多配置管理员同步、`port_check` socket 初始化、`csv_utils` 行上限、`semver` v 前缀、`log_parse` 精确匹配等
+- **API 规范化**: `_registry.py` 移除无效 `func_type` 字段；`_auth.py`/`main.py` 改用 `event.is_admin()` 替代 `getattr`
 - **缺陷**: 零存量已知缺陷
 
 ## v2.3.0 — 基础层补完 (60→61)
