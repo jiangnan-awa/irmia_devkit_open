@@ -25,3 +25,8 @@ def get_config() -> dict:
 def get_plugin_dir() -> Path | None:
     """获取插件根目录路径。"""
     return _plugin_dir
+
+
+def get_owner_sid() -> str:
+    """获取主人会话 ID。空字符串表示未配置。"""
+    return _config.get("owner_sid", "")

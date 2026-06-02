@@ -1,5 +1,6 @@
 {
   "_comment": "弥亚开发工具箱配置。空值 = 自动检测。",
+  "owner_sid": "",
   "tool_groups": {
     "安全编辑链": true,
     "Git & GitHub": true,

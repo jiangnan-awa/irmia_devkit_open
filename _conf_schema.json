@@ -1,4 +1,9 @@
 {
+  "owner_sid": {
+    "description": "主人会话ID（留空则仅私聊可用）。可设为你的 session_id 或 unified_msg_origin。",
+    "type": "string",
+    "default": ""
+  },
   "tool_groups": {
     "description": "工具组开关（关闭整组禁用该组所有工具，需重启生效）",
     "type": "object",

@@ -11,12 +11,15 @@ import copy
 
 from astrbot.api import logger, star
 from astrbot.api.star import StarTools
+from astrbot.api.event import filter, AstrMessageEvent
+from astrbot.api.provider import ProviderRequest
 
 from .tools import config as _tool_config
 
 from .tools._registry import TOOL_GROUPS, _ALL_TOOLS
 
 _DEFAULT_CONFIG = {
+    "owner_sid": "",
     "tool_groups": {g: True for g in TOOL_GROUPS},
     "disabled_tools": [],
     "es_path": "",
@@ -65,6 +68,12 @@ class Main(star.Star):
         # AstrBot WebUI 配置优先于 config.json
         if config:
             changed = False
+            # owner_sid
+            web_owner = config.get("owner_sid", "")
+            if web_owner:
+                _config["owner_sid"] = web_owner
+                changed = True
+            # paths 嵌套（工具路径）
             paths = config.get("paths", {})
             for key in ("es_path", "gh_path", "backup_dir"):
                 if paths.get(key):
@@ -106,3 +115,22 @@ class Main(star.Star):
         tools = [_ALL_TOOLS[name]() for name in enabled if name in _ALL_TOOLS]
         context.add_llm_tools(*tools)
         logger.info(f"🔧 弥亚开发工具箱已就绪 — {len(tools)} 个工具注册完毕")
+
+    @filter.on_llm_request()
+    async def _on_llm_request(self, event: AstrMessageEvent, req: ProviderRequest):
+        owner_sid = _tool_config.get_owner_sid()
+        current_sid = event.get_session_id()
+
+        # 主人匹配 → 全权限
+        if owner_sid and current_sid == owner_sid:
+            return
+
+        # 未配置 owner_sid → 仅私聊放行
+        if not owner_sid and "group" not in current_sid.lower():
+            return
+
+        # 非主人或群聊 → 清空工具
+        if hasattr(req, 'functions') and req.functions:
+            original_count = len(req.functions)
+            req.functions = []
+            logger.info(f"🔒 未授权会话 {current_sid} — {original_count} 个工具已拦截")
