@@ -135,6 +135,7 @@ class Main(star.Star):
         tools = [_ALL_TOOLS[name]() for name in enabled if name in _ALL_TOOLS]
         tools = [protect_tool(t, allowed_ids) for t in tools]
         context.add_llm_tools(*tools)
+        self._tool_names = {t.name for t in tools}
         # 修正 handler_module_path：对齐 AstrBot star_manager 的 deactivate/activate 路径匹配
         # star_manager 的 module_path = "data.plugins.astrbot_plugin_irmia_devkit.main"
         # add_llm_tools 设的是 "astrbot_plugin_irmia_devkit.tools.xxx" → startswith 失败
@@ -148,6 +149,25 @@ class Main(star.Star):
 
         if self._group_config_enabled:
             self._register_web_page()
+
+    @filter.on_plugin_loaded()
+    async def _post_load_heal(self, event):
+        """L1091 之后第二轮自愈：强制启用本轮被 star_manager 误关的工具。
+        _heal_inactivated_tools 在 __init__ 中跑了，但 L1091 在 __init__ 之后
+        用本地 inactivated_llm_tools 副本覆盖了 active=False。此处纠正。
+        """
+        try:
+            healed = 0
+            for tool in self.context.provider_manager.llm_tools.func_list:
+                mp = getattr(tool, "handler_module_path", "")
+                if mp and mp.startswith(_PLUGIN_MODULE_PREFIX) and not tool.active:
+                    tool.active = True
+                    healed += 1
+            if healed:
+                logger.info(f"post-load heal: re-activated {healed} tools suppressed by inactivated_llm_tools")
+            self._heal_inactivated_tools_db()
+        except Exception as e:
+            logger.warning(f"post-load heal failed: {e}")
 
     def _register_web_page(self) -> None:
         try:
@@ -216,18 +236,16 @@ class Main(star.Star):
         return str(event.get_sender_id() or "").strip() in self._allowed_ids or self._is_group_extra_admin(event)
 
     def _heal_inactivated_tools(self, tools: list) -> None:
-        """自愈：强制启用所有 devkit 工具并清理 inactivated_llm_tools 中的幽灵条目。
-
-        AstrBot 关闭时 deactivate_plugin 将工具加入 inactivated_llm_tools，
-        但重启时 activate_plugin 不会被调用，且 star_manager 在 __init__ 之前
-        已将列表读到内存，导致工具永远禁用。
-
-        DB 路径：StarTools.get_data_dir() 返回插件数据子目录，需回退到根 data 目录。
-        """
-        # 强启工具（必须，因为 star_manager 内存缓存已读）
+        """__init__ 阶段：强启所有 devkit 工具 + DB 清理。"""
         for tool in tools:
             tool.active = True
-        # 清理 DB 幽灵条目（为下次重启铺路）
+        self._heal_inactivated_tools_db()
+
+    def _heal_inactivated_tools_db(self) -> None:
+        """清理 inactivated_llm_tools 中本插件的幽灵条目，为下次重启铺路。"""
+        names = getattr(self, "_tool_names", set())
+        if not names:
+            return
         try:
             plug_data = str(StarTools.get_data_dir())
             data_root = os.path.dirname(os.path.dirname(plug_data))
@@ -241,7 +259,6 @@ class Main(star.Star):
                 return
             v = json.loads(rows[0][0])
             old_list = v.get("val", [])
-            names = {t.name for t in tools}
             new_list = [x for x in old_list if x not in names]
             removed = len(old_list) - len(new_list)
             if removed:
