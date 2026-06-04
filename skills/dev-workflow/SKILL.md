@@ -23,7 +23,7 @@ description: >
 2. `git_branch` — 确认在正确的分支上
 3. `safe_backups` — 看一眼有没有旧备份可用
 4. `es_search` / `rg_search` / `dir_tree` — 需要时先了解项目结构
-5. `code_index` `code_explore` — 需要理解代码调用链时优先使用（'X 在哪' '从 A 到 B 怎么走'）
+5. `code_index` — 首次进入项目时建索引（一次性，后续增量更新）；`code_explore` — 需要理解代码调用链时**直接调**，不要先 rg_search 拼答案
 
 ## 节奏感
 
