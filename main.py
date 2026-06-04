@@ -147,6 +147,15 @@ class Main(star.Star):
         for tool in self.context.provider_manager.llm_tools.func_list:
             if tool.name in self._tool_names:
                 tool.handler_module_path = _PLUGIN_MODULE_PREFIX
+        # WebUI 来源显示靠 star_map.get(handler_module_path)。截断路径不匹配
+        # plugin.module_path，所以手动注入一条 alias 映射。
+        try:
+            from astrbot.core.star.star import star_map
+            _FULL = "data.plugins.astrbot_plugin_irmia_devkit.main"
+            if _FULL in star_map and _PLUGIN_MODULE_PREFIX not in star_map:
+                star_map[_PLUGIN_MODULE_PREFIX] = star_map[_FULL]
+        except Exception:
+            pass
         self._heal_inactivated_tools(tools)
         allowed_count = len(allowed_ids)
         logger.info(f"devkit ready — {len(tools)} tools registered, {allowed_count} allowed user{'s' if allowed_count != 1 else ''}")
