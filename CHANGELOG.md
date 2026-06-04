@@ -1,5 +1,13 @@
 # Changelog
 
+## v2.3.7 — 工具管理权收回 + 四层防御上线
+
+- **工具管理权收回**: 不再覆写 `handler_module_path` 强制对齐 AstrBot，改为利用 `startswith` 方向差异：`_PLUGIN_MODULE_PREFIX` 不带 `.main` 后缀，使 `turn_off_plugin` 能正确停用、`_unbind_plugin` 不被误删
+- **四层防御**: `__init__` 自愈（`_heal_inactivated_tools`）→ `on_plugin_loaded` 钩子纠正 L1091 覆写（`_post_load_heal`）→ 请求级兜底（`_auth_guard` 自愈）→ `star_map` alias 修复 WebUI 来源显示
+- **上游问题**: 定位并报告 4 个 AstrBot 上游 bug（`config.py` 停用时无差别 reload、`startswith` 方向反 ×2、`turn_on_plugin` 重启路径缺失、`handler_module_path` 前缀不一致）
+- **防御**: `_auth_guard` 取消 L2 原生工具摘除实验（已回退），回到纯 L1 模式，管理员路径零开销；日志降级避免刷屏
+- **DB 自愈**: 直接清理 SQLite 中 `inactivated_llm_tools` 的幽灵条目
+
 ## v2.3.6 — 群级 WebUI + handler_module_path 修正
 
 - **群级权限配置 (PR #4)**: 新增 `devkit_web.py` Web 管理面板 — 按群聊独立配置工具箱权限（额外管理员、工具组开关），支持全局管理员和群级额外管理员双层鉴权
