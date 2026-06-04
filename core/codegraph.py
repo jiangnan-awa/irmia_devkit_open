@@ -108,6 +108,14 @@ class CodeGraph:
             self._conn = sqlite3.connect(self._db_path)
         return self._conn
 
+    def close(self) -> None:
+        if self._conn:
+            try:
+                self._conn.close()
+            except Exception:
+                pass
+            self._conn = None
+
     # ── index ─────────────────────────────────────────
 
     def index(self, project_dir: str, incremental: bool = False) -> dict:
@@ -117,8 +125,9 @@ class CodeGraph:
 
         start = time.time()
         conn = self._conn_get()
-        conn.execute("DELETE FROM symbols")
-        conn.execute("DELETE FROM edges")
+        if not incremental:
+            conn.execute("DELETE FROM symbols")
+            conn.execute("DELETE FROM edges")
 
         stats = {"files": 0, "symbols": 0, "edges": 0, "skipped": 0}
         mtimes: dict[str, float] = {}
@@ -140,9 +149,14 @@ class CodeGraph:
                 rp = str(fpath.relative_to(root))
                 if incremental:
                     fmtime = fpath.stat().st_mtime
-                    if rp in mtimes and mtimes[rp] >= fmtime:
+                    if rp in mtimes and mtimes[rp] == fmtime:
                         continue
-                    mtimes[rp] = fmtime
+                    # 增删模式：先清该文件旧记录再插新
+                    conn.execute("DELETE FROM symbols WHERE file=?", (rp,))
+                    conn.execute("DELETE FROM edges WHERE file=?", (rp,))
+                else:
+                    fmtime = fpath.stat().st_mtime
+                mtimes[rp] = fmtime
                 try:
                     symbols, edges = _extract_file(str(fpath), suffix)
                     for s in symbols:
@@ -167,13 +181,15 @@ class CodeGraph:
                     stats["skipped"] += 1
 
         # 后处理：引用消解
-        _resolve_references(conn)
+        try:
+            _resolve_references(conn)
+        except Exception:
+            pass
 
-        if incremental:
-            conn.execute(
-                "INSERT OR REPLACE INTO meta(key,value) VALUES('mtimes',?)",
-                (json.dumps(mtimes),),
-            )
+        conn.execute(
+            "INSERT OR REPLACE INTO meta(key,value) VALUES('mtimes',?)",
+            (json.dumps(mtimes),),
+        )
         conn.commit()
         try:
             conn.execute("DELETE FROM sym_fts")
@@ -198,6 +214,11 @@ class CodeGraph:
     # ── explore ───────────────────────────────────────
 
     def explore(self, query: str, project_dir: str = ".") -> dict:
+        if not query or not query.strip():
+            return {
+                "ok": False, "error": "empty_query",
+                "summary": "查询为空。——请提供符号名、调用链或自然语言描述。",
+            }
         conn = self._conn_get()
         row = conn.execute("SELECT value FROM meta WHERE key='last_index'").fetchone()
         if not row:
@@ -302,14 +323,17 @@ class CodeGraph:
 
     def _search(self, conn, query: str, limit: int = 10) -> tuple[list[dict], str]:
         """三级搜索：LIKE → FTS5 → 无结果提示"""
-        # Level 1: LIKE 精确匹配
-        rows = conn.execute(
-            "SELECT name,kind,file,line,signature,source,visibility,is_async "
-            "FROM symbols WHERE name LIKE ? LIMIT ?",
-            (f"%{query}%", limit),
-        ).fetchall()
-        if rows:
-            return [_row_to_dict(r) for r in rows], "like"
+        try:
+            # Level 1: LIKE 精确匹配
+            rows = conn.execute(
+                "SELECT name,kind,file,line,signature,source,visibility,is_async "
+                "FROM symbols WHERE name LIKE ? LIMIT ?",
+                (f"%{query}%", limit),
+            ).fetchall()
+            if rows:
+                return [_row_to_dict(r) for r in rows], "like"
+        except Exception:
+            rows = ()
 
         # Level 2: FTS5 全文搜索
         try:
