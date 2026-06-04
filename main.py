@@ -36,6 +36,11 @@ _DEFAULT_CONFIG = {
 
 _PLUGIN_MODULE_PREFIX = "data.plugins.astrbot_plugin_irmia_devkit"
 
+_NATIVE_REPLACEMENTS: dict[str, str] = {
+    "astrbot_file_edit_tool": "safe_edit",
+    "astrbot_grep_tool": "rg_search",
+}
+
 
 class Main(star.Star):
     """弥亚开发工具箱插件"""
@@ -287,6 +292,18 @@ class Main(star.Star):
                     removed.append(tool.name)
                     continue
                 kept.append(tool)
+
+            # L2: 授权用户有 devkit 替代品时，摘掉对应的原生工具
+            devkit_names = {t.name for t in kept if getattr(t, "handler_module_path", "").startswith(_PLUGIN_MODULE_PREFIX)}
+            if devkit_names:
+                kept2 = []
+                for tool in kept:
+                    devkit_alt = _NATIVE_REPLACEMENTS.get(tool.name)
+                    if devkit_alt and devkit_alt in devkit_names:
+                        removed.append(f"{tool.name}→{devkit_alt}")
+                        continue
+                    kept2.append(tool)
+                kept = kept2
 
             if removed:
                 self._rebuild_func_tool(req, kept)

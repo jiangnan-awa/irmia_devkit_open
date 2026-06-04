@@ -99,10 +99,15 @@ from .dep_scan import scan as _dep_scan
 from .file_remove import remove as _file_remove
 
 # ── codegraph ──
-from core.codegraph import CodeGraph as _CodeGraph
+try:
+    from ..core.codegraph import CodeGraph as _CodeGraph
+except ImportError:
+    _CodeGraph = None  # tree-sitter / codegraph 不可用时优雅降级
 
 
 def _code_index(project_dir: str, incremental: bool = False) -> dict:
+    if _CodeGraph is None:
+        return {"ok": False, "error": "tree-sitter 未安装，codegraph 不可用"}
     from pathlib import Path
     root = Path(project_dir).resolve()
     db_path = str(root / ".codegraph" / "codegraph.db")
@@ -111,6 +116,8 @@ def _code_index(project_dir: str, incremental: bool = False) -> dict:
 
 
 def _code_explore(query: str, project_dir: str = ".") -> dict:
+    if _CodeGraph is None:
+        return {"ok": False, "error": "tree-sitter 未安装，codegraph 不可用"}
     from pathlib import Path
     root = Path(project_dir).resolve()
     db_path = str(root / ".codegraph" / "codegraph.db")

@@ -226,8 +226,7 @@ class CodeGraph:
         if not symbols:
             return {
                 "ok": True, "found": False, "query_type": "symbol_search",
-                "summary": f"未找到符号 '{target}'。",
-                "hint": f"试试 rg_search 搜索 '{target}' 在源码中的原始文本；或用更宽泛的关键词重试 code_explore。",
+                "summary": f"未找到符号 '{target}'。——用 rg_search('{target}') 搜索源码全文。",
                 "search_strategy": strategy,
             }
         callers = {}
@@ -262,7 +261,7 @@ class CodeGraph:
             }
         return {
             "ok": True, "found": False, "query_type": "trace",
-            "summary": f"从 {from_sym} 到 {to_sym} 未找到静态调用链（可能跨模块、动态调用或异步）。",
+            "summary": f"从 {from_sym} 到 {to_sym} BFS 未找到调用链——可能是事件/装饰器连接。用 rg_search('{to_sym}') 查动态引用。",
             "unresolved": [{"from": from_sym, "to": to_sym, "reason": "BFS 未找到路径"}],
             "hint": f"用 rg_search 搜索 {to_sym} 确认是否通过动态调用或回调连接。",
         }
@@ -289,9 +288,13 @@ class CodeGraph:
 
     def _explore_fallback(self, conn, query: str, project_dir: str) -> dict:
         symbols, strategy = self._search(conn, query)
+        if not symbols or strategy == "none":
+            summary = f"自然语言探索 '{query}'：未命中索引。——用 rg_search('{query}') 搜索源码全文。"
+        else:
+            summary = f"自然语言探索 '{query}'：找到 {len(symbols)} 个相关符号。"
         return {
             "ok": True, "found": len(symbols) > 0, "query_type": "explore",
-            "summary": f"自然语言探索 '{query}'：找到 {len(symbols)} 个相关符号。",
+            "summary": summary,
             "symbols": symbols,
             "search_strategy": strategy,
             "hint": "缩小范围：用符号名精确搜索，或 '从 X 到 Y' 追踪调用链。",
