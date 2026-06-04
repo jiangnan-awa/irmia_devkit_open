@@ -188,7 +188,7 @@ python -m pytest tests/ -v
 
 ## Version
 
-2.3.7 · [Changelog](CHANGELOG.md)
+2.4.0 · [Changelog](CHANGELOG.md)
 
 ## Author
 
