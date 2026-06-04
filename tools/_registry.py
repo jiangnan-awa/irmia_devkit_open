@@ -2542,10 +2542,10 @@ class CodeExploreTool(FunctionTool):
 
     name: str = "code_explore"
     description: str = (
-        "【代码语义探索——首选】用自然语言或符号名查询代码库结构。"
+        "【代码语义探索——首选】用自然语言或符号名查询代码库结构。自动路由："
         "符号搜索（'safe_edit 在哪'）→ 全文检索返回位置+签名；"
-        "调用链追踪（'从 load 到 add_llm_tools 怎么走'）→ BFS 找路径；"
-        "  需要先运行 code_index 建索引。失败时给出明确的下一步提示。"
+        "调用链追踪（'从 load 到 add_llm_tools 怎么走'）→ BFS 找路径。"
+        "需要先运行 code_index 建索引。失败时给出明确的下一步提示。"
     )
     parameters: dict = field(default_factory=lambda: {
         "type": "object",
@@ -2634,6 +2634,8 @@ TOOL_GROUPS: dict[str, list[str]] = {
         "git_changelog",
         "db_query",
         "dep_scan",
+    ],
+    "代码理解": [
         "code_index",
         "code_explore",
     ],

@@ -51,7 +51,7 @@ Python ≥ 3.10
 
 `syntax_check`/`lint_runner`/`rg_search` 在返回结果中附带代码上下文片段，帮助 LLM 直接定位问题，无需额外读文件。
 
-63 个工具按 9 组管理，可在 `config.json` 中按组或按单个工具关闭。
+63 个工具按 10 组管理，可在 `config.json` 中按组或按单个工具关闭。
 
 ## 架构
 
@@ -157,14 +157,7 @@ Python ≥ 3.10
 | `time_convert` | 时间戳↔ISO 互转（direction: to_iso/to_ts） |
 | `time_diff` | 时间差 |
 
-### 🧩 扩展 (10)
-
-| 工具 | 用途 |
-|------|------|
-| ...（省略）|
-| `dep_scan` | Python 依赖图 + 循环检测 |
-| `code_index` | 建立项目语义索引（符号+调用链） |
-| `code_explore` | 自然语言探索代码库结构 |
+### 🧩 扩展 (8)
 
 | 工具 | 用途 |
 |------|------|
@@ -176,6 +169,13 @@ Python ≥ 3.10
 | `git_changelog` | git log 分类 |
 | `db_query` | SQLite 只读查询 |
 | `dep_scan` | Python 依赖图 + 循环检测 |
+
+### 🤖 代码理解 (2)
+
+| 工具 | 用途 |
+|------|------|
+| `code_index` | 建立项目语义索引（符号+调用链） |
+| `code_explore` | 自然语言探索代码库结构 |
 
 ### 🧠 Skill
 
