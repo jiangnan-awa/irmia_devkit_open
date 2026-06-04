@@ -1,15 +1,13 @@
 # Changelog
 
-## v2.3.6 — L2 原生工具摘除 + handler_module_path 修正 + 群级 WebUI
+## v2.3.6 — 群级 WebUI + handler_module_path 修正
 
 - **群级权限配置 (PR #4)**: 新增 `devkit_web.py` Web 管理面板 — 按群聊独立配置工具箱权限（额外管理员、工具组开关），支持全局管理员和群级额外管理员双层鉴权
 - **配置**: 新增 `group_config_enabled` 开关（默认关闭），`config.json` / `_conf_schema.json` 同步
 - **前端**: `pages/settings/` — 蓝白主题 WebUI，群列表侧边栏 + 配置面板，XSS 防护，确认弹窗，Toast 提示
-- **L2 原生工具摘除 (P0)**: `_auth_guard` 在管理员路径自动移除有 devkit 替代品的 AstrBot 原生工具（`astrbot_file_edit_tool` → `safe_edit`、`astrbot_grep_tool` → `rg_search`），LLM 不再在原生和 devkit 之间摇摆
-- **工具排序优化**: `_auth_guard` 将 devkit 工具排在原生工具前面，确保 LLM 优先选择 devkit
-- **AstrBot 兼容修复**: `handler_module_path` 从子模块路径（`astrbot_plugin_irmia_devkit.tools.xxx`）改为插件根路径（`data.plugins.astrbot_plugin_irmia_devkit`），对齐 `star_manager` 的 deactivate/activate 路径匹配逻辑
-- **上游问题**: 发现并报告 AstrBot `star_manager.py` 中 `plugin.module_path.startswith(mp)` 的比较方向反了（应 `mp.startswith(plugin.module_path)`），导致插件禁用/启用时工具状态持久化损坏
-- **复现与验证**: 记录完整的 6 步复现路径和插件侧 workaround
+- **AstrBot 兼容修复**: `handler_module_path` 从子模块路径（`astrbot_plugin_irmia_devkit.tools.xxx`）改为插件根路径（`data.plugins.astrbot_plugin_irmia_devkit`），对齐 `star_manager` 的 deactivate/activate 路径匹配逻辑，修复插件禁用/启用后工具被意外关闭的问题
+- **上游问题**: 发现并报告 AstrBot `star_manager.py` 中 `plugin.module_path.startswith(mp)` 的比较方向反了（应 `mp.startswith(plugin.module_path)`），导致插件禁用/启用时工具状态持久化损坏；含完整 6 步复现路径和插件侧 workaround
+- **日志优化**: L2 摘除实验（已回退）；`_auth_guard` 回到纯 L1 模式，管理员路径零开销
 
 ## v2.3.5 — 双层权限防线 + 代码审查修复
 

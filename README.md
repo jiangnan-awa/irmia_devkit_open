@@ -16,6 +16,7 @@ Python ≥ 3.10
 |------|------|
 | `owner_sid` | 管理员会话 ID（可不填，插件自动读取 AstrBot 管理员列表） |
 | `allowed_ids` | 额外允许的用户 ID（逗号分隔，平台无关） |
+| `group_config_enabled` | 启用群级权限配置（默认关闭，需重启生效） |
 | `tool_groups` | 9 组 bool 开关，`false` = 关闭整组 |
 | `disabled_tools` | 逗号分隔单独禁用的工具名 |
 | `es_path` | Everything CLI 路径，空自动检测 |

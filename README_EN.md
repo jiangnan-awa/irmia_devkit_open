@@ -18,6 +18,7 @@ Place the plugin folder into AstrBot's `data/plugins/` directory and restart Ast
 |------|------|
 | `owner_sid` | Admin session ID (optional; plugin auto-reads AstrBot admin list) |
 | `allowed_ids` | Additional allowed user IDs (comma-separated, platform-agnostic) |
+| `group_config_enabled` | Enable per-group permission config (default: false, restart required) |
 | `tool_groups` | 9 group bool switches (`false` = disable entire group) |
 | `disabled_tools` | Comma-separated names of individually disabled tools |
 | `es_path` | Everything CLI path (auto-detect if empty) |
