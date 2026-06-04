@@ -17,8 +17,10 @@ from astrbot.api.provider import ProviderRequest
 
 from .tools import config as _tool_config
 
-from .tools._registry import TOOL_GROUPS, _ALL_TOOLS
+from .tools._registry import TOOL_GROUPS, _ALL_TOOLS, FunctionTool
 from .tools._auth import protect_tool, build_allowed_ids
+from .tools._helpers import run_sync as _run_sync
+from .core.codegraph import CodeGraph as _CodeGraph
 
 _DEFAULT_CONFIG = {
     "owner_sid": "",
@@ -35,6 +37,80 @@ _DEFAULT_CONFIG = {
 
 
 _PLUGIN_MODULE_PREFIX = "data.plugins.astrbot_plugin_irmia_devkit"
+
+
+# ── codegraph tool wrappers ──────────────────────────
+
+def _cg_index(project_dir: str, incremental: bool = False) -> dict:
+    from pathlib import Path
+    root = Path(project_dir).resolve()
+    db_path = str(root / ".codegraph" / "codegraph.db")
+    cg = _CodeGraph(db_path)
+    return cg.index(str(root), incremental)
+
+
+def _cg_explore(query: str, project_dir: str = ".") -> dict:
+    from pathlib import Path
+    root = Path(project_dir).resolve()
+    db_path = str(root / ".codegraph" / "codegraph.db")
+    cg = _CodeGraph(db_path)
+    return cg.explore(query, str(root))
+
+
+from dataclasses import dataclass, field
+
+from astrbot.core.agent.run_context import ContextWrapper
+from astrbot.core.agent.tool import ToolExecResult
+from astrbot.core.astr_agent_context import AstrAgentContext
+
+
+@dataclass
+class _CgIndexTool(FunctionTool):
+    name: str = "cg_index"
+    description: str = (
+        "【代码语义索引】为项目建立符号索引，支持 cg_explore 搜索调用链和符号。"
+        "首次运行约 30s（取决于项目大小），增量模式 mtime 比对跳过未改文件。"
+        "索引存储在项目根目录 .codegraph/codegraph.db。"
+        "Python 零依赖；其他语言需 pip install tree-sitter + 对应 grammar。"
+    )
+    parameters: dict = field(default_factory=lambda: {
+        "type": "object",
+        "properties": {
+            "project_dir": {"type": "string", "description": "项目根目录路径"},
+            "incremental": {"type": "boolean", "description": "增量索引（跳过未改文件），默认 false", "default": False},
+        },
+        "required": ["project_dir"],
+    })
+    async def call(self, context: ContextWrapper[AstrAgentContext], project_dir: str, incremental: bool = False, **kwargs) -> ToolExecResult:
+        try:
+            return json.dumps(await _run_sync(_cg_index, project_dir, incremental), ensure_ascii=False)
+        except Exception as e:
+            return json.dumps({"ok": False, "error": str(e), "hint": "检查 project_dir 是否是有效的项目目录。"}, ensure_ascii=False)
+
+
+@dataclass
+class _CgExploreTool(FunctionTool):
+    name: str = "cg_explore"
+    description: str = (
+        "【代码语义探索——首选】用自然语言或符号名查询代码库结构。自动路由："
+        "符号搜索（'safe_edit 在哪'）→ FTS5 全文检索返回位置+签名；"
+        "调用链追踪（'从 load 到 add_llm_tools 怎么走'）→ BFS 找路径；"
+        "自然语言探索（'star_manager 怎么加载插件'）→ 语义匹配返回相关符号。"
+        "需要先运行 cg_index 建索引。失败时给出明确的下一步提示。"
+    )
+    parameters: dict = field(default_factory=lambda: {
+        "type": "object",
+        "properties": {
+            "query": {"type": "string", "description": "自然语言或符号名，如 'safe_edit 在哪' 或 '从 load 到 add_llm_tools 的调用链'"},
+            "project_dir": {"type": "string", "description": "项目根目录，默认当前工作区", "default": "."},
+        },
+        "required": ["query"],
+    })
+    async def call(self, context: ContextWrapper[AstrAgentContext], query: str, project_dir: str = ".", **kwargs) -> ToolExecResult:
+        try:
+            return json.dumps(await _run_sync(_cg_explore, query, project_dir), ensure_ascii=False)
+        except Exception as e:
+            return json.dumps({"ok": False, "error": str(e), "hint": "检查是否已运行 cg_index 建索引。"}, ensure_ascii=False)
 
 
 class Main(star.Star):
@@ -135,6 +211,10 @@ class Main(star.Star):
 
         tools = [_ALL_TOOLS[name]() for name in enabled if name in _ALL_TOOLS]
         tools = [protect_tool(t, allowed_ids) for t in tools]
+        # 注册 codegraph 工具（始终可用，不归属任何工具组）
+        cg_tools = [_CgIndexTool(), _CgExploreTool()]
+        cg_tools = [protect_tool(t, allowed_ids) for t in cg_tools]
+        tools += cg_tools
         context.add_llm_tools(*tools)
         self._tool_names = {t.name for t in tools}
         # handler_module_path 设为 plugin.module_path 的真前缀：

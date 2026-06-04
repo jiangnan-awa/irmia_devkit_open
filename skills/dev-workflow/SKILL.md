@@ -3,7 +3,7 @@ name: dev-workflow
 description: >
   收到编码任务时强制走安全工作流。触发：写代码、改代码、修bug、重构、实现功能、修改文件。
   核心原则：先确认后执行、自动备份回滚、语法门禁。
-  可用工具：safe_edit、git_*、syntax_check、lint_runner、file_diff、es_search、rg_search、gh_pr、gh_issue、dep_scan。
+  可用工具：safe_edit、git_*、syntax_check、lint_runner、file_diff、es_search、rg_search、gh_pr、gh_issue、dep_scan、cg_explore。
 ---
 
 # 开发工作流
@@ -23,6 +23,7 @@ description: >
 2. `git_branch` — 确认在正确的分支上
 3. `safe_backups` — 看一眼有没有旧备份可用
 4. `es_search` / `rg_search` / `dir_tree` — 需要时先了解项目结构
+5. `cg_explore` — 需要理解代码调用链时优先使用（'X 在哪' '从 A 到 B 怎么走'）
 
 ## 节奏感
 
