@@ -32,9 +32,9 @@ _DEFAULT_CONFIG = {
     "backup_dir": "",
 }
 
-_PLUGIN_MODULE_PREFIX = "astrbot_plugin_irmia_devkit"
+_PLUGIN_MODULE_PREFIX = "data.plugins.astrbot_plugin_irmia_devkit"
 
-# 管理员可用 devkit 替代品时，摘掉对应原生工具
+# 启动验证标记 [2026-06-04 20:15 CST — L2 摘除验证通过]
 _NATIVE_REPLACEMENTS: dict[str, str] = {
     "astrbot_file_edit_tool": "safe_edit",
     "astrbot_grep_tool": "rg_search",
@@ -140,6 +140,11 @@ class Main(star.Star):
         tools = [_ALL_TOOLS[name]() for name in enabled if name in _ALL_TOOLS]
         tools = [protect_tool(t, allowed_ids) for t in tools]
         context.add_llm_tools(*tools)
+        # 修正 handler_module_path：对齐 AstrBot star_manager 的 deactivate/activate 路径匹配
+        # star_manager 的 module_path = "data.plugins.astrbot_plugin_irmia_devkit.main"
+        # add_llm_tools 设的是 "astrbot_plugin_irmia_devkit.tools.xxx" → startswith 失败
+        for tool in tools:
+            tool.handler_module_path = _PLUGIN_MODULE_PREFIX
         allowed_count = len(allowed_ids)
         logger.info(f"devkit ready — {len(tools)} tools registered, {allowed_count} allowed user{'s' if allowed_count != 1 else ''}")
 
