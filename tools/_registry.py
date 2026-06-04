@@ -2515,9 +2515,10 @@ class CodeIndexTool(FunctionTool):
 
     name: str = "code_index"
     description: str = (
-        "【代码语义索引】为项目建立符号和调用关系索引，供 code_explore 使用。"
-        "首次运行约 0.5-5s（取决于项目大小），增量模式 mtime 比对跳过未改文件。"
-        "索引存储在项目根目录 .codegraph/codegraph.db。Python 零依赖；其他语言需 pip install tree-sitter + grammar。"
+        "【首次使用必调】为项目建立代码语义索引（符号+调用关系图）。"
+        "Python 零依赖；其他语言需 pip install tree-sitter + grammar。"
+        "索引存储为 .codegraph/codegraph.db。增量模式按 mtime 跳过未改文件。"
+        "建完之后用 code_explore 回答一切代码结构问题——不要再手动 rg_search+file_read 拼答案。"
     )
     parameters: dict = field(default_factory=lambda: {
         "type": "object",
@@ -2542,10 +2543,12 @@ class CodeExploreTool(FunctionTool):
 
     name: str = "code_explore"
     description: str = (
-        "【代码语义探索——首选】用自然语言或符号名查询代码库结构。自动路由："
-        "符号搜索（'safe_edit 在哪'）→ 全文检索返回位置+签名；"
-        "调用链追踪（'从 load 到 add_llm_tools 怎么走'）→ BFS 找路径。"
-        "需要先运行 code_index 建索引。失败时给出明确的下一步提示。"
+        "【代码结构问题首选——一次调用即答案】回答一切代码库结构问题："
+        "符号搜索（'safe_edit 在哪'）、调用链追踪（'从 load 到 add_llm_tools'）、"
+        "架构理解（'star_manager 怎么加载插件'）。返回结构化 JSON + 自然语言总结。"
+        "**不要先 rg_search 再手动拼答案**——code_explore 就是预建的搜索索引，一次调用返回即答。"
+        "它返回的源码片段是 Read-equivalent 的。未找到时看 hint 改进查询，不要退到 rg_search。"
+        "需要先运行 code_index 建索引。"
     )
     parameters: dict = field(default_factory=lambda: {
         "type": "object",

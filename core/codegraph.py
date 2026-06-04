@@ -227,7 +227,7 @@ class CodeGraph:
             return {
                 "ok": True, "found": False, "query_type": "symbol_search",
                 "summary": f"未找到符号 '{target}'。",
-                "hint": f"试试 rg_search('{target}') 搜索包含该关键字的文件。",
+                "hint": f"试试 rg_search 搜索 '{target}' 在源码中的原始文本；或用更宽泛的关键词重试 code_explore。",
                 "search_strategy": strategy,
             }
         callers = {}
@@ -252,7 +252,7 @@ class CodeGraph:
                 "ok": True, "found": True, "query_type": "trace",
                 "summary": f"从 {from_sym} 到 {to_sym} 的调用链 ({len(path)-1} 跳): {' → '.join(path)}",
                 "path": path,
-                "hint": "需要看具体代码？用 file_read 查看对应文件。",
+                "hint": "用更精确的符号名或调用链查询重试（'从 X 到 Y'）。",
             }
         fwd = _bfs_path(conn, from_sym, to_sym, max_depth=10)
         if fwd:
@@ -264,7 +264,7 @@ class CodeGraph:
             "ok": True, "found": False, "query_type": "trace",
             "summary": f"从 {from_sym} 到 {to_sym} 未找到静态调用链（可能跨模块、动态调用或异步）。",
             "unresolved": [{"from": from_sym, "to": to_sym, "reason": "BFS 未找到路径"}],
-            "hint": f"用 rg_search 搜索 {to_sym} 在哪些文件中被引用。",
+            "hint": f"用 rg_search 搜索 {to_sym} 确认是否通过动态调用或回调连接。",
         }
 
     def _trace_open(self, conn, query: str, project_dir: str) -> dict:
