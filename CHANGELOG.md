@@ -1,5 +1,13 @@
 # Changelog
 
+## v2.3.6 — L2 原生工具摘除 + handler_module_path 修正
+
+- **L2 原生工具摘除 (P0)**: `_auth_guard` 在管理员路径自动移除有 devkit 替代品的 AstrBot 原生工具（`astrbot_file_edit_tool` → `safe_edit`、`astrbot_grep_tool` → `rg_search`），LLM 不再在原生和 devkit 之间摇摆
+- **工具排序优化**: `_auth_guard` 将 devkit 工具排在原生工具前面，确保 LLM 优先选择 devkit
+- **AstrBot 兼容修复**: `handler_module_path` 从子模块路径（`astrbot_plugin_irmia_devkit.tools.xxx`）改为插件根路径（`data.plugins.astrbot_plugin_irmia_devkit`），对齐 `star_manager` 的 deactivate/activate 路径匹配逻辑
+- **上游问题**: 发现并报告 AstrBot `star_manager.py` 中 `plugin.module_path.startswith(mp)` 的比较方向反了（应 `mp.startswith(plugin.module_path)`），导致插件禁用/启用时工具状态持久化损坏
+- **复现与验证**: 记录完整的 6 步复现路径和插件侧 workaround
+
 ## v2.3.5 — 双层权限防线 + 代码审查修复
 
 - **权限防线 (P0)**: 新增 `tools/_auth.py` 模块 — `protect_tool()` 包裹每个工具的 `call()` 执行前鉴权；`build_allowed_ids()` 自动读取 AstrBot 全局管理员列表 + 插件额外配置

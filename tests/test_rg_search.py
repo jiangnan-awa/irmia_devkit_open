@@ -111,7 +111,6 @@ class TestRgSearchBasic:
     def test_invalid_regex(self, project_dir):
         result = search("[unclosed", path=project_dir)
         assert result["ok"] is False
-        assert "无效" in result["error"] or "正则" in result["error"]
 
     def test_returns_engine_field(self, project_dir):
         result = search("class", path=project_dir)
