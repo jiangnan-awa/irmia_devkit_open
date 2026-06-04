@@ -294,7 +294,7 @@ class Main(star.Star):
                 kept.append(tool)
 
             # L2: 授权用户有 devkit 替代品时，摘掉对应的原生工具
-            devkit_names = {t.name for t in kept if getattr(t, "handler_module_path", "").startswith(_PLUGIN_MODULE_PREFIX)}
+            devkit_names = {t.name for t in kept if (getattr(t, "handler_module_path", None) or "").startswith(_PLUGIN_MODULE_PREFIX)}
             if devkit_names:
                 kept2 = []
                 for tool in kept:
