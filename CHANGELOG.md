@@ -1,7 +1,10 @@
 # Changelog
 
-## v2.3.6 — L2 原生工具摘除 + handler_module_path 修正
+## v2.3.6 — L2 原生工具摘除 + handler_module_path 修正 + 群级 WebUI
 
+- **群级权限配置 (PR #4)**: 新增 `devkit_web.py` Web 管理面板 — 按群聊独立配置工具箱权限（额外管理员、工具组开关），支持全局管理员和群级额外管理员双层鉴权
+- **配置**: 新增 `group_config_enabled` 开关（默认关闭），`config.json` / `_conf_schema.json` 同步
+- **前端**: `pages/settings/` — 蓝白主题 WebUI，群列表侧边栏 + 配置面板，XSS 防护，确认弹窗，Toast 提示
 - **L2 原生工具摘除 (P0)**: `_auth_guard` 在管理员路径自动移除有 devkit 替代品的 AstrBot 原生工具（`astrbot_file_edit_tool` → `safe_edit`、`astrbot_grep_tool` → `rg_search`），LLM 不再在原生和 devkit 之间摇摆
 - **工具排序优化**: `_auth_guard` 将 devkit 工具排在原生工具前面，确保 LLM 优先选择 devkit
 - **AstrBot 兼容修复**: `handler_module_path` 从子模块路径（`astrbot_plugin_irmia_devkit.tools.xxx`）改为插件根路径（`data.plugins.astrbot_plugin_irmia_devkit`），对齐 `star_manager` 的 deactivate/activate 路径匹配逻辑
