@@ -8,6 +8,7 @@ from __future__ import annotations
 import json
 import os
 import copy
+import sqlite3
 
 from astrbot.api import logger, star
 from astrbot.api.star import StarTools
@@ -139,6 +140,9 @@ class Main(star.Star):
         # add_llm_tools 设的是 "astrbot_plugin_irmia_devkit.tools.xxx" → startswith 失败
         for tool in tools:
             tool.handler_module_path = _PLUGIN_MODULE_PREFIX
+        # 自愈：清理 deactivate_plugin 在关闭时残留的 inactivated_llm_tools 条目
+        # AstrBot 重启时 activate_plugin 不会被调用，但加载路径的 step 4 会扫到旧条目
+        self._heal_inactivated_tools(tools)
         allowed_count = len(allowed_ids)
         logger.info(f"devkit ready — {len(tools)} tools registered, {allowed_count} allowed user{'s' if allowed_count != 1 else ''}")
 
@@ -211,10 +215,60 @@ class Main(star.Star):
             return False
         return str(event.get_sender_id() or "").strip() in self._allowed_ids or self._is_group_extra_admin(event)
 
+    def _heal_inactivated_tools(self, tools: list) -> None:
+        """自愈：强制启用所有 devkit 工具并清理 inactivated_llm_tools 中的幽灵条目。
+
+        AstrBot 关闭时 deactivate_plugin 将工具加入 inactivated_llm_tools，
+        但重启时 activate_plugin 不会被调用，且 star_manager 在 __init__ 之前
+        已将列表读到内存，导致工具永远禁用。
+
+        DB 路径：StarTools.get_data_dir() 返回插件数据子目录，需回退到根 data 目录。
+        """
+        # 强启工具（必须，因为 star_manager 内存缓存已读）
+        for tool in tools:
+            tool.active = True
+        # 清理 DB 幽灵条目（为下次重启铺路）
+        try:
+            plug_data = str(StarTools.get_data_dir())
+            data_root = os.path.dirname(os.path.dirname(plug_data))
+            db_path = os.path.join(data_root, "data_v4.db")
+            if not os.path.exists(db_path):
+                db_path = os.path.join(data_root, "data.db")
+            db = sqlite3.connect(db_path)
+            rows = db.execute("SELECT value FROM preferences WHERE key='inactivated_llm_tools'").fetchall()
+            if not rows:
+                db.close()
+                return
+            v = json.loads(rows[0][0])
+            old_list = v.get("val", [])
+            names = {t.name for t in tools}
+            new_list = [x for x in old_list if x not in names]
+            removed = len(old_list) - len(new_list)
+            if removed:
+                v["val"] = new_list
+                db.execute("UPDATE preferences SET value=? WHERE key='inactivated_llm_tools'", (json.dumps(v),))
+                db.commit()
+                logger.info(f"healed: removed {removed} ghost entries from inactivated_llm_tools ({len(new_list)} remain)")
+            db.close()
+        except Exception as e:
+            logger.warning(f"heal_inactivated_tools DB cleanup failed: {e}")
+
     @filter.on_llm_request()
     async def _auth_guard(self, event: AstrMessageEvent, req: ProviderRequest):
         sender_id = str(event.get_sender_id() or "").strip()
         if req.func_tool:
+            # 兜底自愈：star_manager 在 __init__ 之前已将 inactivated_llm_tools
+            # 读到内存，_heal_inactivated_tools 改了 DB 但内存缓存仍然是旧的。
+            # 这里直接在 req.func_tool.tools 上修正 active 状态。
+            healed = 0
+            for tool in req.func_tool.tools:
+                mp = getattr(tool, "handler_module_path", "")
+                if mp and mp.startswith(_PLUGIN_MODULE_PREFIX) and not tool.active:
+                    tool.active = True
+                    healed += 1
+            if healed:
+                logger.info(f"devkit self-heal: re-activated {healed} tools suppressed by stale inactivated_llm_tools cache")
+
             removed = []
             kept = []
             for tool in req.func_tool.tools:
