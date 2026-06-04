@@ -251,10 +251,18 @@ class Main(star.Star):
             reordered = devkit + others
 
             if removed:
-                logger.info(
-                    "devkit L1 auth: removed %d tools for sender=%s: %s",
-                    len(removed), sender_id, ", ".join(removed),
-                )
+                # L2 摘除（相同原生工具每轮重复移除）→ debug；L1 拦截（非授权用户）→ info
+                l2_only = all("→" in r for r in removed)
+                if l2_only:
+                    logger.debug(
+                        "devkit L1 auth: removed %d tools for sender=%s: %s",
+                        len(removed), sender_id, ", ".join(removed),
+                    )
+                else:
+                    logger.info(
+                        "devkit L1 auth: removed %d tools for sender=%s: %s",
+                        len(removed), sender_id, ", ".join(removed),
+                    )
 
             self._rebuild_func_tool(req, reordered)
 
