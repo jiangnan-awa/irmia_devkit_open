@@ -32,7 +32,7 @@ _DEFAULT_CONFIG = {
     "backup_dir": "",
 }
 
-_PLUGIN_MODULE_PREFIX = "data.plugins.astrbot_plugin_irmia_devkit"
+_PLUGIN_MODULE_PREFIX = "data.plugins.astrbot_plugin_irmia_devkit.main"
 
 
 class Main(star.Star):
