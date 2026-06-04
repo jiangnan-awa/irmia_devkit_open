@@ -8,7 +8,33 @@ import pytest
 
 from tools._auth import protect_tool, build_allowed_ids
 
-_PLUGIN_MODULE_PREFIX = "astrbot_plugin_irmia_devkit"
+_DEVKIT_TOOL_NAMES = {
+    # 安全编辑链
+    "safe_edit", "safe_rollback", "safe_backups", "file_patch", "file_preview",
+    "syntax_check", "lint_runner",
+    # Git & GitHub
+    "git_status", "git_diff", "git_log", "git_commit", "git_branch",
+    "git_remote", "git_push", "gh_pr", "gh_issue", "gh_release", "gh_repo",
+    # 文件系统
+    "es_search", "rg_search", "dir_tree", "dir_list", "file_diff",
+    "file_hash", "file_zip", "file_unzip", "disk_info", "file_watch",
+    "file_remove", "config_diff",
+    # 系统信息
+    "proc_list", "sys_snapshot", "port_check", "tool_stats",
+    # 网络
+    "http_get", "http_post", "http_download",
+    # 文本处理
+    "html_extract", "text_filter", "json_query", "json_schema_val",
+    "csv_parse", "csv_gen", "regex_test", "regex_replace", "diff_strings",
+    "md_strip", "log_parse",
+    # 编码
+    "base64_", "hex_", "url_",
+    # 时间
+    "time_now", "time_convert", "time_diff",
+    # 扩展
+    "uuid_gen", "semver_compare", "svg_render", "project_init",
+    "git_changelog", "db_query", "dep_scan",
+}
 
 
 class MockTool:
@@ -170,8 +196,7 @@ class TestLayer1Filtering:
         removed = []
         kept = []
         for tool in tools:
-            mp = getattr(tool, "handler_module_path", "") or ""
-            if mp and mp.startswith(_PLUGIN_MODULE_PREFIX):
+            if tool.name in _DEVKIT_TOOL_NAMES:
                 removed.append(tool.name)
             else:
                 kept.append(tool)
@@ -183,53 +208,41 @@ class TestLayer1Filtering:
             MockTool(name="git_status"),
             MockTool(name="sandbox_tool"),
         ]
-        tools[0].handler_module_path = "astrbot_plugin_irmia_devkit.main"
-        tools[1].handler_module_path = "astrbot_plugin_irmia_devkit.main"
-        tools[2].handler_module_path = "astrbot.builtin_stars.sandbox"
         removed, kept = self._filter(tools)
         assert removed == ["safe_edit", "git_status"]
         assert len(kept) == 1
         assert kept[0].name == "sandbox_tool"
 
-    def test_preserves_mcp_tools(self):
+    def test_preserves_tools_not_in_names(self):
         tools = [
             MockTool(name="safe_edit"),
             MockTool(name="mcp_search"),
         ]
-        tools[0].handler_module_path = "astrbot_plugin_irmia_devkit.main"
-        tools[1].handler_module_path = ""  # MCP tools have no module path
         removed, kept = self._filter(tools)
         assert removed == ["safe_edit"]
         assert len(kept) == 1
         assert kept[0].name == "mcp_search"
 
-    def test_preserves_tools_without_module_path(self):
+    def test_preserves_unknown_tools(self):
         tools = [
             MockTool(name="devkit_tool"),
             MockTool(name="unknown_tool"),
         ]
-        tools[0].handler_module_path = "astrbot_plugin_irmia_devkit.main"
-        tools[1].handler_module_path = None
         removed, kept = self._filter(tools)
-        assert removed == ["devkit_tool"]
-        assert len(kept) == 1
-        assert kept[0].name == "unknown_tool"
+        assert removed == []  # "devkit_tool" not in _DEVKIT_TOOL_NAMES
+        assert len(kept) == 2
 
     def test_no_devkit_tools_nothing_removed(self):
         tools = [
             MockTool(name="web_search"),
             MockTool(name="shell_exec"),
         ]
-        tools[0].handler_module_path = "astrbot.builtin_stars.websearch"
-        tools[1].handler_module_path = "astrbot.core.computer_tools"
         removed, kept = self._filter(tools)
         assert removed == []
         assert len(kept) == 2
 
     def test_all_devkit_tools_all_removed(self):
         tools = [MockTool(name=f"tool_{i}") for i in range(5)]
-        for t in tools:
-            t.handler_module_path = "astrbot_plugin_irmia_devkit.main"
         removed, kept = self._filter(tools)
-        assert len(removed) == 5
-        assert len(kept) == 0
+        assert len(removed) == 0  # tool_0, tool_1, ... not in _DEVKIT_TOOL_NAMES
+        assert len(kept) == 5

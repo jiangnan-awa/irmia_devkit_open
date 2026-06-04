@@ -33,8 +33,6 @@ _DEFAULT_CONFIG = {
     "backup_dir": "",
 }
 
-_PLUGIN_MODULE_PREFIX = "data.plugins.astrbot_plugin_irmia_devkit.main"
-
 
 class Main(star.Star):
     """弥亚开发工具箱插件"""
@@ -136,13 +134,9 @@ class Main(star.Star):
         tools = [protect_tool(t, allowed_ids) for t in tools]
         context.add_llm_tools(*tools)
         self._tool_names = {t.name for t in tools}
-        # 修正 handler_module_path：对齐 AstrBot star_manager 的 deactivate/activate 路径匹配
-        # star_manager 的 module_path = "data.plugins.astrbot_plugin_irmia_devkit.main"
-        # add_llm_tools 设的是 "astrbot_plugin_irmia_devkit.tools.xxx" → startswith 失败
-        for tool in tools:
-            tool.handler_module_path = _PLUGIN_MODULE_PREFIX
-        # 自愈：清理 deactivate_plugin 在关闭时残留的 inactivated_llm_tools 条目
-        # AstrBot 重启时 activate_plugin 不会被调用，但加载路径的 step 4 会扫到旧条目
+        # 不再覆写 handler_module_path，让 AstrBot 的 deactivate/activate/_unbind_plugin
+        # 无法通过路径匹配到我们的工具，从而避免 reload 停用插件时误删工具。
+        # 工具启停由我们的 terminate() / _heal_inactivated_tools / _auth_guard 自行管理。
         self._heal_inactivated_tools(tools)
         allowed_count = len(allowed_ids)
         logger.info(f"devkit ready — {len(tools)} tools registered, {allowed_count} allowed user{'s' if allowed_count != 1 else ''}")
@@ -150,24 +144,24 @@ class Main(star.Star):
         if self._group_config_enabled:
             self._register_web_page()
 
-    @filter.on_plugin_loaded()
-    async def _post_load_heal(self, event):
-        """L1091 之后第二轮自愈：强制启用本轮被 star_manager 误关的工具。
-        _heal_inactivated_tools 在 __init__ 中跑了，但 L1091 在 __init__ 之后
-        用本地 inactivated_llm_tools 副本覆盖了 active=False。此处纠正。
+    async def terminate(self):
+        """停用插件时关闭所有 devkit 工具。
+        因为不再覆写 handler_module_path，AstrBot 的 turn_off_plugin 无法通过路径匹配
+        找到我们的工具，所以需要在 terminate() 中自行关停。
         """
         try:
-            healed = 0
+            names = getattr(self, "_tool_names", set())
+            if not names:
+                return
+            count = 0
             for tool in self.context.provider_manager.llm_tools.func_list:
-                mp = getattr(tool, "handler_module_path", "")
-                if mp and mp.startswith(_PLUGIN_MODULE_PREFIX) and not tool.active:
-                    tool.active = True
-                    healed += 1
-            if healed:
-                logger.info(f"post-load heal: re-activated {healed} tools suppressed by inactivated_llm_tools")
-            self._heal_inactivated_tools_db()
+                if tool.name in names and tool.active:
+                    tool.active = False
+                    count += 1
+            if count:
+                logger.info(f"devkit terminate: deactivated {count} tools")
         except Exception as e:
-            logger.warning(f"post-load heal failed: {e}")
+            logger.warning(f"devkit terminate failed: {e}")
 
     def _register_web_page(self) -> None:
         try:
@@ -274,33 +268,33 @@ class Main(star.Star):
     async def _auth_guard(self, event: AstrMessageEvent, req: ProviderRequest):
         sender_id = str(event.get_sender_id() or "").strip()
         if req.func_tool:
-            # 兜底自愈：star_manager 在 __init__ 之前已将 inactivated_llm_tools
-            # 读到内存，_heal_inactivated_tools 改了 DB 但内存缓存仍然是旧的。
-            # 这里直接在 req.func_tool.tools 上修正 active 状态。
-            healed = 0
-            for tool in req.func_tool.tools:
-                mp = getattr(tool, "handler_module_path", "")
-                if mp and mp.startswith(_PLUGIN_MODULE_PREFIX) and not tool.active:
-                    tool.active = True
-                    healed += 1
-            if healed:
-                logger.info(f"devkit self-heal: re-activated {healed} tools suppressed by stale inactivated_llm_tools cache")
+            names = getattr(self, "_tool_names", set())
+            if names:
+                # 兜底自愈：star_manager 的 load L1091 可能在 __init__ 之后
+                # 用本地 inactivated_llm_tools 副本覆盖了 active=False。
+                # 此处用 _tool_names 集合识别我们的工具（不再依赖 handler_module_path）。
+                healed = 0
+                for tool in req.func_tool.tools:
+                    if tool.name in names and not tool.active:
+                        tool.active = True
+                        healed += 1
+                if healed:
+                    logger.info(f"devkit self-heal: re-activated {healed} tools suppressed by stale inactivated_llm_tools cache")
 
-            removed = []
-            kept = []
-            for tool in req.func_tool.tools:
-                mp = getattr(tool, "handler_module_path", "")
-                if mp and mp.startswith(_PLUGIN_MODULE_PREFIX) and not self._is_tool_allowed_for_event(event, tool.name):
-                    removed.append(tool.name)
-                    continue
-                kept.append(tool)
+                removed = []
+                kept = []
+                for tool in req.func_tool.tools:
+                    if tool.name in names and not self._is_tool_allowed_for_event(event, tool.name):
+                        removed.append(tool.name)
+                        continue
+                    kept.append(tool)
 
-            if removed:
-                self._rebuild_func_tool(req, kept)
-                logger.info(
-                    "devkit L1 auth: removed %d tools for sender=%s: %s",
-                    len(removed), sender_id, ", ".join(removed),
-                )
+                if removed:
+                    self._rebuild_func_tool(req, kept)
+                    logger.info(
+                        "devkit L1 auth: removed %d tools for sender=%s: %s",
+                        len(removed), sender_id, ", ".join(removed),
+                    )
 
     @staticmethod
     def _rebuild_func_tool(req, kept: list) -> None:
