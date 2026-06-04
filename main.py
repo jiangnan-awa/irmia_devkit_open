@@ -34,12 +34,6 @@ _DEFAULT_CONFIG = {
 
 _PLUGIN_MODULE_PREFIX = "data.plugins.astrbot_plugin_irmia_devkit"
 
-# 启动验证标记 [2026-06-04 20:15 CST — L2 摘除验证通过]
-_NATIVE_REPLACEMENTS: dict[str, str] = {
-    "astrbot_file_edit_tool": "safe_edit",
-    "astrbot_grep_tool": "rg_search",
-}
-
 
 class Main(star.Star):
     """弥亚开发工具箱插件"""
@@ -221,50 +215,21 @@ class Main(star.Star):
     async def _auth_guard(self, event: AstrMessageEvent, req: ProviderRequest):
         sender_id = str(event.get_sender_id() or "").strip()
         if req.func_tool:
-            # 收集当前 devkit 工具名
-            devkit_names: set[str] = set()
-            for tool in req.func_tool.tools:
-                mp = getattr(tool, "handler_module_path", "")
-                if mp and mp.startswith(_PLUGIN_MODULE_PREFIX):
-                    devkit_names.add(tool.name)
-
             removed = []
             kept = []
             for tool in req.func_tool.tools:
                 mp = getattr(tool, "handler_module_path", "")
-                # L1: 移除未授权用户的 devkit 工具
                 if mp and mp.startswith(_PLUGIN_MODULE_PREFIX) and not self._is_tool_allowed_for_event(event, tool.name):
                     removed.append(tool.name)
                     continue
-                # L2: 管理员有 devkit 替代品时，摘掉对应的原生工具
-                if self._is_tool_allowed_for_event(event, tool.name):
-                    native_name = tool.name
-                    devkit_name = _NATIVE_REPLACEMENTS.get(native_name)
-                    if devkit_name and devkit_name in devkit_names:
-                        removed.append(f"{native_name}→{devkit_name}")
-                        continue
                 kept.append(tool)
 
-            # 重排序：devkit 工具排到原生工具前面
-            devkit = [t for t in kept if (mp := getattr(t, "handler_module_path", None)) and mp.startswith(_PLUGIN_MODULE_PREFIX)]
-            others = [t for t in kept if not ((mp := getattr(t, "handler_module_path", None)) and mp.startswith(_PLUGIN_MODULE_PREFIX))]
-            reordered = devkit + others
-
             if removed:
-                # L2 摘除（相同原生工具每轮重复移除）→ debug；L1 拦截（非授权用户）→ info
-                l2_only = all("→" in r for r in removed)
-                if l2_only:
-                    logger.debug(
-                        "devkit L1 auth: removed %d tools for sender=%s: %s",
-                        len(removed), sender_id, ", ".join(removed),
-                    )
-                else:
-                    logger.info(
-                        "devkit L1 auth: removed %d tools for sender=%s: %s",
-                        len(removed), sender_id, ", ".join(removed),
-                    )
-
-            self._rebuild_func_tool(req, reordered)
+                self._rebuild_func_tool(req, kept)
+                logger.info(
+                    "devkit L1 auth: removed %d tools for sender=%s: %s",
+                    len(removed), sender_id, ", ".join(removed),
+                )
 
     @staticmethod
     def _rebuild_func_tool(req, kept: list) -> None:
