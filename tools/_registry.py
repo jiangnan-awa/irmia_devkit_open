@@ -98,6 +98,25 @@ from .db_query import query as _db_query
 from .dep_scan import scan as _dep_scan
 from .file_remove import remove as _file_remove
 
+# ── codegraph ──
+from core.codegraph import CodeGraph as _CodeGraph
+
+
+def _cg_index(project_dir: str, incremental: bool = False) -> dict:
+    from pathlib import Path
+    root = Path(project_dir).resolve()
+    db_path = str(root / ".codegraph" / "codegraph.db")
+    cg = _CodeGraph(db_path)
+    return cg.index(str(root), incremental)
+
+
+def _cg_explore(query: str, project_dir: str = ".") -> dict:
+    from pathlib import Path
+    root = Path(project_dir).resolve()
+    db_path = str(root / ".codegraph" / "codegraph.db")
+    cg = _CodeGraph(db_path)
+    return cg.explore(query, str(root))
+
 # ═══════════════════════════════════════════════════════════
 # Tool classes
 # ═══════════════════════════════════════════════════════════
@@ -2489,6 +2508,62 @@ class FileRemoveTool(FunctionTool):
             return _err(f"file_remove 失败: {e}")
 
 
+# ══ codegraph ══
+@dataclass
+class CgIndexTool(FunctionTool):
+    """代码语义索引：为项目建立符号索引。"""
+
+    name: str = "cg_index"
+    description: str = (
+        "【代码语义索引】为项目建立符号和调用关系索引，供 cg_explore 使用。"
+        "首次运行约 0.5-5s（取决于项目大小），增量模式 mtime 比对跳过未改文件。"
+        "索引存储在项目根目录 .codegraph/codegraph.db。Python 零依赖；其他语言需 pip install tree-sitter + grammar。"
+    )
+    parameters: dict = field(default_factory=lambda: {
+        "type": "object",
+        "properties": {
+            "project_dir": {"type": "string", "description": "项目根目录路径"},
+            "incremental": {"type": "boolean", "description": "增量索引（跳过未改文件），默认 false", "default": False},
+        },
+        "required": ["project_dir"],
+    })
+
+    async def call(self, context: ContextWrapper[AstrAgentContext], project_dir: str, incremental: bool = False, **kwargs) -> ToolExecResult:
+        _tool_stats.record(self.name)
+        try:
+            return _unwrap(await _run_sync(_cg_index, project_dir, incremental))
+        except Exception as e:
+            return _err(f"cg_index 失败: {e}")
+
+
+@dataclass
+class CgExploreTool(FunctionTool):
+    """代码语义探索：用自然语言或符号名查询代码库结构。"""
+
+    name: str = "cg_explore"
+    description: str = (
+        "【代码语义探索——首选】用自然语言或符号名查询代码库结构。"
+        "符号搜索（'safe_edit 在哪'）→ 全文检索返回位置+签名；"
+        "调用链追踪（'从 load 到 add_llm_tools 怎么走'）→ BFS 找路径；"
+        "需要先运行 cg_index 建索引。失败时给出明确的下一步提示。"
+    )
+    parameters: dict = field(default_factory=lambda: {
+        "type": "object",
+        "properties": {
+            "query": {"type": "string", "description": "自然语言或符号名，如 'safe_edit 在哪' 或 '从 load 到 add_llm_tools 的调用链'"},
+            "project_dir": {"type": "string", "description": "项目根目录，默认当前目录", "default": "."},
+        },
+        "required": ["query"],
+    })
+
+    async def call(self, context: ContextWrapper[AstrAgentContext], query: str, project_dir: str = ".", **kwargs) -> ToolExecResult:
+        _tool_stats.record(self.name)
+        try:
+            return _unwrap(await _run_sync(_cg_explore, query, project_dir))
+        except Exception as e:
+            return _err(f"cg_explore 失败: {e}")
+
+
 # ═══════════════════════════════════════════════════════════
 # Tool groups and registry
 # ═══════════════════════════════════════════════════════════
@@ -2559,6 +2634,8 @@ TOOL_GROUPS: dict[str, list[str]] = {
         "git_changelog",
         "db_query",
         "dep_scan",
+        "cg_index",
+        "cg_explore",
     ],
 }
 
@@ -2624,4 +2701,6 @@ _ALL_TOOLS = {
     "git_changelog": GitChangelogTool,
     "db_query": DbQueryTool,
     "dep_scan": DepScanTool,
+    "cg_index": CgIndexTool,
+    "cg_explore": CgExploreTool,
 }
