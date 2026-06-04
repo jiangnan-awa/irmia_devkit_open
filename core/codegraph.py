@@ -95,7 +95,7 @@ class CodeGraph:
         conn.execute("CREATE INDEX IF NOT EXISTS idx_edge_kind ON edges(kind)")
         try:
             conn.execute(
-                "CREATE VIRTUAL TABLE IF NOT EXISTS sym_fts USING fts5(name, kind, file, signature, source)"
+                "CREATE VIRTUAL TABLE IF NOT EXISTS sym_fts USING fts5(name, file, signature)"
             )
         except Exception:
             pass
@@ -178,8 +178,8 @@ class CodeGraph:
         try:
             conn.execute("DELETE FROM sym_fts")
             conn.execute(
-                "INSERT INTO sym_fts(name, kind, file, signature, source) "
-                "SELECT name, kind, file, signature, coalesce(source,'') FROM symbols"
+                "INSERT INTO sym_fts(name, file, signature) "
+                "SELECT name, file, signature FROM symbols"
             )
         except Exception:
             pass
@@ -314,12 +314,25 @@ class CodeGraph:
             if tokens:
                 fts_query = " OR ".join(tokens)
                 rows = conn.execute(
-                    "SELECT name,kind,file,line,signature,source,visibility,is_async "
+                    "SELECT name, file, signature "
                     "FROM sym_fts WHERE sym_fts MATCH ? ORDER BY rank LIMIT ?",
                     (fts_query, limit),
                 ).fetchall()
                 if rows:
-                    return [_row_to_dict(r) for r in rows], "fts5"
+                    result = []
+                    fts_names = [r[0] for r in rows]
+                    placeholders = ",".join(["?"] * len(fts_names))
+                    sym_rows = conn.execute(
+                        f"SELECT name,kind,file,line,signature,source,visibility,is_async "
+                        f"FROM symbols WHERE name IN ({placeholders})",
+                        fts_names,
+                    ).fetchall()
+                    sym_map = {r[0]: r for r in sym_rows}
+                    for fts_r in rows:
+                        name = fts_r[0]
+                        if name in sym_map:
+                            result.append(_row_to_dict(sym_map[name]))
+                    return result, "fts5"
         except Exception:
             pass
 
@@ -417,7 +430,7 @@ def _extract_python(filepath: str) -> tuple[list[dict], list[dict]]:
                 if isinstance(b, py_ast.Name):
                     bases.append(b.id)
                 elif isinstance(b, py_ast.Attribute):
-                    bases.append(_unparse_attr(b))
+                    bases.append(".".join(_unparse_attr(b)))
             symbols.append({
                 "name": cls, "kind": "class", "line": node.lineno,
                 "signature": f"class {node.name}({', '.join(bases)})" if bases else f"class {node.name}",
