@@ -99,10 +99,7 @@ from .dep_scan import scan as _dep_scan
 from .file_remove import remove as _file_remove
 
 # ── codegraph ──
-try:
-    from ..core.codegraph import CodeGraph as _CodeGraph
-except ImportError:
-    _CodeGraph = None  # tree-sitter / codegraph 不可用时优雅降级
+from .codegraph import CodeGraph as _CodeGraph
 
 
 def _code_index(project_dir: str, incremental: bool = False) -> dict:
