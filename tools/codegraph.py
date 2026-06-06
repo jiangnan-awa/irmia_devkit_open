@@ -197,8 +197,9 @@ class CodeGraph:
 
         start = time.time()
         conn = self._conn_get()
-        conn.execute("DELETE FROM symbols")
-        conn.execute("DELETE FROM edges")
+        if not incremental:
+            conn.execute("DELETE FROM symbols")
+            conn.execute("DELETE FROM edges")
 
         stats = {"files": 0, "symbols": 0, "edges": 0, "skipped": 0}
         mtimes: dict[str, float] = {}
@@ -217,6 +218,8 @@ class CodeGraph:
             if incremental and rp in mtimes and mtimes[rp] >= fpath.stat().st_mtime:
                 continue
             if incremental:
+                conn.execute("DELETE FROM symbols WHERE file=?", (rp,))
+                conn.execute("DELETE FROM edges WHERE file=?", (rp,))
                 mtimes[rp] = fpath.stat().st_mtime
             try:
                 symbols, edges = _extract_file(str(fpath), fpath.suffix.lower())
@@ -672,9 +675,10 @@ class CodeGraph:
 # ── helpers ───────────────────────────────────────────
 
 def _row_to_dict(r) -> dict:
+    raw_source = (r[5] or "") if len(r) > 5 else ""
+    truncated = CodeGraph._smart_truncate(raw_source)
     d = {"name": r[0], "kind": r[1], "file": r[2], "line": r[3],
-         "signature": r[4], "source": CodeGraph._smart_truncate(r[5] or "")}
-    d["source"] = d["source"]["source"][:300] if isinstance(d["source"], dict) else (d["source"] or "")[:300]
+         "signature": r[4], "source": truncated["source"]}
     if len(r) > 6 and r[6]:
         d["visibility"] = r[6]
     if len(r) > 7 and r[7]:
@@ -880,7 +884,6 @@ def _walk_ts(node, source: bytes, symbols: list, edges: list, scope: str = ""):
         fn = f"{scope}.{name}" if scope else name
         symbols.append({"name": fn, "kind": "function", "line": node.start_point[0] + 1,
                        "signature": text(node).split("\n")[0][:200], "visibility": "public" if not name.startswith("_") else "private"})
-        _ts_edges(node, source, fn, edges, scope)
 
     # class / struct / interface / enum
     elif kind in _TS_CLASS_TYPES:
@@ -922,10 +925,6 @@ def _walk_ts(node, source: bytes, symbols: list, edges: list, scope: str = ""):
     for child in node.children:
         if kind not in _TS_CLASS_TYPES:
             _walk_ts(child, source, symbols, edges, scope)
-
-
-def _ts_edges(node, source, fn, edges, scope):
-    pass
 
 
 def _ts_extends(node, source, cls, edges):

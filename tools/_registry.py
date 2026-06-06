@@ -140,9 +140,7 @@ def _code_status() -> dict:
     db_path = str(root / ".codegraph" / "codegraph.db")
     cg = _CodeGraph(db_path)
     return cg.code_status()
-    db_path = str(root / ".codegraph" / "codegraph.db")
-    cg = _CodeGraph(db_path)
-    return cg.explore(query, str(root))
+
 
 # ═══════════════════════════════════════════════════════════
 # Tool classes
