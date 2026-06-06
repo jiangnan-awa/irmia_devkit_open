@@ -500,17 +500,22 @@ class CodeGraph:
     def _build_relationship_map(self, conn, names: list[str]) -> dict:
         rmap: dict = {}
         limit = min(len(names), 5)
-        for name in names[:limit]:
-            calls = [r[0] for r in conn.execute("SELECT to_sym FROM edges WHERE from_sym=? AND kind='calls' LIMIT 5", (name,)).fetchall()]
-            called_by = [r[0] for r in conn.execute("SELECT from_sym FROM edges WHERE to_sym=? AND kind='calls' LIMIT 5", (name,)).fetchall()]
-            extends = [r[0] for r in conn.execute("SELECT to_sym FROM edges WHERE from_sym=? AND kind='extends' LIMIT 3", (name,)).fetchall()]
-            imports = [r[0] for r in conn.execute("SELECT to_sym FROM edges WHERE from_sym=? AND kind='imports' LIMIT 3", (name,)).fetchall()]
-            if calls or called_by:
-                rmap[name] = {"calls": calls, "called_by": called_by}
-                if extends:
-                    rmap[name]["extends"] = extends
-                if imports:
-                    rmap[name]["imports"] = imports
+        targets = names[:limit]
+        if not targets:
+            return rmap
+        placeholders = ",".join(["?"] * len(targets))
+        calls_map: dict[str, list] = defaultdict(list)
+        called_by_map: dict[str, list] = defaultdict(list)
+        for row in conn.execute(f"SELECT from_sym,to_sym FROM edges WHERE kind='calls' AND (from_sym IN ({placeholders}) OR to_sym IN ({placeholders}))", targets + targets).fetchall():
+            if row[0] in targets:
+                calls_map[row[0]].append(row[1])
+            if row[1] in targets:
+                called_by_map[row[1]].append(row[0])
+        for name in targets:
+            rmap[name] = {
+                "calls": calls_map.get(name, [])[:5],
+                "called_by": called_by_map.get(name, [])[:5],
+            }
         return rmap
 
     # ── blast radius ──────────────────────────────────
@@ -827,11 +832,12 @@ def _py_calls(node, source, caller):
             elif isinstance(node.func, py_ast.Attribute):
                 edges.append({"from": caller, "to": ".".join(_unparse_attr(node.func)), "kind": "calls", "line": getattr(node, "lineno", None)})
             # triggers: register(func) / add_tool(tool) → func ─triggers→ caller
-            for arg in node.args:
-                if isinstance(arg, py_ast.Name):
-                    edges.append({"from": arg.id, "to": caller, "kind": "triggers", "line": getattr(node, "lineno", None)})
-                elif isinstance(arg, py_ast.Attribute):
-                    edges.append({"from": ".".join(_unparse_attr(arg)), "to": caller, "kind": "triggers", "line": getattr(node, "lineno", None)})
+            if isinstance(node.func, py_ast.Attribute):
+                for arg in node.args:
+                    if isinstance(arg, py_ast.Name):
+                        edges.append({"from": arg.id, "to": caller, "kind": "triggers", "line": getattr(node, "lineno", None)})
+                    elif isinstance(arg, py_ast.Attribute):
+                        edges.append({"from": ".".join(_unparse_attr(arg)), "to": caller, "kind": "triggers", "line": getattr(node, "lineno", None)})
             self.generic_visit(node)
     CV().visit(node)
     return edges
@@ -1091,7 +1097,7 @@ def _bfs_path(conn, start: str, end: str, max_depth: int = 6) -> list[str] | Non
         node, path, visited = q.popleft()
         if len(path) > max_depth:
             continue
-        for (nxt,) in conn.execute("SELECT to_sym FROM edges WHERE from_sym=? AND kind IN ('calls','extends','triggers','imports','references')", (node,)):
+        for (nxt,) in conn.execute("SELECT to_sym FROM edges WHERE from_sym=? AND kind IN ('calls','extends','triggers','imports')", (node,)):
             if nxt == end:
                 return path + [nxt]
             if nxt not in visited:
@@ -1112,7 +1118,7 @@ def _bfs_partial(conn, start: str, end: str, max_depth: int = 8) -> dict | None:
             continue
         if len(path) > len(furthest_path):
             furthest, furthest_path = node, path
-        rows = conn.execute("SELECT to_sym FROM edges WHERE from_sym=? AND kind IN ('calls','extends','triggers','imports','references')", (node,)).fetchall()
+        rows = conn.execute("SELECT to_sym FROM edges WHERE from_sym=? AND kind IN ('calls','extends','triggers','imports')", (node,)).fetchall()
         if not rows:
             return {"path": path, "break_at": node,
                     "reason": f"{node} 没有静态调用出边（可能通过回调、动态调用或 AstrBot 框架路由连接）"}
@@ -1135,7 +1141,7 @@ def _bfs_all_callers(conn, target: str, max_depth: int = 3) -> list[str]:
         node, d = q.popleft()
         if d >= max_depth:
             continue
-        for (caller,) in conn.execute("SELECT from_sym FROM edges WHERE to_sym=? AND kind IN ('calls','extends','triggers','imports','references')", (node,)):
+        for (caller,) in conn.execute("SELECT from_sym FROM edges WHERE to_sym=? AND kind IN ('calls','extends','triggers','imports')", (node,)):
             if caller not in visited:
                 visited.add(caller)
                 callers.append(caller)
