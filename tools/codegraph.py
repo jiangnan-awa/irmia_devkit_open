@@ -316,6 +316,11 @@ class CodeGraph:
             return result
 
         symbols = self._sort_symbols(conn, symbols)
+        for i in range(min(3, len(symbols))):
+            name = symbols[i]["name"]
+            sr = conn.execute("SELECT source FROM symbols WHERE name=? LIMIT 1", (name,)).fetchone()
+            if sr and sr[0]:
+                symbols[i]["source"] = sr[0]
         rmap = self._build_relationship_map(conn, [s["name"] for s in symbols])
         blast = self._build_blast_radius(conn, [s["name"] for s in symbols[:3]])
         grouped = self._build_grouped_by_file(conn, symbols)
@@ -381,6 +386,11 @@ class CodeGraph:
                 result["candidates"] = candidates
             return result
         symbols = self._sort_symbols(conn, symbols)
+        for i in range(min(3, len(symbols))):
+            name = symbols[i]["name"]
+            sr = conn.execute("SELECT source FROM symbols WHERE name=? LIMIT 1", (name,)).fetchone()
+            if sr and sr[0]:
+                symbols[i]["source"] = sr[0]
         rmap = self._build_relationship_map(conn, [s["name"] for s in symbols])
         grouped = self._build_grouped_by_file(conn, symbols)
         return {"ok": True, "found": True, "query_type": "explore",
@@ -391,10 +401,20 @@ class CodeGraph:
     # ── search engine ─────────────────────────────────
 
     def _search(self, conn, query: str, limit: int = 10) -> tuple[list[dict], str]:
+        """三级搜索：LIKE → FTS5 → 无结果提示。支持 kind: 过滤（如 kind:function）。"""
+        kind_filter = ""
+        m = re.search(r"kind:(\w+)", query)
+        if m:
+            kind_filter = m.group(1)
+            query = query.replace(m.group(0), "").strip()
+        base_where = f"WHERE name LIKE ?{(' AND kind=?' if kind_filter else '')}"
+        base_params: list = [f"%{query}%"]
+        if kind_filter:
+            base_params.append(kind_filter)
         try:
             rows = conn.execute(
-                "SELECT name,kind,file,line,signature,source,visibility,is_async FROM symbols WHERE name LIKE ? LIMIT ?",
-                (f"%{query}%", limit),
+                f"SELECT name,kind,file,line,signature,source,visibility,is_async FROM symbols {base_where} LIMIT ?",
+                base_params + [limit],
             ).fetchall()
             if rows:
                 return [_row_to_dict(r) for r in rows], "like"
@@ -806,6 +826,12 @@ def _py_calls(node, source, caller):
                 edges.append({"from": caller, "to": node.func.id, "kind": "calls", "line": getattr(node, "lineno", None)})
             elif isinstance(node.func, py_ast.Attribute):
                 edges.append({"from": caller, "to": ".".join(_unparse_attr(node.func)), "kind": "calls", "line": getattr(node, "lineno", None)})
+            # triggers: register(func) / add_tool(tool) → func ─triggers→ caller
+            for arg in node.args:
+                if isinstance(arg, py_ast.Name):
+                    edges.append({"from": arg.id, "to": caller, "kind": "triggers", "line": getattr(node, "lineno", None)})
+                elif isinstance(arg, py_ast.Attribute):
+                    edges.append({"from": ".".join(_unparse_attr(arg)), "to": caller, "kind": "triggers", "line": getattr(node, "lineno", None)})
             self.generic_visit(node)
     CV().visit(node)
     return edges
@@ -1034,8 +1060,28 @@ def _resolve_references(conn):
         if len(candidates) == 1:
             conn.execute("UPDATE edges SET to_sym=?, resolved=1 WHERE id=?", (candidates.pop(), eid))
 
+    # Phase 3: self.method() / cls.method() resolution
+    unresolved = conn.execute(
+        "SELECT e.id, e.from_sym, e.to_sym FROM edges e "
+        "WHERE e.kind='calls' AND e.resolved=0 AND e.to_sym NOT LIKE '%.%' AND e.to_sym NOT LIKE '%(%'"
+    ).fetchall()
+    for eid, from_sym, to_sym in unresolved:
+        cls_prefix = _class_of(from_sym)
+        if not cls_prefix:
+            continue
+        candidate = f"{cls_prefix}.{to_sym}"
+        sr = conn.execute("SELECT name FROM symbols WHERE name=? LIMIT 1", (candidate,)).fetchone()
+        if sr:
+            conn.execute("UPDATE edges SET to_sym=?, resolved=1 WHERE id=?", (sr[0], eid))
+
 
 # ── BFS ───────────────────────────────────────────────
+
+def _class_of(qualified_name: str) -> str | None:
+    if "." not in qualified_name:
+        return None
+    parts = qualified_name.rsplit(".", 1)
+    return parts[0]
 
 def _bfs_path(conn, start: str, end: str, max_depth: int = 6) -> list[str] | None:
     from collections import deque
@@ -1045,7 +1091,7 @@ def _bfs_path(conn, start: str, end: str, max_depth: int = 6) -> list[str] | Non
         node, path, visited = q.popleft()
         if len(path) > max_depth:
             continue
-        for (nxt,) in conn.execute("SELECT to_sym FROM edges WHERE from_sym=? AND kind IN ('calls','extends')", (node,)):
+        for (nxt,) in conn.execute("SELECT to_sym FROM edges WHERE from_sym=? AND kind IN ('calls','extends','triggers')", (node,)):
             if nxt == end:
                 return path + [nxt]
             if nxt not in visited:
