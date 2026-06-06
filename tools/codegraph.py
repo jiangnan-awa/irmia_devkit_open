@@ -951,6 +951,13 @@ def _walk_ts(node, source: bytes, symbols: list, edges: list, scope: str = ""):
             called = text(fn_node)
             if called and called != "?":
                 edges.append({"from": scope, "to": called, "kind": "calls", "line": node.start_point[0] + 1})
+            # triggers: router.GET(path, handler) → handler ─triggers→ scope
+            args_node = node.child_by_field_name("arguments")
+            if args_node:
+                for arg in args_node.children:
+                    if arg.type in ("identifier", "type_identifier"):
+                        edges.append({"from": text(arg), "to": scope, "kind": "triggers",
+                                     "line": node.start_point[0] + 1})
 
     # variable decl (for arrow functions assigned to vars)
     elif kind in ("variable_declaration", "lexical_declaration", "let_declaration", "const_declaration"):
