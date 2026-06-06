@@ -213,7 +213,7 @@ class CodeGraph:
         all_files = [f for f in root.rglob("*") if f.is_file() and f.suffix.lower() in _LANG_MAP
                      and not any(p in _DEFAULT_IGNORE for p in f.parts)]
         for fpath in all_files:
-            rp = str(fpath.relative_to(root))
+            rp = str(fpath.relative_to(root)).replace("\\", "/")
             if incremental and rp in mtimes and mtimes[rp] >= fpath.stat().st_mtime:
                 continue
             if incremental:
@@ -552,7 +552,8 @@ class CodeGraph:
         affected_symbols: list[dict] = []
         affected_files: set[str] = set()
         for fp in filepaths:
-            rows = conn.execute("SELECT name,kind,line FROM symbols WHERE file=? LIMIT 50", (fp,)).fetchall()
+            rows = conn.execute("SELECT name,kind,line FROM symbols WHERE file=? OR file=? LIMIT 50",
+                                (fp, fp.replace("/", "\\"))).fetchall()
             for r in rows:
                 name, kind, line = r[0], r[1], r[2]
                 callers = _bfs_all_callers(conn, name, max_depth)
@@ -571,6 +572,8 @@ class CodeGraph:
     def code_pack(self, target: str, depth: int = 2, mode: str = "both") -> dict:
         conn = self._conn_get()
         sr = conn.execute("SELECT name,kind,file,line,signature,source FROM symbols WHERE name=? LIMIT 1", (target,)).fetchone()
+        if not sr:
+            sr = conn.execute("SELECT name,kind,file,line,signature,source FROM symbols WHERE name LIKE ? LIMIT 1", (f"%{target}%",)).fetchone()
         if not sr:
             return {"ok": False, "error": f"符号 '{target}' 未找到。先运行 code_index 建索引。"}
         target_info = {"name": sr[0], "kind": sr[1], "file": sr[2], "line": sr[3], "signature": sr[4]}
