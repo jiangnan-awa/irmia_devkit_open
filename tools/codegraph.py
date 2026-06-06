@@ -853,10 +853,19 @@ def _py_refs(node, source, caller):
             self.generic_visit(n)
     RV().visit(node)
     for d in getattr(node, "decorator_list", []):
+        target = None
         if isinstance(d, py_ast.Name):
-            edges.append({"from": caller, "to": d.id, "kind": "overrides", "line": getattr(node, "lineno", None)})
+            target = d.id
         elif isinstance(d, py_ast.Attribute):
-            edges.append({"from": caller, "to": ".".join(_unparse_attr(d)), "kind": "overrides", "line": getattr(node, "lineno", None)})
+            target = ".".join(_unparse_attr(d))
+        elif isinstance(d, py_ast.Call):
+            if isinstance(d.func, py_ast.Name):
+                target = d.func.id
+            elif isinstance(d.func, py_ast.Attribute):
+                target = ".".join(_unparse_attr(d.func))
+        if target:
+            edges.append({"from": caller, "to": target, "kind": "overrides", "line": getattr(node, "lineno", None)})
+            edges.append({"from": target, "to": caller, "kind": "triggers", "line": getattr(node, "lineno", None)})
     return edges
 
 
@@ -953,6 +962,15 @@ def _walk_ts(node, source: bytes, symbols: list, edges: list, scope: str = ""):
                     _walk_ts(value_node, source, symbols, edges, scope)
                 elif name_node:
                     _walk_ts(child, source, symbols, edges, scope)
+
+    # decorator / annotation → triggers
+    name_node = node.child_by_field_name("name")
+    deco = node.child_by_field_name("decorator") or node.child_by_field_name("decorators") or node.child_by_field_name("attribute")
+    if deco and kind in _TS_FUNCTION_TYPES | _TS_CLASS_TYPES and name_node:
+        deco_text = text(deco).lstrip("@#[").split("(")[0].split("\n")[0].strip()
+        fn = f"{scope}.{text(name_node)}" if scope else text(name_node)
+        if deco_text:
+            edges.append({"from": deco_text, "to": fn, "kind": "triggers", "line": node.start_point[0] + 1})
 
     for child in node.children:
         if kind not in _TS_CLASS_TYPES:
