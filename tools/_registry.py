@@ -103,8 +103,6 @@ from .codegraph import CodeGraph as _CodeGraph
 
 
 def _code_index(project_dir: str, incremental: bool = False) -> dict:
-    if _CodeGraph is None:
-        return {"ok": False, "error": "tree-sitter 未安装，codegraph 不可用"}
     from pathlib import Path
     root = Path(project_dir).resolve()
     db_path = str(root / ".codegraph" / "codegraph.db")
@@ -113,10 +111,35 @@ def _code_index(project_dir: str, incremental: bool = False) -> dict:
 
 
 def _code_explore(query: str, project_dir: str = ".") -> dict:
-    if _CodeGraph is None:
-        return {"ok": False, "error": "tree-sitter 未安装，codegraph 不可用"}
     from pathlib import Path
     root = Path(project_dir).resolve()
+    db_path = str(root / ".codegraph" / "codegraph.db")
+    cg = _CodeGraph(db_path)
+    return cg.explore(query, str(root))
+
+
+def _code_diff_impact(filepaths: list, max_depth: int = 3) -> dict:
+    from pathlib import Path
+    root = Path(".").resolve()
+    db_path = str(root / ".codegraph" / "codegraph.db")
+    cg = _CodeGraph(db_path)
+    return cg.code_diff_impact(filepaths, max_depth)
+
+
+def _code_pack(target: str, depth: int = 2, mode: str = "both") -> dict:
+    from pathlib import Path
+    root = Path(".").resolve()
+    db_path = str(root / ".codegraph" / "codegraph.db")
+    cg = _CodeGraph(db_path)
+    return cg.code_pack(target, depth, mode)
+
+
+def _code_status() -> dict:
+    from pathlib import Path
+    root = Path(".").resolve()
+    db_path = str(root / ".codegraph" / "codegraph.db")
+    cg = _CodeGraph(db_path)
+    return cg.code_status()
     db_path = str(root / ".codegraph" / "codegraph.db")
     cg = _CodeGraph(db_path)
     return cg.explore(query, str(root))
@@ -2550,9 +2573,8 @@ class CodeExploreTool(FunctionTool):
         "【代码结构问题首选——一次调用即答案】回答一切代码库结构问题："
         "符号搜索（'safe_edit 在哪'）、调用链追踪（'从 load 到 add_llm_tools'）、"
         "架构理解（'star_manager 怎么加载插件'）。返回结构化 JSON + 自然语言总结。"
-        "**不要先 rg_search 再手动拼答案**——code_explore 就是预建的搜索索引，一次调用返回即答。"
-        "它返回的源码片段是 Read-equivalent 的。未找到时看 hint 改进查询，不要退到 rg_search。"
-        "需要先运行 code_index 建索引。"
+        "**先调我**——查不到时看 hint 改进查询；若符号确实不在索引中（日志文本、配置值、注释关键词），"
+        "fallback 到 rg_search。需要先运行 code_index 建索引。"
     )
     parameters: dict = field(default_factory=lambda: {
         "type": "object",
@@ -2569,6 +2591,80 @@ class CodeExploreTool(FunctionTool):
             return _unwrap(await _run_sync(_code_explore, query, project_dir))
         except Exception as e:
             return _err(f"code_explore 失败: {e}")
+
+
+@dataclass
+class CodeDiffImpactTool(FunctionTool):
+    """变更影响分析：改完代码后追踪波及范围。"""
+
+    name: str = "code_diff_impact"
+    description: str = (
+        "【变更影响分析】改完代码后追踪波及范围。适合 commit 前检查哪些符号和文件受影响。"
+        "不适合：查单个函数的调用者（用 code_explore）。基于 BFS 追踪调用者链，参数 max_depth 控制深度（默认 3）。"
+    )
+    parameters: dict = field(default_factory=lambda: {
+        "type": "object",
+        "properties": {
+            "filepaths": {"type": "array", "items": {"type": "string"}, "description": "变更的文件路径列表"},
+            "max_depth": {"type": "integer", "description": "BFS 最大深度，默认 3", "default": 3},
+        },
+        "required": ["filepaths"],
+    })
+
+    async def call(self, context: ContextWrapper[AstrAgentContext], filepaths: list, max_depth: int = 3, **kwargs) -> ToolExecResult:
+        _tool_stats.record(self.name)
+        try:
+            return _unwrap(await _run_sync(_code_diff_impact, filepaths, max_depth))
+        except Exception as e:
+            return _err(f"code_diff_impact 失败: {e}")
+
+
+@dataclass
+class CodePackTool(FunctionTool):
+    """精准上下文打包：以符号为起点收集 N 层调用链源码。"""
+
+    name: str = "code_pack"
+    description: str = (
+        "【精准上下文打包】以符号为起点收集 N 层调用链源码。适合修 bug 前需要完整上下文。"
+        "不适合：查符号在哪定义（用 code_explore）。mode 可选 callers/callees/both，depth 控制展开层数（默认 2），上限 2000 行。"
+    )
+    parameters: dict = field(default_factory=lambda: {
+        "type": "object",
+        "properties": {
+            "target": {"type": "string", "description": "目标符号名（如 'Main._heal_inactivated_tools'）"},
+            "depth": {"type": "integer", "description": "展开层数，默认 2", "default": 2},
+            "mode": {"type": "string", "description": "callers / callees / both，默认 both", "default": "both"},
+        },
+        "required": ["target"],
+    })
+
+    async def call(self, context: ContextWrapper[AstrAgentContext], target: str, depth: int = 2, mode: str = "both", **kwargs) -> ToolExecResult:
+        _tool_stats.record(self.name)
+        try:
+            return _unwrap(await _run_sync(_code_pack, target, depth, mode))
+        except Exception as e:
+            return _err(f"code_pack 失败: {e}")
+
+
+@dataclass
+class CodeStatusTool(FunctionTool):
+    """索引健康检查：查看索引覆盖范围和状态。"""
+
+    name: str = "code_status"
+    description: str = (
+        "【索引健康检查】查看索引覆盖范围和状态。适合 code_explore 查不到时排障。"
+        "不适合：索引正常时调它——直接调 code_explore。返回文件数、符号数、边数、上次索引时间、DB 大小、FTS5 状态、缺失的 grammar。"
+    )
+    parameters: dict = field(default_factory=lambda: {
+        "type": "object", "properties": {}, "required": [],
+    })
+
+    async def call(self, context: ContextWrapper[AstrAgentContext], **kwargs) -> ToolExecResult:
+        _tool_stats.record(self.name)
+        try:
+            return _unwrap(await _run_sync(_code_status))
+        except Exception as e:
+            return _err(f"code_status 失败: {e}")
 
 
 # ═══════════════════════════════════════════════════════════
@@ -2645,6 +2741,9 @@ TOOL_GROUPS: dict[str, list[str]] = {
     "代码理解": [
         "code_index",
         "code_explore",
+        "code_diff_impact",
+        "code_pack",
+        "code_status",
     ],
 }
 
@@ -2712,4 +2811,7 @@ _ALL_TOOLS = {
     "dep_scan": DepScanTool,
     "code_index": CodeIndexTool,
     "code_explore": CodeExploreTool,
+    "code_diff_impact": CodeDiffImpactTool,
+    "code_pack": CodePackTool,
+    "code_status": CodeStatusTool,
 }

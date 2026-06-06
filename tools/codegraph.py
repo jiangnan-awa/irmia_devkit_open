@@ -1,8 +1,8 @@
 """
 codegraph — 代码语义索引与查询引擎。
 
-Python ast 解析 + SQLite 存储 + FTS5 全文检索。单文件，零强制依赖。
-tree-sitter 可选（pip install tree-sitter + grammar）。
+Python ast 解析 + SQLite 存储 + FTS5 全文检索。
+tree-sitter 多语言支持（可选依赖：tree-sitter-{go,rust,java,c,cpp,javascript,typescript}）。
 """
 
 from __future__ import annotations
@@ -16,22 +16,48 @@ import time
 from collections import defaultdict
 from pathlib import Path
 
+# ── optional deps ────────────────────────────────────
+
 try:
     import tree_sitter
-    import tree_sitter_python as ts_py
     HAS_TREE_SITTER = True
 except ImportError:
     HAS_TREE_SITTER = False
 
+
+def _try_import_grammar(pkg: str):
+    try:
+        return __import__(pkg)
+    except ImportError:
+        return None
+
+# ── constants ────────────────────────────────────────
+
 _FTS_MIN_LENGTH = 2
+_SOURCE_FULL_LINES = 30
+_SOURCE_HEAD_LINES = 15
+_SOURCE_TAIL_LINES = 5
+_PACK_MAX_LINES = 2000
+_PROGRESS_INTERVAL_FILES = 50
 
 _LANG_MAP: dict[str, str] = {
     ".py": "python",
     ".js": "javascript", ".mjs": "javascript", ".cjs": "javascript",
     ".ts": "typescript", ".tsx": "typescript", ".jsx": "javascript",
     ".go": "go", ".rs": "rust",
-    ".java": "java", ".cpp": "cpp", ".cc": "cpp", ".cxx": "cpp",
-    ".hpp": "cpp", ".h": "cpp",
+    ".java": "java",
+    ".c": "c", ".h": "c",
+    ".cpp": "cpp", ".cc": "cpp", ".cxx": "cpp", ".hpp": "cpp",
+}
+
+_GRAMMAR_IMPORTS: dict[str, tuple[str, str]] = {
+    "javascript": ("tree_sitter_javascript", "language"),
+    "typescript": ("tree_sitter_typescript", "language"),
+    "go": ("tree_sitter_go", "language"),
+    "rust": ("tree_sitter_rust", "language"),
+    "java": ("tree_sitter_java", "language"),
+    "c": ("tree_sitter_c", "language"),
+    "cpp": ("tree_sitter_cpp", "language"),
 }
 
 _DEFAULT_IGNORE = {
@@ -50,6 +76,52 @@ _QUERY_ROUTES = [
 
 _SEARCH_NOISE = {"在哪", "哪里", "定义了", "定义在", "where", "is", "find", "locate", "的", "怎么"}
 
+# ── tree-sitter node kind mappings ───────────────────
+
+_TS_FUNCTION_TYPES = {
+    "function_declaration", "function_definition",
+    "method_declaration", "method_definition",
+    "arrow_function", "function_expression",
+    "constructor_declaration", "destructor_declaration",
+}
+_TS_CLASS_TYPES = {
+    "class_declaration", "class_definition", "class_specifier",
+    "struct_declaration", "struct_specifier",
+    "interface_declaration", "interface_definition",
+    "trait_declaration", "enum_declaration", "enum_specifier",
+    "impl_item",
+}
+_TS_IMPORT_TYPES = {
+    "import_declaration", "import_statement",
+    "import_specification", "import_spec_list",
+    "use_declaration", "mod_item",
+}
+
+# ── query tokenizer ──────────────────────────────────
+
+def _tokenize_query(query: str) -> list[str]:
+    tokens: set[str] = set()
+    for word in re.split(r"\s+", query):
+        word = word.strip()
+        if len(word) < _FTS_MIN_LENGTH:
+            continue
+        tokens.add(word)
+        # CamelCase / snake_case split
+        parts = re.findall(r"[A-Z]?[a-z]+|[A-Z]+(?=[A-Z][a-z]|\d|\s|$)|[A-Z]+|\d+", word)
+        tokens.update(p for p in parts if len(p) >= _FTS_MIN_LENGTH)
+        sub = word.replace("_", " ").split()
+        tokens.update(s for s in sub if len(s) >= _FTS_MIN_LENGTH)
+    # Chinese 2-gram
+    cjk_chars = re.findall(r"[\u4e00-\u9fff]+", query)
+    for segment in cjk_chars:
+        for i in range(len(segment) - 1):
+            tokens.add(segment[i:i + 2])
+        if len(segment) == 1:
+            tokens.add(segment)
+    return sorted(tokens)
+
+
+# ── code graph engine ─────────────────────────────────
 
 class CodeGraph:
     def __init__(self, db_path: str):
@@ -90,13 +162,13 @@ class CodeGraph:
         )""")
         conn.execute("CREATE INDEX IF NOT EXISTS idx_sym_name ON symbols(name)")
         conn.execute("CREATE INDEX IF NOT EXISTS idx_sym_file ON symbols(file)")
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_sym_kind ON symbols(kind)")
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_sym_vis ON symbols(visibility)")
         conn.execute("CREATE INDEX IF NOT EXISTS idx_edge_from ON edges(from_sym)")
         conn.execute("CREATE INDEX IF NOT EXISTS idx_edge_to ON edges(to_sym)")
         conn.execute("CREATE INDEX IF NOT EXISTS idx_edge_kind ON edges(kind)")
         try:
-            conn.execute(
-                "CREATE VIRTUAL TABLE IF NOT EXISTS sym_fts USING fts5(name, file, signature)"
-            )
+            conn.execute("CREATE VIRTUAL TABLE IF NOT EXISTS sym_fts USING fts5(name, file, signature)")
         except Exception:
             pass
         conn.commit()
@@ -125,253 +197,484 @@ class CodeGraph:
 
         start = time.time()
         conn = self._conn_get()
-        if not incremental:
-            conn.execute("DELETE FROM symbols")
-            conn.execute("DELETE FROM edges")
+        conn.execute("DELETE FROM symbols")
+        conn.execute("DELETE FROM edges")
 
         stats = {"files": 0, "symbols": 0, "edges": 0, "skipped": 0}
         mtimes: dict[str, float] = {}
         if incremental:
             row = conn.execute("SELECT value FROM meta WHERE key='mtimes'").fetchone()
             if row:
-                try:
-                    mtimes = json.loads(row[0])
-                except (json.JSONDecodeError, TypeError):
-                    mtimes = {}
+                mtimes = json.loads(row[0]) if row[0] else {}
 
-        for fpath in root.rglob("*"):
-            if any(p in _DEFAULT_IGNORE for p in fpath.parts):
+        progress_log: list[dict] = []
+        files_scanned = 0
+
+        all_files = [f for f in root.rglob("*") if f.is_file() and f.suffix.lower() in _LANG_MAP
+                     and not any(p in _DEFAULT_IGNORE for p in f.parts)]
+        for fpath in all_files:
+            rp = str(fpath.relative_to(root))
+            if incremental and rp in mtimes and mtimes[rp] >= fpath.stat().st_mtime:
                 continue
-            if fpath.is_file():
-                suffix = fpath.suffix.lower()
-                if suffix not in _LANG_MAP:
-                    continue
-                rp = str(fpath.relative_to(root))
-                if incremental:
-                    fmtime = fpath.stat().st_mtime
-                    if rp in mtimes and mtimes[rp] == fmtime:
-                        continue
-                    # 增删模式：先清该文件旧记录再插新
-                    conn.execute("DELETE FROM symbols WHERE file=?", (rp,))
-                    conn.execute("DELETE FROM edges WHERE file=?", (rp,))
-                else:
-                    fmtime = fpath.stat().st_mtime
-                mtimes[rp] = fmtime
-                try:
-                    symbols, edges = _extract_file(str(fpath), suffix)
-                    for s in symbols:
-                        conn.execute(
-                            "INSERT INTO symbols(name,kind,file,line,signature,source,doc,visibility,is_async) "
-                            "VALUES(?,?,?,?,?,?,?,?,?)",
-                            (s["name"], s["kind"], rp, s.get("line"),
-                             s.get("signature"), s.get("source"), s.get("doc"),
-                             s.get("visibility"), s.get("is_async", 0)),
-                        )
-                    for e in edges:
-                        conn.execute(
-                            "INSERT INTO edges(from_sym,to_sym,kind,file,line) VALUES(?,?,?,?,?)",
-                            (e["from"], e["to"], e["kind"], rp, e.get("line")),
-                        )
-                    stats["symbols"] += len(symbols)
-                    stats["edges"] += len(edges)
-                    stats["files"] += 1
-                except SyntaxError:
-                    stats["skipped"] += 1
-                except Exception:
-                    stats["skipped"] += 1
+            if incremental:
+                mtimes[rp] = fpath.stat().st_mtime
+            try:
+                symbols, edges = _extract_file(str(fpath), fpath.suffix.lower())
+                for s in symbols:
+                    conn.execute(
+                        "INSERT INTO symbols(name,kind,file,line,signature,source,doc,visibility,is_async) "
+                        "VALUES(?,?,?,?,?,?,?,?,?)",
+                        (s["name"], s["kind"], rp, s.get("line"), s.get("signature"),
+                         s.get("source"), s.get("doc"), s.get("visibility", "public"),
+                         s.get("is_async", 0)),
+                    )
+                for e in edges:
+                    conn.execute(
+                        "INSERT INTO edges(from_sym,to_sym,kind,file,line) VALUES(?,?,?,?,?)",
+                        (e["from"], e["to"], e["kind"], rp, e.get("line")),
+                    )
+                stats["symbols"] += len(symbols)
+                stats["edges"] += len(edges)
+                stats["files"] += 1
+            except SyntaxError:
+                stats["skipped"] += 1
+            except Exception:
+                stats["skipped"] += 1
 
-        # 后处理：引用消解
+            files_scanned += 1
+            if files_scanned % _PROGRESS_INTERVAL_FILES == 0:
+                progress_log.append({"phase": "indexing", "file": rp,
+                                     "progress": f"{stats['files']}/{len(all_files)}",
+                                     "elapsed_s": round(time.time() - start, 1)})
+
         try:
             _resolve_references(conn)
         except Exception:
             pass
 
-        conn.execute(
-            "INSERT OR REPLACE INTO meta(key,value) VALUES('mtimes',?)",
-            (json.dumps(mtimes),),
-        )
+        if incremental:
+            conn.execute("INSERT OR REPLACE INTO meta(key,value) VALUES('mtimes',?)", (json.dumps(mtimes),))
         conn.commit()
         try:
             conn.execute("DELETE FROM sym_fts")
-            conn.execute(
-                "INSERT INTO sym_fts(name, file, signature) "
-                "SELECT name, file, signature FROM symbols"
-            )
+            conn.execute("INSERT INTO sym_fts(name, file, signature) SELECT name, file, signature FROM symbols")
         except Exception:
             pass
         elapsed = round(time.time() - start, 2)
         conn.execute("INSERT OR REPLACE INTO meta(key,value) VALUES(?,?)", ("last_index", str(time.time())))
         conn.commit()
 
-        summary = (
-            f"索引完成：{stats['files']} 文件, {stats['symbols']} 符号, {stats['edges']} 边"
-        )
+        summary = f"索引完成：{stats['files']} 文件, {stats['symbols']} 符号, {stats['edges']} 边, 耗时 {elapsed}s"
         if stats["skipped"]:
-            summary += f", {stats['skipped']} 文件因语法错误跳过"
-        summary += f", 耗时 {elapsed}s"
-        return {"ok": True, "summary": summary, "stats": stats}
+            summary += f", {stats['skipped']} 跳过"
+        result: dict = {"ok": True, "summary": summary, "stats": stats}
+        if progress_log:
+            result["progress_log"] = progress_log
+        return result
 
     # ── explore ───────────────────────────────────────
 
     def explore(self, query: str, project_dir: str = ".") -> dict:
-        if not query or not query.strip():
-            return {
-                "ok": False, "error": "empty_query",
-                "summary": "查询为空。——请提供符号名、调用链或自然语言描述。",
-            }
         conn = self._conn_get()
         row = conn.execute("SELECT value FROM meta WHERE key='last_index'").fetchone()
         if not row:
-            return {
-                "ok": False, "error": "no_index",
-                "summary": "尚未建立语义索引。",
-                "hint": f"运行 code_index('{os.path.abspath(project_dir)}') 建索引（首次 ~0.5-5s）。",
-            }
+            return {"ok": False, "error": "no_index",
+                    "summary": "尚未建立语义索引。",
+                    "hint": f"运行 code_index('{os.path.abspath(project_dir)}') 建索引。"}
 
         qtype, match = _route_query(query)
 
         if qtype == "trace_closed" and match and match.re.groups >= 2:
-            return self._trace_path(conn, match.group(1).strip(), match.group(2).strip(), project_dir)
+            return self._trace_path(conn, match.group(1).strip(), match.group(2).strip())
         if qtype == "trace_open":
-            return self._trace_open(conn, query, project_dir)
+            return self._trace_open(conn, query)
         if qtype == "symbol_search":
             target = query
             for kw in _SEARCH_NOISE:
                 target = target.replace(kw, " ")
-            target = " ".join(target.split())
-            return self._search_symbol(conn, target, project_dir)
-        return self._explore_fallback(conn, query, project_dir)
+            target = re.sub(r"\s+", " ", target).strip()
+            return self._search_symbol(conn, target)
+        return self._explore_fallback(conn, query)
 
-    def _search_symbol(self, conn, target: str, project_dir: str) -> dict:
+    # ── search ────────────────────────────────────────
+
+    def _search_symbol(self, conn, target: str) -> dict:
         symbols, strategy = self._search(conn, target)
         if not symbols:
-            return {
-                "ok": True, "found": False, "query_type": "symbol_search",
-                "summary": f"未找到符号 '{target}'。——用 rg_search('{target}') 搜索源码全文。",
-                "search_strategy": strategy,
-            }
-        callers = {}
-        for s in symbols[:5]:
-            rows = conn.execute(
-                "SELECT from_sym FROM edges WHERE to_sym=? AND kind='calls' LIMIT 5",
-                (s["name"],),
-            ).fetchall()
-            callers[s["name"]] = [r[0] for r in rows]
-        return {
-            "ok": True, "found": True, "query_type": "symbol_search",
-            "summary": f"找到 {len(symbols)} 个匹配 '{target}' 的符号。",
-            "symbols": symbols[:10], "callers": callers,
-            "search_strategy": strategy,
-            "hint": "需要调用链？用 code_explore('从 X 到 Y') 精确追踪。",
-        }
+            candidates = self._get_candidates(conn, target)
+            result: dict = {"ok": True, "found": False, "query_type": "symbol_search",
+                   "summary": f"未找到符号 '{target}'。",
+                   "search_strategy": strategy}
+            if candidates:
+                result["candidates"] = candidates
+                result["hint"] = f"上述候选中有你要找的吗？用精确名重试 code_explore。否则 fallback 到 rg_search。"
+            else:
+                result["hint"] = "该符号不在索引中。用 rg_search 搜索原始文本。"
+            return result
 
-    def _trace_path(self, conn, from_sym: str, to_sym: str, project_dir: str) -> dict:
+        symbols = self._sort_symbols(conn, symbols)
+        rmap = self._build_relationship_map(conn, [s["name"] for s in symbols])
+        blast = self._build_blast_radius(conn, [s["name"] for s in symbols[:3]])
+        grouped = self._build_grouped_by_file(conn, symbols)
+        related = self._get_related(conn, symbols[0]["name"]) if symbols else {}
+
+        return {"ok": True, "found": True, "query_type": "symbol_search",
+                "summary": f"找到 {len(symbols)} 个匹配 '{target}' 的符号。",
+                "symbols": symbols[:10], "relationship_map": rmap, "blast_radius": blast,
+                "grouped_by_file": grouped, "related_symbols": related,
+                "search_strategy": strategy,
+                "hint": "需要调用链？用 code_explore('从 X 到 Y') 精确追踪。"}
+
+    def _trace_path(self, conn, from_sym: str, to_sym: str) -> dict:
         path = _bfs_path(conn, from_sym, to_sym, max_depth=6)
         if path:
-            return {
-                "ok": True, "found": True, "query_type": "trace",
-                "summary": f"从 {from_sym} 到 {to_sym} 的调用链 ({len(path)-1} 跳): {' → '.join(path)}",
-                "path": path,
-                "hint": "用更精确的符号名或调用链查询重试（'从 X 到 Y'）。",
-            }
+            return {"ok": True, "found": True, "query_type": "trace",
+                    "summary": f"从 {from_sym} 到 {to_sym} 的调用链 ({len(path)-1} 跳): {' → '.join(path)}",
+                    "path": path}
         fwd = _bfs_path(conn, from_sym, to_sym, max_depth=10)
         if fwd:
-            return {
-                "ok": True, "found": True, "query_type": "trace",
-                "summary": f"(长路径 {len(fwd)-1} 跳) {' → '.join(fwd)}", "path": fwd,
-            }
-        return {
-            "ok": True, "found": False, "query_type": "trace",
-            "summary": f"从 {from_sym} 到 {to_sym} BFS 未找到调用链——可能是事件/装饰器连接。用 rg_search('{to_sym}') 查动态引用。",
-            "unresolved": [{"from": from_sym, "to": to_sym, "reason": "BFS 未找到路径"}],
-            "hint": f"用 rg_search 搜索 {to_sym} 确认是否通过动态调用或回调连接。",
-        }
-
-    def _trace_open(self, conn, query: str, project_dir: str) -> dict:
-        symbols, _ = self._search(conn, query)
-        if not symbols:
-            return {"ok": True, "found": False, "query_type": "trace",
-                    "summary": f"未找到与 '{query}' 相关的符号。",
-                    "hint": "试试更精确的函数名或符号名。"}
-        sname = symbols[0]["name"]
-        callers = [r[0] for r in conn.execute(
-            "SELECT from_sym FROM edges WHERE to_sym=? AND kind='calls' LIMIT 8", (sname,),
-        ).fetchall()]
-        callees = [r[0] for r in conn.execute(
-            "SELECT to_sym FROM edges WHERE from_sym=? AND kind='calls' LIMIT 8", (sname,),
-        ).fetchall()]
-        return {
-            "ok": True, "found": True, "query_type": "trace",
-            "summary": f"{sname} 的调用关系：{len(callers)} 个调用者, {len(callees)} 个被调用者。",
-            "symbol": symbols[0], "callers": callers, "callees": callees,
-            "hint": f"精确追踪：code_explore('从 X → {sname}')",
-        }
-
-    def _explore_fallback(self, conn, query: str, project_dir: str) -> dict:
-        symbols, strategy = self._search(conn, query)
-        if not symbols or strategy == "none":
-            summary = f"自然语言探索 '{query}'：未命中索引。——用 rg_search('{query}') 搜索源码全文。"
+            return {"ok": True, "found": True, "query_type": "trace",
+                    "summary": f"(长路径 {len(fwd)-1} 跳) {' → '.join(fwd)}", "path": fwd}
+        # partial path
+        partial = _bfs_partial(conn, from_sym, to_sym, max_depth=8)
+        result: dict = {"ok": True, "found": False, "query_type": "trace",
+               "summary": f"从 {from_sym} 到 {to_sym} 未找到完整静态调用链。"}
+        if partial:
+            result["partial_path"] = partial["path"]
+            result["break_at"] = partial["break_at"]
+            result["break_reason"] = partial.get("reason", "BFS 未找到路径")
+            result["hint"] = f"断在 {partial['break_at']}——可能通过回调、动态调用或 AstrBot 框架路由连接。用 rg_search 确认。"
         else:
-            summary = f"自然语言探索 '{query}'：找到 {len(symbols)} 个相关符号。"
-        return {
-            "ok": True, "found": len(symbols) > 0, "query_type": "explore",
-            "summary": summary,
-            "symbols": symbols,
-            "search_strategy": strategy,
-            "hint": "缩小范围：用符号名精确搜索，或 '从 X 到 Y' 追踪调用链。",
-        }
+            result["hint"] = f"用 rg_search 搜索 {to_sym} 确认是否通过动态调用连接。"
+        return result
+
+    def _trace_open(self, conn, query: str) -> dict:
+        tokens = _tokenize_query(query)
+        fts_query = " OR ".join(tokens) if tokens else query
+        try:
+            rows = conn.execute("SELECT name, file, signature FROM sym_fts WHERE sym_fts MATCH ? ORDER BY rank LIMIT 4",
+                                (fts_query,)).fetchall()
+        except Exception:
+            rows = conn.execute("SELECT name,file,signature FROM symbols WHERE name LIKE ? LIMIT 4",
+                                (f"%{query}%",)).fetchall()
+        if not rows:
+            return {"ok": True, "found": False, "query_type": "trace",
+                    "summary": f"未找到与 '{query}' 相关的符号。"}
+        sname = rows[0][0]
+        callers = [r[0] for r in conn.execute("SELECT from_sym FROM edges WHERE to_sym=? AND kind='calls' LIMIT 8", (sname,)).fetchall()]
+        callees = [r[0] for r in conn.execute("SELECT to_sym FROM edges WHERE from_sym=? AND kind='calls' LIMIT 8", (sname,)).fetchall()]
+        sym_info = {"name": rows[0][0], "signature": rows[0][2], "file": rows[0][1]}
+        return {"ok": True, "found": True, "query_type": "trace",
+                "summary": f"{sname} 的调用关系：{len(callers)} 调用者, {len(callees)} 被调用者。",
+                "symbol": sym_info, "callers": callers, "callees": callees}
+
+    def _explore_fallback(self, conn, query: str) -> dict:
+        symbols, strategy = self._search(conn, query)
+        if not symbols:
+            candidates = self._get_candidates(conn, query)
+            result: dict = {"ok": True, "found": False, "query_type": "explore",
+                   "summary": f"自然语言探索 '{query}'：未找到相关符号。", "search_strategy": strategy}
+            if candidates:
+                result["candidates"] = candidates
+            return result
+        symbols = self._sort_symbols(conn, symbols)
+        rmap = self._build_relationship_map(conn, [s["name"] for s in symbols])
+        grouped = self._build_grouped_by_file(conn, symbols)
+        return {"ok": True, "found": True, "query_type": "explore",
+                "summary": f"自然语言探索 '{query}'：找到 {len(symbols)} 个相关符号。",
+                "symbols": symbols, "relationship_map": rmap, "grouped_by_file": grouped,
+                "search_strategy": strategy}
+
+    # ── search engine ─────────────────────────────────
 
     def _search(self, conn, query: str, limit: int = 10) -> tuple[list[dict], str]:
-        """三级搜索：LIKE → FTS5 → 无结果提示"""
         try:
-            # Level 1: LIKE 精确匹配
             rows = conn.execute(
-                "SELECT name,kind,file,line,signature,source,visibility,is_async "
-                "FROM symbols WHERE name LIKE ? LIMIT ?",
+                "SELECT name,kind,file,line,signature,source,visibility,is_async FROM symbols WHERE name LIKE ? LIMIT ?",
                 (f"%{query}%", limit),
             ).fetchall()
             if rows:
                 return [_row_to_dict(r) for r in rows], "like"
         except Exception:
-            rows = ()
+            pass
 
-        # Level 2: FTS5 全文搜索
-        try:
-            tokens = [t for t in re.split(r"\s+", query) if len(t) >= _FTS_MIN_LENGTH]
-            if tokens:
+        tokens = _tokenize_query(query)
+        if tokens:
+            try:
                 fts_query = " OR ".join(tokens)
                 rows = conn.execute(
-                    "SELECT name, file, signature "
-                    "FROM sym_fts WHERE sym_fts MATCH ? ORDER BY rank LIMIT ?",
-                    (fts_query, limit),
+                    "SELECT name, file, signature FROM sym_fts WHERE sym_fts MATCH ? ORDER BY rank LIMIT ?",
+                    (fts_query, limit * 3),
                 ).fetchall()
                 if rows:
                     result = []
-                    fts_names = [r[0] for r in rows]
-                    placeholders = ",".join(["?"] * len(fts_names))
-                    sym_rows = conn.execute(
-                        f"SELECT name,kind,file,line,signature,source,visibility,is_async "
-                        f"FROM symbols WHERE name IN ({placeholders})",
-                        fts_names,
-                    ).fetchall()
-                    sym_map = {r[0]: r for r in sym_rows}
-                    for fts_r in rows:
-                        name = fts_r[0]
-                        if name in sym_map:
-                            result.append(_row_to_dict(sym_map[name]))
-                    return result, "fts5"
+                    seen = set()
+                    fts_names = [r[0] for r in rows if r[0] not in seen and not seen.add(r[0])]
+                    for name in fts_names[:limit]:
+                        sr = conn.execute("SELECT name,kind,file,line,signature,source,visibility,is_async FROM symbols WHERE name=? LIMIT 1", (name,)).fetchone()
+                        if sr:
+                            result.append(_row_to_dict(sr))
+                    if result:
+                        return result, "fts5"
+            except Exception:
+                pass
+
+        # try LIKE on wider field
+        try:
+            rows = conn.execute(
+                "SELECT name,kind,file,line,signature,source,visibility,is_async FROM symbols WHERE signature LIKE ? OR source LIKE ? LIMIT ?",
+                (f"%{query}%", f"%{query}%", limit),
+            ).fetchall()
+            if rows:
+                return [_row_to_dict(r) for r in rows], "like_wide"
         except Exception:
             pass
 
         return [], "none"
 
+    # ── sorting ───────────────────────────────────────
+
+    def _sort_symbols(self, conn, symbols: list[dict]) -> list[dict]:
+        if len(symbols) <= 1:
+            return symbols
+        counts: dict[str, int] = {}
+        names = [s["name"] for s in symbols]
+        placeholders = ",".join(["?"] * len(names))
+        rows = conn.execute(
+            f"SELECT to_sym, COUNT(*) FROM edges WHERE to_sym IN ({placeholders}) AND kind='calls' GROUP BY to_sym",
+            names,
+        ).fetchall()
+        for name, cnt in rows:
+            counts[name] = cnt
+
+        def _score(s: dict) -> tuple[int, int, int, int]:
+            vis = 0 if s.get("visibility") == "public" else 1
+            is_def = 0 if s.get("kind") in ("function", "method", "class") else 1
+            cnt = -(counts.get(s["name"], 0))
+            return (vis, is_def, cnt, 0)
+
+        return sorted(symbols, key=_score)
+
+    # ── candidates ────────────────────────────────────
+
+    def _get_candidates(self, conn, query: str, limit: int = 3) -> list[dict]:
+        try:
+            rows = conn.execute(
+                "SELECT name,kind,file,line FROM symbols WHERE name LIKE ? LIMIT ?",
+                (f"%{query}%", limit * 2),
+            ).fetchall()
+            if rows:
+                result = []
+                for r in rows:
+                    result.append({"name": r[0], "kind": r[1], "file": r[2], "line": r[3]})
+                return result[:limit]
+        except Exception:
+            pass
+        return []
+
+    # ── relationship map ──────────────────────────────
+
+    def _build_relationship_map(self, conn, names: list[str]) -> dict:
+        rmap: dict = {}
+        limit = min(len(names), 5)
+        for name in names[:limit]:
+            calls = [r[0] for r in conn.execute("SELECT to_sym FROM edges WHERE from_sym=? AND kind='calls' LIMIT 5", (name,)).fetchall()]
+            called_by = [r[0] for r in conn.execute("SELECT from_sym FROM edges WHERE to_sym=? AND kind='calls' LIMIT 5", (name,)).fetchall()]
+            extends = [r[0] for r in conn.execute("SELECT to_sym FROM edges WHERE from_sym=? AND kind='extends' LIMIT 3", (name,)).fetchall()]
+            imports = [r[0] for r in conn.execute("SELECT to_sym FROM edges WHERE from_sym=? AND kind='imports' LIMIT 3", (name,)).fetchall()]
+            if calls or called_by:
+                rmap[name] = {"calls": calls, "called_by": called_by}
+                if extends:
+                    rmap[name]["extends"] = extends
+                if imports:
+                    rmap[name]["imports"] = imports
+        return rmap
+
+    # ── blast radius ──────────────────────────────────
+
+    def _build_blast_radius(self, conn, names: list[str], depth: int = 1) -> dict:
+        affected: dict[str, dict] = {}
+        for name in names[:3]:
+            callers = _bfs_all_callers(conn, name, depth)
+            files: set[str] = set()
+            for c in callers:
+                sr = conn.execute("SELECT file FROM symbols WHERE name=? LIMIT 1", (c,)).fetchone()
+                if sr:
+                    files.add(sr[0])
+            affected[name] = {"callers": callers, "affected_files": sorted(files)[:10], "total_callers": len(callers)}
+        return affected
+
+    # ── grouped by file ───────────────────────────────
+
+    def _build_grouped_by_file(self, conn, symbols: list[dict]) -> dict:
+        groups: dict[str, dict] = {}
+        for s in symbols:
+            f = s.get("file", "unknown")
+            if f not in groups:
+                groups[f] = {"symbols": [], "count": 0}
+            groups[f]["symbols"].append({"name": s.get("name"), "kind": s.get("kind"), "line": s.get("line")})
+            groups[f]["count"] += 1
+        for f in groups:
+            kinds = defaultdict(int)
+            for sym in groups[f]["symbols"]:
+                kinds[sym["kind"]] += 1
+            parts = [f"{v} {k}" for k, v in sorted(kinds.items()) if v]
+            groups[f]["summary"] = ", ".join(parts) if parts else "0 symbols"
+        return dict(sorted(groups.items(), key=lambda x: -x[1]["count"])) if len(groups) <= 8 else dict(sorted(list(groups.items()), key=lambda x: -x[1]["count"])[:8])
+
+    # ── related symbols ───────────────────────────────
+
+    def _get_related(self, conn, name: str) -> dict:
+        callers = [r[0] for r in conn.execute("SELECT from_sym FROM edges WHERE to_sym=? AND kind='calls' LIMIT 5", (name,)).fetchall()]
+        callees = [r[0] for r in conn.execute("SELECT to_sym FROM edges WHERE from_sym=? AND kind='calls' LIMIT 5", (name,)).fetchall()]
+        return {"callers": callers, "callees": callees}
+
+    # ── smart source truncation ───────────────────────
+
+    @staticmethod
+    def _smart_truncate(source: str) -> dict:
+        if not source:
+            return {"source": "", "source_truncated": False, "total_lines": 0}
+        lines = source.split("\n")
+        total = len(lines)
+        if total <= _SOURCE_FULL_LINES:
+            return {"source": source, "source_truncated": False, "total_lines": total}
+        head = lines[:_SOURCE_HEAD_LINES]
+        tail = lines[-_SOURCE_TAIL_LINES:]
+        skipped = total - _SOURCE_HEAD_LINES - _SOURCE_TAIL_LINES
+        truncated = "\n".join(head) + f"\n... ({skipped} lines skipped) ...\n" + "\n".join(tail)
+        return {"source": truncated, "source_truncated": True, "total_lines": total}
+
+    # ── code_diff_impact ──────────────────────────────
+
+    def code_diff_impact(self, filepaths: list[str], max_depth: int = 3) -> dict:
+        conn = self._conn_get()
+        affected_symbols: list[dict] = []
+        affected_files: set[str] = set()
+        for fp in filepaths:
+            rows = conn.execute("SELECT name,kind,line FROM symbols WHERE file=? LIMIT 50", (fp,)).fetchall()
+            for r in rows:
+                name, kind, line = r[0], r[1], r[2]
+                callers = _bfs_all_callers(conn, name, max_depth)
+                for c in callers:
+                    sr = conn.execute("SELECT file,kind,line FROM symbols WHERE name=? LIMIT 1", (c,)).fetchone()
+                    if sr:
+                        affected_symbols.append({"name": c, "file": sr[0], "kind": sr[1], "depth": callers.index(c) + 1})
+                        affected_files.add(sr[0])
+                if callers:
+                    affected_symbols.append({"name": name, "file": fp, "kind": kind, "depth": 0})
+                    affected_files.add(fp)
+        return {"ok": True, "affected_symbols": affected_symbols[:30], "affected_files": sorted(affected_files)[:20], "blast_depth": max_depth}
+
+    # ── code_pack ─────────────────────────────────────
+
+    def code_pack(self, target: str, depth: int = 2, mode: str = "both") -> dict:
+        conn = self._conn_get()
+        sr = conn.execute("SELECT name,kind,file,line,signature,source FROM symbols WHERE name=? LIMIT 1", (target,)).fetchone()
+        if not sr:
+            return {"ok": False, "error": f"符号 '{target}' 未找到。先运行 code_index 建索引。"}
+        target_info = {"name": sr[0], "kind": sr[1], "file": sr[2], "line": sr[3], "signature": sr[4]}
+        trunc = self._smart_truncate(sr[5] or "")
+        target_info.update(trunc)
+
+        deps: list[dict] = []
+        visited: set[str] = {target}
+        queue = [(target, 0, "target")]
+        total_lines = len((sr[5] or "").split("\n")) if sr[5] else 0
+
+        while queue:
+            node, d, relation = queue.pop(0)
+            if d >= depth:
+                continue
+            if mode in ("callees", "both"):
+                rows = conn.execute("SELECT to_sym,kind FROM edges WHERE from_sym=? AND kind='calls' LIMIT 20", (node,)).fetchall()
+                for callee_name, _ in rows:
+                    if callee_name in visited:
+                        continue
+                    visited.add(callee_name)
+                    ds = conn.execute("SELECT name,kind,file,line,signature,source FROM symbols WHERE name=? LIMIT 1", (callee_name,)).fetchone()
+                    if ds:
+                        trunc = self._smart_truncate(ds[5] or "")
+                        entry = {"name": ds[0], "kind": ds[1], "file": ds[2], "line": ds[3], "signature": ds[4],
+                                 "relation": "callee", "depth": d + 1}
+                        entry.update(trunc)
+                        deps.append(entry)
+                        total_lines += trunc["total_lines"]
+                        if total_lines > _PACK_MAX_LINES:
+                            break
+                        queue.append((callee_name, d + 1, "callee"))
+            if mode in ("callers", "both"):
+                rows = conn.execute("SELECT from_sym,kind FROM edges WHERE to_sym=? AND kind='calls' LIMIT 20", (node,)).fetchall()
+                for caller_name, _ in rows:
+                    if caller_name in visited:
+                        continue
+                    visited.add(caller_name)
+                    ds = conn.execute("SELECT name,kind,file,line,signature,source FROM symbols WHERE name=? LIMIT 1", (caller_name,)).fetchone()
+                    if ds:
+                        trunc = self._smart_truncate(ds[5] or "")
+                        entry = {"name": ds[0], "kind": ds[1], "file": ds[2], "line": ds[3], "signature": ds[4],
+                                 "relation": "caller", "depth": d + 1}
+                        entry.update(trunc)
+                        deps.append(entry)
+                        total_lines += trunc["total_lines"]
+                        if total_lines > _PACK_MAX_LINES:
+                            break
+                        queue.append((caller_name, d + 1, "caller"))
+            if total_lines > _PACK_MAX_LINES:
+                break
+
+        return {"ok": True, "target": target_info, "dependencies": deps, "total_lines": total_lines,
+                "truncated": total_lines > _PACK_MAX_LINES}
+
+    # ── code_status ───────────────────────────────────
+
+    def code_status(self) -> dict:
+        conn = self._conn_get()
+        files = conn.execute("SELECT COUNT(DISTINCT file) FROM symbols").fetchone()[0]
+        symbols = conn.execute("SELECT COUNT(*) FROM symbols").fetchone()[0]
+        edges = conn.execute("SELECT COUNT(*) FROM edges").fetchone()[0]
+        last = conn.execute("SELECT value FROM meta WHERE key='last_index'").fetchone()
+        last_str = ""
+        if last:
+            try:
+                last_str = str(last[0])
+            except Exception:
+                last_str = str(last[0])
+
+        try:
+            db_size = os.path.getsize(self._db_path)
+            size_str = f"{db_size / 1024 / 1024:.1f}MB" if db_size > 1024 * 1024 else f"{db_size / 1024:.0f}KB"
+        except OSError:
+            size_str = "unknown"
+
+        fts_ok = False
+        try:
+            conn.execute("SELECT count(*) FROM sym_fts").fetchone()
+            fts_ok = True
+        except Exception:
+            pass
+
+        missing: list[str] = []
+        if HAS_TREE_SITTER:
+            for lang, (pkg, _) in _GRAMMAR_IMPORTS.items():
+                if _try_import_grammar(pkg) is None:
+                    missing.append(f"tree-sitter-{lang}")
+
+        return {"ok": True, "files_indexed": files, "symbols_total": symbols, "edges_total": edges,
+                "last_index_at": last_str, "db_size": size_str, "fts5_ok": fts_ok,
+                "missing_grammars": missing,
+                "language_support": "python ✅ | " + ", ".join(f"{l} ⚠️" if l in missing else f"{l} ✅" if HAS_TREE_SITTER and _try_import_grammar(pkg) is not None else f"{l} ❌" for l, (pkg, _) in _GRAMMAR_IMPORTS.items())}
+
+
+# ── helpers ───────────────────────────────────────────
 
 def _row_to_dict(r) -> dict:
     d = {"name": r[0], "kind": r[1], "file": r[2], "line": r[3],
-         "signature": r[4], "source": (r[5] or "")[:300]}
-    if r[6]:
+         "signature": r[4], "source": CodeGraph._smart_truncate(r[5] or "")}
+    d["source"] = d["source"]["source"][:300] if isinstance(d["source"], dict) else (d["source"] or "")[:300]
+    if len(r) > 6 and r[6]:
         d["visibility"] = r[6]
-    if r[7]:
+    if len(r) > 7 and r[7]:
         d["is_async"] = bool(r[7])
     return d
 
@@ -382,7 +685,7 @@ def _extract_file(filepath: str, suffix: str) -> tuple[list[dict], list[dict]]:
     lang = _LANG_MAP.get(suffix, "")
     if lang == "python":
         return _extract_python(filepath)
-    if HAS_TREE_SITTER and lang in ("javascript", "typescript", "go", "rust"):
+    if HAS_TREE_SITTER:
         try:
             return _extract_ts(filepath, lang)
         except Exception:
@@ -409,22 +712,24 @@ def _extract_python(filepath: str) -> tuple[list[dict], list[dict]]:
 
         def visit_FunctionDef(self, node):
             fn = self._full_name(node.name)
-            is_async = 0
             sig = f"def {node.name}(...)"
             try:
-                sig = _py_sig(node)
+                args = []
+                for a in node.args.args:
+                    arg = a.arg
+                    if a.annotation:
+                        arg += f": {py_ast.unparse(a.annotation)}"
+                    args.append(arg)
+                sig = f"def {node.name}({', '.join(args)})"
             except Exception:
                 pass
-            symbols.append({
-                "name": fn, "kind": "method" if self._current_cls else "function",
-                "line": node.lineno, "signature": sig,
-                "source": _get_src(source, node),
-                "doc": py_ast.get_docstring(node) or "",
-                "visibility": "public" if not node.name.startswith("_") else "private",
-                "is_async": 0,
-            })
-            edges.extend(_extract_calls(node, source, fn))
-            edges.extend(_extract_refs(node, source, fn))
+            symbols.append({"name": fn, "kind": "method" if self._current_cls else "function",
+                           "line": node.lineno, "signature": sig,
+                           "source": (py_ast.get_source_segment(source, node) or "")[:500],
+                           "doc": py_ast.get_docstring(node) or "",
+                           "visibility": "public" if not node.name.startswith("_") else "private"})
+            edges.extend(_py_calls(node, source, fn))
+            edges.extend(_py_refs(node, source, fn))
             self._scope.append(node.name)
             self.generic_visit(node)
             self._scope.pop()
@@ -433,133 +738,86 @@ def _extract_python(filepath: str) -> tuple[list[dict], list[dict]]:
             fn = self._full_name(node.name)
             sig = f"async def {node.name}(...)"
             try:
-                sig = _py_sig(node)
+                args = []
+                for a in node.args.args:
+                    arg = a.arg
+                    if a.annotation:
+                        arg += f": {py_ast.unparse(a.annotation)}"
+                    args.append(arg)
+                sig = f"async def {node.name}({', '.join(args)})"
             except Exception:
                 pass
-            symbols.append({
-                "name": fn, "kind": "method" if self._current_cls else "function",
-                "line": node.lineno, "signature": sig,
-                "source": _get_src(source, node),
-                "doc": py_ast.get_docstring(node) or "",
-                "visibility": "public" if not node.name.startswith("_") else "private",
-                "is_async": 1,
-            })
-            edges.extend(_extract_calls(node, source, fn))
-            edges.extend(_extract_refs(node, source, fn))
+            symbols.append({"name": fn, "kind": "method" if self._current_cls else "function",
+                           "line": node.lineno, "signature": sig,
+                           "source": (py_ast.get_source_segment(source, node) or "")[:500],
+                           "doc": py_ast.get_docstring(node) or "",
+                           "visibility": "public" if not node.name.startswith("_") else "private",
+                           "is_async": 1})
+            edges.extend(_py_calls(node, source, fn))
+            edges.extend(_py_refs(node, source, fn))
             self._scope.append(node.name)
             self.generic_visit(node)
             self._scope.pop()
 
         def visit_ClassDef(self, node):
             cls = self._full_name(node.name)
-            bases = []
-            for b in getattr(node, "bases", []):
-                if isinstance(b, py_ast.Name):
-                    bases.append(b.id)
-                elif isinstance(b, py_ast.Attribute):
-                    bases.append(".".join(_unparse_attr(b)))
-            symbols.append({
-                "name": cls, "kind": "class", "line": node.lineno,
-                "signature": f"class {node.name}({', '.join(bases)})" if bases else f"class {node.name}",
-                "source": "", "doc": py_ast.get_docstring(node) or "",
-                "visibility": "public" if not node.name.startswith("_") else "private",
-            })
-            for bname in bases:
-                edges.append({"from": cls, "to": bname, "kind": "extends", "line": node.lineno})
-            prev_cls = self._current_cls
+            bases = [".".join(_unparse_attr(b)) for b in getattr(node, "bases", []) if isinstance(b, (py_ast.Name, py_ast.Attribute))]
+            sig = f"class {node.name}({', '.join(bases)})" if bases else f"class {node.name}"
+            symbols.append({"name": cls, "kind": "class", "line": node.lineno, "signature": sig,
+                           "source": (py_ast.get_source_segment(source, node) or "").split("\n")[0],
+                           "doc": py_ast.get_docstring(node) or "",
+                           "visibility": "public" if not node.name.startswith("_") else "private"})
+            for bn in bases:
+                edges.append({"from": cls, "to": bn, "kind": "extends", "line": node.lineno})
+            prev = self._current_cls
             self._current_cls = node.name
             self._scope.append(node.name)
             self.generic_visit(node)
             self._scope.pop()
-            self._current_cls = prev_cls
+            self._current_cls = prev
 
         def visit_Import(self, node):
             scope = self._scope[-1] if self._scope else "(module)"
-            for alias in node.names:
-                edges.append({"from": scope, "to": alias.name, "kind": "imports", "line": node.lineno})
+            for a in node.names:
+                edges.append({"from": scope, "to": a.name, "kind": "imports", "line": node.lineno})
 
         def visit_ImportFrom(self, node):
             scope = self._scope[-1] if self._scope else "(module)"
             mod = node.module or ""
-            for alias in node.names:
-                name = f"{mod}.{alias.name}" if mod else alias.name
-                edges.append({"from": scope, "to": name, "kind": "imports", "line": node.lineno})
-
-        def visit_Assign(self, node):
-            pass
+            for a in node.names:
+                edges.append({"from": scope, "to": f"{mod}.{a.name}" if mod else a.name, "kind": "imports", "line": node.lineno})
 
     Visitor().visit(tree)
     return symbols, edges
 
 
-def _py_sig(node: py_ast.FunctionDef) -> str:
-    args = []
-    for a in node.args.args:
-        arg = a.arg
-        if a.annotation:
-            arg += f": {py_ast.unparse(a.annotation)}"
-        args.append(arg)
-    prefix = "async def" if isinstance(node, py_ast.AsyncFunctionDef) else "def"
-    return f"{prefix} {node.name}({', '.join(args)})"
-
-
-def _get_src(source: str, node) -> str:
-    try:
-        return (py_ast.get_source_segment(source, node) or "")[:300]
-    except Exception:
-        return ""
-
-
-def _extract_calls(node, source: str, caller: str) -> list[dict]:
-    edges: list[dict] = []
-    unresolved: list[str] = []
-
-    class CallVisitor(py_ast.NodeVisitor):
+def _py_calls(node, source, caller):
+    edges = []
+    class CV(py_ast.NodeVisitor):
         def visit_Call(self, node):
             if isinstance(node.func, py_ast.Name):
-                edges.append({"from": caller, "to": node.func.id, "kind": "calls",
-                             "line": getattr(node, "lineno", None)})
+                edges.append({"from": caller, "to": node.func.id, "kind": "calls", "line": getattr(node, "lineno", None)})
             elif isinstance(node.func, py_ast.Attribute):
-                try:
-                    target = ".".join(_unparse_attr(node.func))
-                    edges.append({"from": caller, "to": target, "kind": "calls",
-                                 "line": getattr(node, "lineno", None)})
-                except Exception:
-                    unresolved.append(_get_src(source, node) or "?")
+                edges.append({"from": caller, "to": ".".join(_unparse_attr(node.func)), "kind": "calls", "line": getattr(node, "lineno", None)})
             self.generic_visit(node)
-
-    CallVisitor().visit(node)
-    for u in unresolved[:3]:
-        edges.append({"from": caller, "to": f"(unresolved: {u[:60]})", "kind": "unresolved"})
+    CV().visit(node)
     return edges
 
 
-def _extract_refs(node, source: str, caller: str) -> list[dict]:
-    """提取属性访问（obj.attr）作为 references 边，检测装饰器产生的 overrides 边。"""
-    edges: list[dict] = []
-
-    class RefVisitor(py_ast.NodeVisitor):
-        def visit_Attribute(self, node):
-            if isinstance(node.value, py_ast.Name) and node.value.id == "self":
-                pass
-            else:
-                parts = _unparse_attr(node)
-                if len(parts) >= 2 and parts[-2] != "self":
-                    edges.append({"from": caller, "to": ".".join(parts),
-                                 "kind": "references", "line": getattr(node, "lineno", None)})
-            self.generic_visit(node)
-
-    RefVisitor().visit(node)
-
-    # 装饰器 → overrides 边
-    decos = getattr(node, "decorator_list", [])
-    for d in decos:
+def _py_refs(node, source, caller):
+    edges = []
+    class RV(py_ast.NodeVisitor):
+        def visit_Attribute(self, n):
+            parts = _unparse_attr(n)
+            if len(parts) >= 2 and parts[-2] != "self":
+                edges.append({"from": caller, "to": ".".join(parts), "kind": "references", "line": getattr(n, "lineno", None)})
+            self.generic_visit(n)
+    RV().visit(node)
+    for d in getattr(node, "decorator_list", []):
         if isinstance(d, py_ast.Name):
-            edges.append({"from": caller, "to": d.id, "kind": "overrides",
-                         "line": getattr(node, "lineno", None)})
+            edges.append({"from": caller, "to": d.id, "kind": "overrides", "line": getattr(node, "lineno", None)})
         elif isinstance(d, py_ast.Attribute):
-            edges.append({"from": caller, "to": ".".join(_unparse_attr(d)),
-                         "kind": "overrides", "line": getattr(node, "lineno", None)})
+            edges.append({"from": caller, "to": ".".join(_unparse_attr(d)), "kind": "overrides", "line": getattr(node, "lineno", None)})
     return edges
 
 
@@ -573,48 +831,23 @@ def _unparse_attr(node) -> list[str]:
     return ["?"]
 
 
-# ── reference resolution ─────────────────────────────
-
-def _resolve_references(conn):
-    """后处理：把 edges 中短名字的 to_sym 匹配到 symbols 表中的 qualified_name。
-    如果短名字同时对应多个符号，保持原样（不误消解）。
-    """
-    name_index: dict[str, list[str]] = defaultdict(list)
-    rows = conn.execute("SELECT name FROM symbols").fetchall()
-    for (qn,) in rows:
-        short = qn.rsplit(".", 1)[-1]
-        name_index[short].append(qn)
-
-    edges = conn.execute("SELECT id, to_sym, kind FROM edges WHERE kind='calls'").fetchall()
-    updates = []
-    for eid, to_sym, kind in edges:
-        if "." not in to_sym and to_sym in name_index:
-            candidates = name_index[to_sym]
-            if len(candidates) == 1:
-                updates.append((candidates[0], eid))
-
-    if updates:
-        conn.executemany("UPDATE edges SET to_sym=?, resolved=1 WHERE id=?", updates)
-
-
 # ── tree-sitter ───────────────────────────────────────
 
-_TS_LANG_PARSERS: dict[str, "tree_sitter.Parser"] = {}
+_TS_PARSERS: dict[str, "tree_sitter.Parser"] = {}
 
 def _get_ts_parser(lang: str):
-    if lang in _TS_LANG_PARSERS:
-        return _TS_LANG_PARSERS[lang]
+    if lang in _TS_PARSERS:
+        return _TS_PARSERS[lang]
+    if lang not in _GRAMMAR_IMPORTS:
+        return None
+    pkg_name, attr = _GRAMMAR_IMPORTS[lang]
+    mod = _try_import_grammar(pkg_name)
+    if mod is None:
+        return None
     try:
-        if lang == "python":
-            parser = tree_sitter.Parser(tree_sitter.Language(ts_py.language()))
-        elif lang in ("javascript", "typescript"):
-            import tree_sitter_javascript as ts_js
-            import tree_sitter_typescript as ts_ts
-            lang_mod = ts_ts if lang == "typescript" else ts_js
-            parser = tree_sitter.Parser(tree_sitter.Language(lang_mod.language()))
-        else:
-            raise ImportError(f"no grammar for {lang}")
-        _TS_LANG_PARSERS[lang] = parser
+        lang_fn = getattr(mod, attr)
+        parser = tree_sitter.Parser(tree_sitter.Language(lang_fn()))
+        _TS_PARSERS[lang] = parser
         return parser
     except Exception:
         return None
@@ -627,43 +860,101 @@ def _extract_ts(filepath: str, lang: str) -> tuple[list[dict], list[dict]]:
     with open(filepath, "rb") as f:
         source = f.read()
     tree = parser.parse(source)
-    symbols: list[dict] = []
-    edges: list[dict] = []
-    _walk_ts(tree.root_node, source, filepath, symbols, edges)
+    symbols = []
+    edges = []
+    _walk_ts(tree.root_node, source, symbols, edges, scope="")
     return symbols, edges
 
 
-def _walk_ts(node, source: bytes, filepath: str, symbols: list, edges: list, scope: str = ""):
-    text = lambda n: source[n.start_byte:n.end_byte].decode("utf-8", errors="replace")
+def _walk_ts(node, source: bytes, symbols: list, edges: list, scope: str = ""):
+    text = lambda n: source[n.start_byte:n.end_byte].decode("utf-8", errors="replace") if n.start_byte < len(source) else "?"
+    kind = node.type
 
-    if node.type == "function_declaration":
+    # function / method
+    if kind in _TS_FUNCTION_TYPES:
         name_node = node.child_by_field_name("name")
         name = text(name_node) if name_node else "?"
         fn = f"{scope}.{name}" if scope else name
-        symbols.append({"name": fn, "kind": "function",
-                       "line": node.start_point[0] + 1,
-                       "signature": text(node).split("\n")[0][:120]})
+        symbols.append({"name": fn, "kind": "function", "line": node.start_point[0] + 1,
+                       "signature": text(node).split("\n")[0][:200], "visibility": "public" if not name.startswith("_") else "private"})
+        _ts_edges(node, source, fn, edges, scope)
 
-    elif node.type == "class_declaration":
+    # class / struct / interface / enum
+    elif kind in _TS_CLASS_TYPES:
         name_node = node.child_by_field_name("name")
         name = text(name_node) if name_node else "?"
         cls = f"{scope}.{name}" if scope else name
-        symbols.append({"name": cls, "kind": "class",
-                       "line": node.start_point[0] + 1,
-                       "signature": text(node).split("\n")[0][:120]})
+        symbols.append({"name": cls, "kind": "class", "line": node.start_point[0] + 1,
+                       "signature": text(node).split("\n")[0][:200]})
+        # extends / implements
+        _ts_extends(node, source, cls, edges)
         body = node.child_by_field_name("body")
         if body:
             for child in body.children:
-                _walk_ts(child, source, filepath, symbols, edges, cls)
+                _walk_ts(child, source, symbols, edges, cls)
 
-    elif node.type == "call_expression":
+    # import / use / mod
+    elif kind in _TS_IMPORT_TYPES and scope:
+        _ts_imports(node, source, scope, edges)
+
+    # call expression
+    elif kind in ("call_expression", "call"):
         fn_node = node.child_by_field_name("function")
         if fn_node and scope:
-            edges.append({"from": scope, "to": text(fn_node), "kind": "calls",
-                         "line": node.start_point[0] + 1})
+            called = text(fn_node)
+            if called and called != "?":
+                edges.append({"from": scope, "to": called, "kind": "calls", "line": node.start_point[0] + 1})
+
+    # variable decl (for arrow functions assigned to vars)
+    elif kind in ("variable_declaration", "lexical_declaration", "let_declaration", "const_declaration"):
+        for child in node.children:
+            if child.type == "variable_declarator":
+                name_node = child.child_by_field_name("name")
+                value_node = child.child_by_field_name("value")
+                if value_node and value_node.type in _TS_FUNCTION_TYPES:
+                    _walk_ts(value_node, source, symbols, edges, scope)
+                elif name_node:
+                    _walk_ts(child, source, symbols, edges, scope)
 
     for child in node.children:
-        _walk_ts(child, source, filepath, symbols, edges, scope)
+        if kind not in _TS_CLASS_TYPES:
+            _walk_ts(child, source, symbols, edges, scope)
+
+
+def _ts_edges(node, source, fn, edges, scope):
+    pass
+
+
+def _ts_extends(node, source, cls, edges):
+    for child in node.children:
+        if child.type in ("base_class_clause", "implements_clause", "extends_clause",
+                          "base_class_list", "interface_list", "type_parameters"):
+            for gc in child.children:
+                if gc.type in ("type_identifier", "identifier", "scoped_identifier",
+                               "scoped_type_identifier", "generic_type", "qualified_type"):
+                    text = source[gc.start_byte:gc.end_byte].decode("utf-8", errors="replace")
+                    if text:
+                        edges.append({"from": cls, "to": text, "kind": "extends", "line": node.start_point[0] + 1})
+
+
+def _ts_imports(node, source, scope, edges):
+    for child in node.children:
+        if child.type in ("import_spec", "import_specification", "import_path", "string", "string_literal"):
+            pass
+
+
+# ── reference resolution ─────────────────────────────
+
+def _resolve_references(conn):
+    name_index: dict[str, list[str]] = defaultdict(list)
+    for (qn,) in conn.execute("SELECT name FROM symbols").fetchall():
+        short = qn.rsplit(".", 1)[-1]
+        name_index[short].append(qn)
+    for eid, to_sym, _ in conn.execute("SELECT id, to_sym, kind FROM edges WHERE kind='calls'").fetchall():
+        if "." not in to_sym and to_sym in name_index:
+            candidates = name_index[to_sym]
+            if len(candidates) == 1:
+                conn.execute("UPDATE edges SET to_sym=?, resolved=1 WHERE id=?", (candidates[0], eid))
 
 
 # ── BFS ───────────────────────────────────────────────
@@ -676,17 +967,56 @@ def _bfs_path(conn, start: str, end: str, max_depth: int = 6) -> list[str] | Non
         node, path, visited = q.popleft()
         if len(path) > max_depth:
             continue
-        rows = conn.execute(
-            "SELECT to_sym FROM edges WHERE from_sym=? AND kind IN ('calls','extends')",
-            (node,),
-        ).fetchall()
-        for (nxt,) in rows:
+        for (nxt,) in conn.execute("SELECT to_sym FROM edges WHERE from_sym=? AND kind IN ('calls','extends')", (node,)):
             if nxt == end:
                 return path + [nxt]
             if nxt not in visited:
                 visited.add(nxt)
                 q.append((nxt, path + [nxt], visited))
     return None
+
+
+def _bfs_partial(conn, start: str, end: str, max_depth: int = 8) -> dict | None:
+    from collections import deque
+    q = deque()
+    q.append((start, [start], {start}))
+    furthest = start
+    furthest_path = [start]
+    while q:
+        node, path, visited = q.popleft()
+        if len(path) > max_depth:
+            continue
+        if len(path) > len(furthest_path):
+            furthest, furthest_path = node, path
+        rows = conn.execute("SELECT to_sym FROM edges WHERE from_sym=? AND kind IN ('calls','extends')", (node,)).fetchall()
+        if not rows:
+            return {"path": path, "break_at": node,
+                    "reason": f"{node} 没有静态调用出边（可能通过回调、动态调用或 AstrBot 框架路由连接）"}
+        for (nxt,) in rows:
+            if nxt == end:
+                return {"path": path + [nxt], "break_at": "", "reason": "found"}
+            if nxt not in visited:
+                visited.add(nxt)
+                q.append((nxt, path + [nxt], visited))
+    return {"path": furthest_path, "break_at": furthest,
+            "reason": f"达到最大深度 {max_depth}，在 {furthest} 处中断"}
+
+
+def _bfs_all_callers(conn, target: str, max_depth: int = 3) -> list[str]:
+    from collections import deque
+    callers: list[str] = []
+    visited: set[str] = {target}
+    q = deque([(target, 0)])
+    while q:
+        node, d = q.popleft()
+        if d >= max_depth:
+            continue
+        for (caller,) in conn.execute("SELECT from_sym FROM edges WHERE to_sym=? AND kind='calls'", (node,)):
+            if caller not in visited:
+                visited.add(caller)
+                callers.append(caller)
+                q.append((caller, d + 1))
+    return callers
 
 
 def _route_query(query: str) -> tuple[str, re.Match | None]:

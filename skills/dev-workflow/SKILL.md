@@ -3,7 +3,7 @@ name: dev-workflow
 description: >
   收到编码任务时强制走安全工作流。触发：写代码、改代码、修bug、重构、实现功能、修改文件。
   核心原则：先确认后执行、自动备份回滚、语法门禁。
-  可用工具：safe_edit、git_*、syntax_check、lint_runner、file_diff、es_search、rg_search、gh_pr、gh_issue、dep_scan、code_index、code_explore。
+  可用工具：safe_edit、git_*、syntax_check、lint_runner、file_diff、es_search、rg_search、gh_pr、gh_issue、dep_scan、code_index、code_explore、code_pack、code_diff_impact、code_status。
 ---
 
 # 开发工作流
@@ -23,7 +23,7 @@ description: >
 2. `git_branch` — 确认在正确的分支上
 3. `safe_backups` — 看一眼有没有旧备份可用
 4. `es_search` / `rg_search` / `dir_tree` — 需要时先了解项目结构
-5. `code_index` — 首次进入项目时建索引（一次性，后续增量更新）；`code_explore` — 需要理解代码调用链时**直接调**，不要先 rg_search 拼答案
+5. 代码理解 → 走「代码智能工具组」决策树（见下方完整章节）
 
 ## 节奏感
 
@@ -50,3 +50,47 @@ description: >
 - `git diff --cached` 自查无敏感内容
 - 大改动前备份到安全目录（如插件的 backups/ 目录）
 - 推送后如需创建 PR → 用 `gh_pr`
+
+## 代码智能工具组
+
+> 图优先，grep 兜底。能用图就不要 rg_search。
+
+### 心智模型
+
+```
+code_index（一次性建索引）
+  │
+  ├─ 查符号定义/调用者 ──→ code_explore
+  ├─ 修 bug 要完整上下文 ──→ code_pack
+  ├─ 改完了查影响范围 ──→ code_diff_impact
+  └─ explore 返回空 ──→ code_status（再 fallback rg_search）
+```
+
+### 决策树
+
+| 意图 | 用这个 |
+|------|--------|
+| 第一次进项目 | `code_index`（后续增量 `incremental=true`） |
+| 「X 在哪定义」「谁调了 X」 | `code_explore("X")` |
+| 修 X 的 bug，要 X + 依赖链全部源码 | `code_pack("X", depth=2)` |
+| 刚改了文件 Y，会影响什么 | `code_diff_impact(["Y"])` |
+| explore 查不到，怀疑索引坏了 | `code_status` |
+| 索引正常但 explore 查不到 | fallback → `rg_search` |
+
+### 铁律
+
+1. **图优先** — 能 code_explore 就不要 rg_search
+2. **建索引一次性** — 进项目 `code_index`，后续增量，不要每查一次重建
+3. **失败先查 status** — explore 返回空 → 先 `code_status`，再怀疑查询词
+4. **打包替代多次 explore** — 需要 3+ 符号源码才能理解流程 → 直接 `code_pack`
+5. **改完必查影响** — commit 前 `code_diff_impact`，确认不炸隐藏调用者
+6. **用符号名而非自然语言** — `_auth_guard` 而非「权限守卫怎么工作」
+
+### 反模式
+
+- ❌ 不建索引就调 explore
+- ❌ 每查一个符号重新 code_index
+- ❌ explore 失败直接 rg_search，不查 code_status
+- ❌ 用 code_pack 查单个符号定义（用 explore 更快）
+- ❌ 用 explore 查改动影响（用 diff_impact，它从文件反推符号树）
+- ❌ 改 5 个文件但 diff_impact 只查 1 个（传列表一次查全）
