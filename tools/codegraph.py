@@ -1091,7 +1091,7 @@ def _bfs_path(conn, start: str, end: str, max_depth: int = 6) -> list[str] | Non
         node, path, visited = q.popleft()
         if len(path) > max_depth:
             continue
-        for (nxt,) in conn.execute("SELECT to_sym FROM edges WHERE from_sym=? AND kind IN ('calls','extends','triggers')", (node,)):
+        for (nxt,) in conn.execute("SELECT to_sym FROM edges WHERE from_sym=? AND kind IN ('calls','extends','triggers','imports','references')", (node,)):
             if nxt == end:
                 return path + [nxt]
             if nxt not in visited:
@@ -1112,7 +1112,7 @@ def _bfs_partial(conn, start: str, end: str, max_depth: int = 8) -> dict | None:
             continue
         if len(path) > len(furthest_path):
             furthest, furthest_path = node, path
-        rows = conn.execute("SELECT to_sym FROM edges WHERE from_sym=? AND kind IN ('calls','extends')", (node,)).fetchall()
+        rows = conn.execute("SELECT to_sym FROM edges WHERE from_sym=? AND kind IN ('calls','extends','triggers','imports','references')", (node,)).fetchall()
         if not rows:
             return {"path": path, "break_at": node,
                     "reason": f"{node} 没有静态调用出边（可能通过回调、动态调用或 AstrBot 框架路由连接）"}
@@ -1135,7 +1135,7 @@ def _bfs_all_callers(conn, target: str, max_depth: int = 3) -> list[str]:
         node, d = q.popleft()
         if d >= max_depth:
             continue
-        for (caller,) in conn.execute("SELECT from_sym FROM edges WHERE to_sym=? AND kind='calls'", (node,)):
+        for (caller,) in conn.execute("SELECT from_sym FROM edges WHERE to_sym=? AND kind IN ('calls','extends','triggers','imports','references')", (node,)):
             if caller not in visited:
                 visited.add(caller)
                 callers.append(caller)
