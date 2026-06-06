@@ -940,9 +940,60 @@ def _ts_extends(node, source, cls, edges):
 
 
 def _ts_imports(node, source, scope, edges):
+    seen = set()
     for child in node.children:
-        if child.type in ("import_spec", "import_specification", "import_path", "string", "string_literal"):
-            pass
+        path = _ts_extract_import_path(child, source)
+        if path and path not in seen:
+            seen.add(path)
+            edges.append({"from": scope, "to": path, "kind": "imports", "line": node.start_point[0] + 1})
+
+
+def _ts_extract_import_path(node, source) -> str | None:
+    t = node.type
+    text = lambda n: source[n.start_byte:n.end_byte].decode("utf-8", errors="replace") if n.start_byte < len(source) else ""
+    # JS/TS: import 'foo' / import { x } from 'foo' / import x from 'foo'
+    if t in ("string", "string_literal", "string_fragment"):
+        raw = text(node).strip("\"'`")
+        return raw if raw else None
+    if t in ("import_specification", "import_statement"):
+        for child in node.children:
+            result = _ts_extract_import_path(child, source)
+            if result:
+                return result
+    # Go: import "fmt" / import ( "fmt"; "os" )
+    if t in ("import_spec", "import_spec_list"):
+        for child in node.children:
+            if child.type == "import_path":
+                for gc in child.children:
+                    if gc.type in ("string_literal", "interpreted_string_literal", "raw_string_literal"):
+                        return text(gc).strip("\"`'")
+    # Rust: use std::collections::HashMap
+    if t == "use_declaration":
+        parts = _ts_collect_identifiers(node)
+        if parts:
+            return "::".join(parts)
+    # Rust: use foo::{bar, baz}
+    if t == "scoped_use_list":
+        path_node = node.child_by_field_name("path")
+        prefix = _ts_collect_identifiers(path_node) if path_node else []
+        for child in node.children:
+            if child.type in ("identifier", "scoped_identifier"):
+                sub = _ts_collect_identifiers(child)
+                if prefix and sub:
+                    return "::".join(prefix + sub)
+    return None
+
+
+def _ts_collect_identifiers(node) -> list[str]:
+    parts = []
+    for child in node.children:
+        if child.type in ("identifier", "type_identifier"):
+            text = child.text.decode("utf-8", errors="replace") if hasattr(child, "text") else ""
+            if text:
+                parts.append(text)
+        elif child.type == "scoped_identifier":
+            parts.extend(_ts_collect_identifiers(child))
+    return parts
 
 
 # ── reference resolution ─────────────────────────────
@@ -957,6 +1008,31 @@ def _resolve_references(conn):
             candidates = name_index[to_sym]
             if len(candidates) == 1:
                 conn.execute("UPDATE edges SET to_sym=?, resolved=1 WHERE id=?", (candidates[0], eid))
+
+    # Phase 2: cross-file import resolution
+    unresolved = conn.execute(
+        "SELECT e.id, e.from_sym, e.to_sym, s.file "
+        "FROM edges e JOIN symbols s ON s.name=e.from_sym "
+        "WHERE e.kind='calls' AND e.resolved=0"
+    ).fetchall()
+    file_imports: dict[str, list[str]] = {}
+    all_imports = conn.execute("SELECT file, to_sym FROM edges WHERE kind='imports'").fetchall()
+    for f, imp in all_imports:
+        file_imports.setdefault(f, []).append(imp)
+
+    for eid, from_sym, to_sym, from_file in unresolved:
+        if from_file not in file_imports:
+            continue
+        candidates = set()
+        for imp in file_imports[from_file]:
+            rows = conn.execute(
+                "SELECT name FROM symbols WHERE name=? OR name LIKE ?",
+                (f"{imp}.{to_sym}", f"{imp}.%.{to_sym}"),
+            ).fetchall()
+            for (qn,) in rows:
+                candidates.add(qn)
+        if len(candidates) == 1:
+            conn.execute("UPDATE edges SET to_sym=?, resolved=1 WHERE id=?", (candidates.pop(), eid))
 
 
 # ── BFS ───────────────────────────────────────────────
