@@ -2,10 +2,10 @@
 
 ## v2.4.0 — 代码语义索引 + L2 原生工具摘除恢复
 
-- **新工具 (P0)**: 新增 `code_index` / `code_explore` — Python AST 解析 + SQLite FTS5 存储，三级搜索（LIKE → FTS5 → hint），5 种边类型（calls/imports/extends/references/overrides），后处理引用消解。参考 CodeGraph 设计哲学：一次调用即答案，不退到 rg_search 手动拼凑。61→63 工具，9→10 组（新增「代码理解」组）
+- **新工具 (P0)**: 新增 `code_index` / `code_explore` / `code_diff_impact` / `code_pack` / `code_status` — Python AST 解析 + SQLite FTS5 存储，三级搜索（LIKE → FTS5 → hint），5 种边类型（calls/imports/extends/references/overrides），后处理引用消解。参考 CodeGraph 设计哲学：一次调用即答案，不退到 rg_search 手动拼凑。61→66 工具
 - **L2 原生工具摘除恢复**: `_auth_guard` 在授权用户路径摘除有 devkit 替代品的 AstrBot 原生工具（`astrbot_file_edit_tool`→`safe_edit`、`astrbot_grep_tool`→`rg_search`），仅当替代品确实可用时才摘除
 - **Agent 友好**: tool description 改为命令式使用指南（何时调用、不要先 rg_search、返回是 Read-equivalent），移除"用 file_read 查看"反模式 hint
-- **缺陷修复**: `_unparse_attr` 返回类型修复（Bug1）、FTS5 索引去源码噪声（Bug2）、SQLite 连接泄漏修复、`core/__init__.py` 补全
+- **缺陷修复**: `_unparse_attr` 返回类型修复、FTS5 索引去源码噪声、SQLite 连接泄漏修复、增量 mtimes 写入时序修复
 
 ## v2.3.7 — 工具管理权收回 + 防御上线
 

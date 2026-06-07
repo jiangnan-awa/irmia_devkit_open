@@ -1,6 +1,6 @@
 # Irmia DevKit (弥亚开发工具箱)
 
-An AstrBot plugin providing 61 secure, structured code development tools for LLM Agents.
+An AstrBot plugin providing 66 secure, structured code development tools for LLM Agents.
 
 **Requires**: Python ≥ 3.10, AstrBot any version.
 
@@ -40,7 +40,7 @@ Place the plugin folder into AstrBot's `data/plugins/` directory and restart Ast
 | `config_diff` (YAML) | pyyaml (optional) | Returns install hint |
 | `code_index` (multi-lang) | tree-sitter + grammar (optional) | Zero-deps for Python; other languages skipped |
 
-> The remaining 60+ tools use Python standard library only.
+> The remaining 56+ tools use Python standard library only.
 
 ## Design
 
@@ -52,9 +52,9 @@ Place the plugin folder into AstrBot's `data/plugins/` directory and restart Ast
 
 `syntax_check`/`lint_runner`/`rg_search` include surrounding code context in their results, enabling the LLM to locate issues without an extra file read.
 
-61 tools organized into 9 groups. Disable entire groups or individual tools via `config.json`.
+66 tools organized into 10 groups. Disable entire groups or individual tools via `config.json`.
 
-## Tool List (61)
+## Tool List (66)
 
 ### 🔒 Safe Edit Chain (7)
 
@@ -161,6 +161,16 @@ Place the plugin folder into AstrBot's `data/plugins/` directory and restart Ast
 | `git_changelog` | Git log semantic grouping |
 | `db_query` | SQLite read-only query |
 | `dep_scan` | Python import graph + cycle detection |
+
+### 🤖 Code Understanding (5)
+
+| Tool | Description |
+|------|-------------|
+| `code_index` | Build semantic index (symbols + call edges) |
+| `code_explore` | Natural language codebase exploration |
+| `code_diff_impact` | Blast radius analysis for file changes |
+| `code_pack` | Precision context packing — collect call chain sources |
+| `code_status` | Index health check — coverage and status |
 
 ### 🧠 Skill
 

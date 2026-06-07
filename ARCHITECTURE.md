@@ -86,7 +86,8 @@ irmia_devkit_open/
     ├── dep_scan.py              # Python import graph + cycle detection
     ├── db_query.py              # Read-only SQLite (parameterized)
     ├── svg_render.py            # SVG → PNG (optional cairosvg)
-    └── json_schema_val.py       # JSON Schema validation (optional jsonschema)
+    ├── json_schema_val.py       # JSON Schema validation (optional jsonschema)
+    └── codegraph.py              # Code semantic index (AST + FTS5 + BFS)
 ```
 
 ## Initialization Flow
@@ -95,7 +96,7 @@ irmia_devkit_open/
 AstrBot loads plugin
   └─ imports main.py
        ├─ main.py imports tools/_registry.py
-       │    └─ _registry imports ALL 45 tool modules (even disabled ones)
+       │    └─ _registry imports ALL tool modules (even disabled ones)
        │    └─ populates TOOL_GROUPS and _ALL_TOOLS
        └─ Main.__init__()
             ├─ Reads config.json (→ data_dir or plugin_dir)

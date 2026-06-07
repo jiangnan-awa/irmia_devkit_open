@@ -40,7 +40,7 @@ Python ≥ 3.10
 | `config_diff` (YAML) | pyyaml（可选） | 返回安装提示 |
 | `code_index` (多语言) | tree-sitter + grammar（可选） | Python 零依赖；其他语言跳过 |
 
-> 其余 60+ 工具为 Python 标准库实现，无外部依赖。
+> 其余 56+ 工具为 Python 标准库实现，无外部依赖。
 
 ## 设计说明
 

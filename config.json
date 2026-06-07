@@ -12,12 +12,13 @@
     "文本处理": true,
     "编码": true,
     "时间": true,
-    "扩展": true
+    "扩展": true,
+    "代码理解": true
   },
-  "disabled_tools": [],
+  "disabled_tools": "",
   "es_path": "",
   "gh_path": "",
   "state_dir": "",
-  "lock_dirs": [],
+  "lock_dirs": "",
   "backup_dir": ""
 }
