@@ -176,8 +176,7 @@ class CodeGraph:
 
     def _conn_get(self) -> sqlite3.Connection:
         if self._conn is None:
-            self._ensure_db()
-            self._conn = sqlite3.connect(self._db_path)
+            self._ensure_db()  # already sets self._conn
         return self._conn
 
     def close(self) -> None:
@@ -220,9 +219,10 @@ class CodeGraph:
             if incremental:
                 conn.execute("DELETE FROM symbols WHERE file=?", (rp,))
                 conn.execute("DELETE FROM edges WHERE file=?", (rp,))
-                mtimes[rp] = fpath.stat().st_mtime
             try:
                 symbols, edges = _extract_file(str(fpath), fpath.suffix.lower())
+                if incremental:
+                    mtimes[rp] = fpath.stat().st_mtime
                 for s in symbols:
                     conn.execute(
                         "INSERT INTO symbols(name,kind,file,line,signature,source,doc,visibility,is_async) "
