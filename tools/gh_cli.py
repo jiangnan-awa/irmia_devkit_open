@@ -23,6 +23,7 @@ def _find_gh() -> str:
         return path
     # Windows 常见安装位置
     for guess in [
+        r"D:\Irmia\工具\gh.exe",
         r"C:\Program Files\GitHub CLI\gh.exe",
         r"C:\Program Files (x86)\GitHub CLI\gh.exe",
         os.path.expandvars(r"%LOCALAPPDATA%\Programs\GitHub CLI\gh.exe"),
