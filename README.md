@@ -52,7 +52,7 @@ Python ≥ 3.10
 
 `syntax_check`/`lint_runner`/`rg_search` 在返回结果中附带代码上下文片段，帮助 LLM 直接定位问题，无需额外读文件。
 
-66 个工具按 10 组管理，可在 `config.json` 中按组或按单个工具关闭。
+67 个工具按 10 组管理，可在 `config.json` 中按组或按单个工具关闭。
 
 ## 架构
 
@@ -63,7 +63,7 @@ Python ≥ 3.10
 - 安全设计架构（SSRF 四层、safe_edit 防御链、ReDoS 三重盾）
 - 异步执行模型和测试策略
 
-## 工具列表 (66)
+## 工具列表 (67)
 
 ### 🔒 安全编辑链 (7)
 
@@ -211,7 +211,7 @@ pip install pytest
 python -m pytest tests/ -v
 ```
 
-120 用例，覆盖 SSRF、safe_edit 防御链、Zip-slip、SQL 注入、ReDoS、注册表一致性、linter fallback、权限鉴权等。
+147 用例，覆盖 SSRF、safe_edit 防御链、Zip-slip、SQL 注入、ReDoS、注册表一致性、linter fallback、权限鉴权、语义索引等。
 
 ## 英文文档
 
@@ -219,7 +219,7 @@ python -m pytest tests/ -v
 
 ## 版本
 
-2.4.0 · [Changelog](CHANGELOG.md)
+2.4.5 · [Changelog](CHANGELOG.md)
 
 ## 作者
 

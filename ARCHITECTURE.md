@@ -30,6 +30,8 @@ irmia_devkit_open/
 │   ├── test_http_utils.py       # SSRF validation
 │   ├── test_db_query.py         # SQL injection, read-only enforcement
 │   ├── test_file_zip.py         # Zip-slip protection
+│   ├── test_git_smart.py        # Git status/diff/log/commit/push/branch guards
+│   ├── test_codegraph.py        # Semantic index, explore, pack, impact, BFS
 │   └── test_auth.py             # protect_tool, build_allowed_ids, Layer 1 filtering
 └── tools/
     ├── __init__.py              # Package marker

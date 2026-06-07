@@ -1,6 +1,6 @@
 # Irmia DevKit (弥亚开发工具箱)
 
-An AstrBot plugin providing 66 secure, structured code development tools for LLM Agents.
+An AstrBot plugin providing 67 secure, structured code development tools for LLM Agents.
 
 **Requires**: Python ≥ 3.10, AstrBot any version.
 
@@ -52,9 +52,9 @@ Place the plugin folder into AstrBot's `data/plugins/` directory and restart Ast
 
 `syntax_check`/`lint_runner`/`rg_search` include surrounding code context in their results, enabling the LLM to locate issues without an extra file read.
 
-66 tools organized into 10 groups. Disable entire groups or individual tools via `config.json`.
+67 tools organized into 10 groups. Disable entire groups or individual tools via `config.json`.
 
-## Tool List (66)
+## Tool List (67)
 
 ### 🔒 Safe Edit Chain (7)
 
@@ -195,11 +195,11 @@ pip install pytest
 python -m pytest tests/ -v
 ```
 
-120 test cases covering SSRF, safe_edit, Zip-slip, SQL injection, ReDoS, registry consistency, linter fallback, auth permission checks, and tool correctness.
+147 test cases covering SSRF, safe_edit, Zip-slip, SQL injection, ReDoS, registry consistency, linter fallback, auth permission checks, semantic indexing, and tool correctness.
 
 ## Version
 
-2.4.0 · [Changelog](CHANGELOG.md)
+2.4.5 · [Changelog](CHANGELOG.md)
 
 ## Author
 

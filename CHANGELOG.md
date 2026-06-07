@@ -1,5 +1,16 @@
 # Changelog
 
+## v2.4.5 — 语义索引 5 工具 + gh_cli 自动定位 + 文档补完
+
+- **新工具 — 代码理解组**: 新增 `code_index` 建语义索引、`code_explore` 符号搜索与调用链追踪、`code_diff_impact` 变更波及分析、`code_pack` 精准上下文打包、`code_status` 索引健康检查。Python AST 零依赖解析 + 可选 tree-sitter 多语言（JS/TS/Go/Rust/Java/C/C++），SQLite FTS5 存储，一次调用即答案。64→67 工具，9 组→10 组
+- **语义索引引擎稳定**: 修复 SQLite 连接泄漏和增量索引时序问题，扩展多语言支持（Python 全框架 + JS/TS/Java/Rust）
+- **safe_edit 多匹配消歧**: 多处匹配时不再报错退出，列出所有候选位置供选择
+- **错误返回防截断**: 语义索引工具在未建索引或查无结果时返回完整提示，不再被截断为模糊报错
+- **gh_cli 自动定位**: 移除本地路径硬编码，改为全盘自动搜索 gh.exe + 未找到时给出安装指引
+- **缺依赖友好**: `html_extract`、`syntax_check`、语义索引、`config_diff` 缺少可选依赖时返回 pip install 指引而非报错
+- **测试扩展**: 新增 27 个语义索引用例，总用例 120→147
+- **文档查漏**: README 工具组数/工具数修正、tree-sitter 可选依赖说明、README_EN 同步；`.gitignore` 补 SQLite WAL 和索引目录规则；全项目陈旧引用 13 处修复
+
 ## v2.4.0 — 代码语义索引 + L2 原生工具摘除恢复
 
 - **新工具 (P0)**: 新增 `code_index` / `code_explore` / `code_diff_impact` / `code_pack` / `code_status` — Python AST 解析 + SQLite FTS5 存储，三级搜索（LIKE → FTS5 → hint），5 种边类型（calls/imports/extends/references/overrides），后处理引用消解。参考 CodeGraph 设计哲学：一次调用即答案，不退到 rg_search 手动拼凑。61→66 工具
