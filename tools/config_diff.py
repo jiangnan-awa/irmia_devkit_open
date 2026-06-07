@@ -24,6 +24,8 @@ def diff(file_a: str, file_b: str) -> dict:
 
     try:
         obj_a = _load(pa)
+    except ImportError as e:
+        return {"ok": False, "error": str(e)}
     except Exception as e:
         return {"ok": False, "error": f"无法解析 {file_a}: {e}"}
     try:

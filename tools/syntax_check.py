@@ -129,7 +129,7 @@ def _check_nim(p: Path) -> dict:
             "ok": True,
             "language": "nim",
             "skipped": True,
-            "reason": "nim 编译器未安装，跳过语法检查",
+            "reason": "nim 编译器未安装，跳过语法检查。安装: winget install nim-lang.nim 或 scoop install nim",
         }
     except Exception as e:
         return {"ok": False, "language": "nim", "errors": [{"msg": str(e)}]}
@@ -150,7 +150,7 @@ def _check_go(p: Path) -> dict:
             "ok": True,
             "language": "go",
             "skipped": True,
-            "reason": "go 未安装，跳过语法检查",
+            "reason": "go 未安装，跳过语法检查。安装: winget install GoLang.Go 或 scoop install go",
         }
     except Exception as e:
         return {"ok": False, "language": "go", "errors": [{"msg": str(e)}]}
@@ -177,7 +177,7 @@ def _check_node(p: Path) -> dict:
             "ok": True,
             "language": "javascript/typescript",
             "skipped": True,
-            "reason": "node 未安装，跳过语法检查",
+            "reason": "node 未安装，跳过语法检查。安装: winget install OpenJS.NodeJS 或 scoop install nodejs",
         }
     except Exception as e:
         return {

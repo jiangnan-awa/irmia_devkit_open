@@ -691,11 +691,17 @@ class CodeGraph:
         if HAS_TREE_SITTER:
             for lang, (pkg, _) in _GRAMMAR_IMPORTS.items():
                 if _try_import_grammar(pkg) is None:
-                    missing.append(f"tree-sitter-{lang}")
+                    missing.append(lang)
+
+        hint = ""
+        if missing:
+            hint = f"缺失 grammar: pip install {' '.join(f'tree-sitter-{l}' for l in missing)}"
+        elif not HAS_TREE_SITTER:
+            hint = "tree-sitter 未安装: pip install tree-sitter tree-sitter-python（可选，仅 Python 可用）"
 
         return {"ok": True, "files_indexed": files, "symbols_total": symbols, "edges_total": edges,
                 "last_index_at": last_str, "db_size": size_str, "fts5_ok": fts_ok,
-                "missing_grammars": missing,
+                "missing_grammars": missing, "install_hint": hint,
                 "language_support": "python ✅ | " + ", ".join(f"{l} ⚠️" if l in missing else f"{l} ✅" if HAS_TREE_SITTER and _try_import_grammar(pkg) is not None else f"{l} ❌" for l, (pkg, _) in _GRAMMAR_IMPORTS.items())}
 
 

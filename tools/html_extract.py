@@ -3,9 +3,23 @@ html_extract — HTML 内容提取。
 用 BeautifulSoup + lxml 从 HTML 中提取文本、链接、表格。
 """
 
-from bs4 import BeautifulSoup
+import re
 
 from ._helpers import proposal_reply
+
+
+def _get_soup(html: str, parser: str = "lxml"):
+    try:
+        from bs4 import BeautifulSoup
+    except ImportError:
+        return None, parser
+    try:
+        return BeautifulSoup(html, parser), parser
+    except Exception:
+        try:
+            return BeautifulSoup(html, "html.parser"), "html.parser"
+        except Exception:
+            return None, "html.parser"
 
 
 def extract(html: str, what: str = "text", selector: str = "") -> dict:
@@ -24,12 +38,13 @@ def extract(html: str, what: str = "text", selector: str = "") -> dict:
         {"ok": True, "data": ...} 或 {"ok": False, "error": ...}
     """
     try:
-        soup = BeautifulSoup(html, "lxml")
-    except Exception:
-        try:
-            soup = BeautifulSoup(html, "html.parser")
-        except Exception as e:
-            return {"ok": False, "error": f"HTML 解析器初始化失败: {e}"}
+        soup, parser = _get_soup(html)
+        if soup is None:
+            if parser == "lxml":
+                return {"ok": False, "error": "beautifulsoup4 未安装。请运行: pip install beautifulsoup4 lxml"}
+            return {"ok": False, "error": "HTML 解析器初始化失败"}
+    except Exception as e:
+        return {"ok": False, "error": f"HTML 解析器初始化失败: {e}"}
 
     try:
         if what == "text":
