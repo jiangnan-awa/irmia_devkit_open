@@ -13,7 +13,7 @@ from ._helpers import _run_cmd
 
 
 def _find_gh() -> str:
-    """查找 gh CLI 路径。先读配置，再自动搜索 PATH。"""
+    """查找 gh CLI 路径。先读配置，再自动搜索 PATH 和常见安装位置。"""
     config = get_config()
     custom = config.get("gh_path", "")
     if custom and os.path.exists(custom):
@@ -21,6 +21,14 @@ def _find_gh() -> str:
     path = shutil.which("gh")
     if path:
         return path
+    # Windows 常见安装位置
+    for guess in [
+        r"C:\Program Files\GitHub CLI\gh.exe",
+        r"C:\Program Files (x86)\GitHub CLI\gh.exe",
+        os.path.expandvars(r"%LOCALAPPDATA%\Programs\GitHub CLI\gh.exe"),
+    ]:
+        if os.path.exists(guess):
+            return guess
     return "gh"
 
 

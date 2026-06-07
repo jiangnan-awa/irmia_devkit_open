@@ -34,8 +34,15 @@ def compare(v1: str, v2: str) -> dict:
         "v1": v1,
         "v2": v2,
         "result": result,
-        "v1_parsed": p1,
-        "v2_parsed": p2,
+        "v1_parsed": _fmt_parsed(p1),
+        "v2_parsed": _fmt_parsed(p2),
+    }
+
+
+def _fmt_parsed(p: tuple) -> dict:
+    return {
+        "major": p[0], "minor": p[1], "patch": p[2],
+        "pre": [x for x in p[3] if x != chr(127)] or None,
     }
 
 

@@ -187,7 +187,7 @@ def _python_fallback_search(query: str, search_root: str, max_results: int,
     except PermissionError:
         pass
 
-    note = "Linux 搜索模式（Python 扫描较慢）。建议安装 locate（sudo apt install mlocate）或 fd（sudo apt install fd-find）"
+    note = "Python 扫描模式（较慢）。建议安装 Everything（voidtools.com）或 fd（choco install fd / winget install sharkdp.fd）"
     return {"ok": True, "count": len(items), "total_size": 0, "items": items, "engine": "python", "note": note}
 
 
@@ -235,7 +235,7 @@ def search(
         args.append(query)
 
     if ext and not regex:
-        args[-1] = f"{args[-1]} *.{ext}"
+        args[-1] = f"ext:{ext} {args[-1]}"
     if path:
         args.extend(["-path", path])
 
