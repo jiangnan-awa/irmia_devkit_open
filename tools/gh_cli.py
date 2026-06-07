@@ -23,7 +23,6 @@ def _find_gh() -> str:
         return path
     # Windows 常见安装位置
     for guess in [
-        r"D:\Irmia\工具\gh.exe",
         r"C:\Program Files\GitHub CLI\gh.exe",
         r"C:\Program Files (x86)\GitHub CLI\gh.exe",
         os.path.expandvars(r"%LOCALAPPDATA%\Programs\GitHub CLI\gh.exe"),
@@ -41,6 +40,12 @@ def _run_gh(args: list[str], cwd: str = None, timeout: int = 20) -> dict:
     if not result["ok"] and gh_bin not in result.get("error", ""):
         if gh_bin != "gh":
             result["error"] = f"gh 未找到: {gh_bin}"
+    if not result["ok"] and gh_bin == "gh":
+        result["error"] = (
+            f"{result.get('error', 'gh 未找到')}。"
+            "如已安装 gh CLI，用 es_search('gh.exe') 找到路径后填入 config.json 的 gh_path；"
+            "或安装 GitHub CLI: winget install GitHub.cli"
+        )
     return result
 
 
