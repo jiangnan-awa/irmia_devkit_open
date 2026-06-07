@@ -282,8 +282,8 @@ class CodeGraph:
         row = conn.execute("SELECT value FROM meta WHERE key='last_index'").fetchone()
         if not row:
             return {"ok": False, "error": "no_index",
-                    "summary": "尚未建立语义索引。",
-                    "hint": f"运行 code_index('{os.path.abspath(project_dir)}') 建索引。"}
+                    "proposal": f"先运行 code_index('{os.path.abspath(project_dir)}') 建索引（首次 ~0.5-5s）。",
+                    "options": ["建索引", "用 rg_search 搜索原始文本"]}
 
         qtype, match = _route_query(query)
 
@@ -603,7 +603,9 @@ class CodeGraph:
         if not sr:
             sr = conn.execute("SELECT name,kind,file,line,signature,source FROM symbols WHERE name LIKE ? LIMIT 1", (f"%{target}%",)).fetchone()
         if not sr:
-            return {"ok": False, "error": f"符号 '{target}' 未找到。先运行 code_index 建索引。"}
+            return {"ok": False, "error": f"符号 '{target}' 未找到",
+                    "proposal": "先运行 code_index 建立索引，或用 code_explore 搜索近似符号",
+                    "options": ["用 code_explore 搜索", "用 rg_search 搜索原始文本"]}
         target_info = {"name": sr[0], "kind": sr[1], "file": sr[2], "line": sr[3], "signature": sr[4]}
         trunc = self._smart_truncate(sr[5] or "")
         target_info.update(trunc)
