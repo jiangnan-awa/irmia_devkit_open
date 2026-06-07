@@ -19,7 +19,7 @@ Place the plugin folder into AstrBot's `data/plugins/` directory and restart Ast
 | `owner_sid` | Admin session ID (optional; plugin auto-reads AstrBot admin list) |
 | `allowed_ids` | Additional allowed user IDs (comma-separated, platform-agnostic) |
 | `group_config_enabled` | Enable per-group permission config (default: false, restart required) |
-| `tool_groups` | 9 group bool switches (`false` = disable entire group) |
+| `tool_groups` | 10 group bool switches (`false` = disable entire group) |
 | `disabled_tools` | Comma-separated names of individually disabled tools |
 | `es_path` | Everything CLI path (auto-detect if empty) |
 | `gh_path` | GitHub CLI path (auto-detect if empty) |
@@ -38,8 +38,9 @@ Place the plugin folder into AstrBot's `data/plugins/` directory and restart Ast
 | `svg_render` | cairosvg (optional) | Returns install hint |
 | `json_schema_val` | jsonschema (optional) | Returns install hint |
 | `config_diff` (YAML) | pyyaml (optional) | Returns install hint |
+| `code_index` (multi-lang) | tree-sitter + grammar (optional) | Zero-deps for Python; other languages skipped |
 
-> The remaining 50+ tools use Python standard library only.
+> The remaining 60+ tools use Python standard library only.
 
 ## Design
 

@@ -17,7 +17,7 @@ Python ≥ 3.10
 | `owner_sid` | 管理员会话 ID（可不填，插件自动读取 AstrBot 管理员列表） |
 | `allowed_ids` | 额外允许的用户 ID（逗号分隔，平台无关） |
 | `group_config_enabled` | 启用群级权限配置（默认关闭，需重启生效） |
-| `tool_groups` | 9 组 bool 开关，`false` = 关闭整组 |
+| `tool_groups` | 10 组 bool 开关，`false` = 关闭整组 |
 | `disabled_tools` | 逗号分隔单独禁用的工具名 |
 | `es_path` | Everything CLI 路径，空自动检测 |
 | `gh_path` | GitHub CLI 路径，空自动检测 |
@@ -38,8 +38,9 @@ Python ≥ 3.10
 | `svg_render` | cairosvg（可选） | 返回安装提示 |
 | `json_schema_val` | jsonschema（可选） | 返回安装提示 |
 | `config_diff` (YAML) | pyyaml（可选） | 返回安装提示 |
+| `code_index` (多语言) | tree-sitter + grammar（可选） | Python 零依赖；其他语言跳过 |
 
-> 其余 50+ 工具为 Python 标准库实现，无外部依赖。
+> 其余 60+ 工具为 Python 标准库实现，无外部依赖。
 
 ## 设计说明
 
