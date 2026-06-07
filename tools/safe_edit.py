@@ -116,9 +116,11 @@ def edit(
         return {
             "ok": False,
             "error": f"old 文本在文件中出现了 {old_count} 次，请指定要替换第几次出现",
-            "occurrence_count": old_count,
+            "proposal": f"请使用 occurrence=N 指定目标（1~{old_count}），或设 replace_all=True 替换全部",
+            "options": [f"occurrence={i+1}" for i in range(min(old_count, 5))],
+            "evidence": {"occurrence_count": old_count, "matches": positions[:20]},
             "matches": positions[:20],
-            "hint": f"请使用 occurrence=N 指定目标（1~{old_count}），或设 replace_all=True 替换全部",
+            "occurrence_count": old_count,
         }
 
     # 2. 执行替换前先校验 occurrence
