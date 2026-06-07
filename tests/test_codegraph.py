@@ -1,6 +1,5 @@
 """Tests for codegraph — semantic indexing and query engine."""
 
-import json
 import os
 import sqlite3
 import tempfile
@@ -147,7 +146,7 @@ class TestCodeGraphIndex:
         assert r["ok"] is False
         cg.close()
 
-    def test_incremental_skip_unchanged(self, tmp_project):
+    def test_incremental_second_run(self, tmp_project):
         fd, path = tempfile.mkstemp(suffix=".db")
         os.close(fd)
         cg = CodeGraph(path)
@@ -306,7 +305,7 @@ class TestResolveReferences:
             resolved = conn.execute(
                 "SELECT COUNT(*) FROM edges WHERE kind='calls' AND resolved=1"
             ).fetchone()[0]
-            assert resolved >= 0
+            assert resolved > 0
             conn.close()
         finally:
             cg.close()
