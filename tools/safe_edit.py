@@ -4,10 +4,11 @@ safe_edit — 安全编辑工具（强制使用）。
 """
 
 import shutil
+import tempfile
 from datetime import datetime
 from pathlib import Path
 
-from .config import get_config
+from .config import get_config, get_plugin_dir
 from .file_patch import patch
 from .syntax_check import check as syntax_check
 from ._file_utils import read_file_with_encoding, find_closest_line, SAFE_EDIT_MAX_SIZE, align_whitespace
@@ -19,7 +20,13 @@ def _backup_dir() -> Path:
     custom = config.get("backup_dir", "")
     if custom:
         return Path(custom)
-    return Path.home() / ".irmia" / "backups"
+    default = Path.home() / ".irmia" / "backups"
+    try:
+        default.parent.mkdir(parents=True, exist_ok=True)
+        return default
+    except OSError:
+        root = get_plugin_dir() or Path(tempfile.gettempdir())
+        return Path(root) / ".irmia" / "backups"
 
 
 def _collect_positions(content: str, old: str) -> list[int]:

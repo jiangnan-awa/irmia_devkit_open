@@ -93,6 +93,11 @@ from .json_schema_val import validate as _json_schema_val
 from .project_init import scan as _project_init_scan
 from .git_changelog import changelog as _git_changelog
 from .lint_runner import run as _lint_run
+from .test_runner import run as _test_run
+from .multi_edit import run as _multi_edit_run
+from .shell_exec import run as _shell_exec_run
+from .op_log import query as _op_log_query
+from .symbol_rename import run as _symbol_rename_run
 from .tool_stats import snapshot as _tool_stats_snap
 from .db_query import query as _db_query
 from .dep_scan import scan as _dep_scan
@@ -107,7 +112,10 @@ def _code_index(project_dir: str, incremental: bool = False) -> dict:
     root = Path(project_dir).resolve()
     db_path = str(root / ".codegraph" / "codegraph.db")
     cg = _CodeGraph(db_path)
-    return cg.index(str(root), incremental)
+    try:
+        return cg.index(str(root), incremental)
+    finally:
+        cg.close()
 
 
 def _code_explore(query: str, project_dir: str = ".") -> dict:
@@ -115,7 +123,10 @@ def _code_explore(query: str, project_dir: str = ".") -> dict:
     root = Path(project_dir).resolve()
     db_path = str(root / ".codegraph" / "codegraph.db")
     cg = _CodeGraph(db_path)
-    return cg.explore(query, str(root))
+    try:
+        return cg.explore(query, str(root))
+    finally:
+        cg.close()
 
 
 def _code_diff_impact(filepaths: list, max_depth: int = 3) -> dict:
@@ -123,7 +134,10 @@ def _code_diff_impact(filepaths: list, max_depth: int = 3) -> dict:
     root = Path(".").resolve()
     db_path = str(root / ".codegraph" / "codegraph.db")
     cg = _CodeGraph(db_path)
-    return cg.code_diff_impact(filepaths, max_depth)
+    try:
+        return cg.code_diff_impact(filepaths, max_depth)
+    finally:
+        cg.close()
 
 
 def _code_pack(target: str, depth: int = 2, mode: str = "both") -> dict:
@@ -131,7 +145,10 @@ def _code_pack(target: str, depth: int = 2, mode: str = "both") -> dict:
     root = Path(".").resolve()
     db_path = str(root / ".codegraph" / "codegraph.db")
     cg = _CodeGraph(db_path)
-    return cg.code_pack(target, depth, mode)
+    try:
+        return cg.code_pack(target, depth, mode)
+    finally:
+        cg.close()
 
 
 def _code_status() -> dict:
@@ -139,7 +156,10 @@ def _code_status() -> dict:
     root = Path(".").resolve()
     db_path = str(root / ".codegraph" / "codegraph.db")
     cg = _CodeGraph(db_path)
-    return cg.code_status()
+    try:
+        return cg.code_status()
+    finally:
+        cg.close()
 
 
 # ═══════════════════════════════════════════════════════════
@@ -2411,6 +2431,104 @@ class LintRunnerTool(FunctionTool):
 
 
 @dataclass
+class TestRunnerTool(FunctionTool):
+    name: str = "test_runner"
+    description: str = (
+        "统一运行项目测试（pytest/go test/cargo test/jest）。"
+        "自动发现项目测试框架，也可传 test_cmd 覆盖；返回 passed/failed/skipped/errors 等结构化结果。"
+    )
+    parameters: dict = field(
+        default_factory=lambda: {
+            "type": "object",
+            "properties": {
+                "filepath": {"type": "string", "description": "相关文件路径，可选"},
+                "project_dir": {
+                    "type": "string",
+                    "description": "项目根目录，默认当前目录",
+                    "default": ".",
+                },
+                "test_cmd": {
+                    "type": "string",
+                    "description": "覆盖自动发现的测试命令，可选；会经过安全白名单校验",
+                    "default": "",
+                },
+                "timeout": {
+                    "type": "integer",
+                    "description": "超时时间秒数，默认 120",
+                    "default": 120,
+                },
+            },
+            "required": [],
+        }
+    )
+
+    async def call(
+        self,
+        context: ContextWrapper[AstrAgentContext],
+        filepath: str = "",
+        project_dir: str = ".",
+        test_cmd: str = "",
+        timeout: int = 120,
+        **kwargs,
+    ) -> ToolExecResult:
+        _tool_stats.record(self.name)
+        try:
+            return _unwrap(await _run_sync(_test_run, filepath, project_dir, test_cmd, timeout))
+        except Exception as e:
+            return _err(f"test_runner 失败: {e}")
+
+
+@dataclass
+class MultiEditTool(FunctionTool):
+    name: str = "multi_edit"
+    description: str = (
+        "原子多文件编辑：接收 edits=[{file, old, new}]，全部预检查和语法检查通过后一次性写入。"
+        "任一失败会回滚全部文件。适合跨文件重构或批量替换。"
+    )
+    parameters: dict = field(
+        default_factory=lambda: {
+            "type": "object",
+            "properties": {
+                "edits": {
+                    "type": "array",
+                    "description": "编辑列表，每项包含 file/old/new，可选 replace_all/occurrence",
+                    "items": {
+                        "type": "object",
+                        "properties": {
+                            "file": {"type": "string"},
+                            "old": {"type": "string"},
+                            "new": {"type": "string"},
+                            "replace_all": {"type": "boolean", "default": False},
+                            "occurrence": {"type": "integer", "default": 0},
+                        },
+                        "required": ["file", "old", "new"],
+                    },
+                },
+                "syntax_check": {
+                    "type": "boolean",
+                    "description": "是否在写入前做语法检查，默认 true",
+                    "default": True,
+                },
+            },
+            "required": ["edits"],
+        }
+    )
+
+    async def call(
+        self,
+        context: ContextWrapper[AstrAgentContext],
+        edits: list,
+        syntax_check: bool = True,
+        **kwargs,
+    ) -> ToolExecResult:
+        _tool_stats.record(self.name)
+        try:
+            return _unwrap(await _run_sync(_multi_edit_run, edits, syntax_check))
+        except Exception as e:
+            return _err(f"multi_edit 失败: {e}")
+
+
+@dataclass
 class ToolStatsTool(FunctionTool):
     name: str = "tool_stats"
     description: str = "查看工具调用统计：每个工具的调用次数和总调用数。纯内存计数器。"
@@ -2426,6 +2544,96 @@ class ToolStatsTool(FunctionTool):
             return _unwrap(_tool_stats_snap())
         except Exception as e:
             return _err(f"tool_stats 失败: {e}")
+
+
+@dataclass
+class ShellExecTool(FunctionTool):
+    name: str = "shell_exec"
+    description: str = (
+        "严格白名单命令执行器。仅用于测试/构建类命令，shell=False 执行，带 cwd 限制、超时和输出截断。"
+        "pip install、make 等高风险命令默认只提示，需 allow_high_risk=true 才执行。"
+    )
+    parameters: dict = field(
+        default_factory=lambda: {
+            "type": "object",
+            "properties": {
+                "cmd": {"type": "string", "description": "要执行的命令字符串"},
+                "project_dir": {
+                    "type": "string",
+                    "description": "执行目录，必须位于当前工作目录内",
+                    "default": ".",
+                },
+                "timeout": {"type": "integer", "description": "超时秒数，默认 120", "default": 120},
+                "max_lines": {"type": "integer", "description": "输出最大行数，默认 500", "default": 500},
+                "dry_run": {"type": "boolean", "description": "只校验不执行", "default": False},
+                "allow_high_risk": {
+                    "type": "boolean",
+                    "description": "允许 pip install/make 等高风险白名单命令",
+                    "default": False,
+                },
+            },
+            "required": ["cmd"],
+        }
+    )
+
+    async def call(
+        self,
+        context: ContextWrapper[AstrAgentContext],
+        cmd: str,
+        project_dir: str = ".",
+        timeout: int = 120,
+        max_lines: int = 500,
+        dry_run: bool = False,
+        allow_high_risk: bool = False,
+        **kwargs,
+    ) -> ToolExecResult:
+        _tool_stats.record(self.name)
+        try:
+            return _unwrap(await _run_sync(_shell_exec_run, cmd, project_dir, timeout, max_lines, dry_run, allow_high_risk))
+        except Exception as e:
+            return _err(f"shell_exec 失败: {e}")
+
+
+@dataclass
+class OpLogTool(FunctionTool):
+    name: str = "op_log"
+    description: str = (
+        "查询本地工具调用审计日志。action=recent/errors/file/stats。"
+        "日志只记录参数摘要、文件路径、结果和耗时，不保存完整敏感参数。"
+    )
+    parameters: dict = field(
+        default_factory=lambda: {
+            "type": "object",
+            "properties": {
+                "action": {
+                    "type": "string",
+                    "description": "recent/errors/file/stats",
+                    "default": "recent",
+                },
+                "limit": {"type": "integer", "description": "最多返回条数，默认 10", "default": 10},
+                "file": {"type": "string", "description": "action=file 时的文件名/路径片段", "default": ""},
+                "tool": {"type": "string", "description": "按工具名过滤 recent", "default": ""},
+                "session_id": {"type": "string", "description": "按会话过滤 recent", "default": ""},
+            },
+            "required": [],
+        }
+    )
+
+    async def call(
+        self,
+        context: ContextWrapper[AstrAgentContext],
+        action: str = "recent",
+        limit: int = 10,
+        file: str = "",
+        tool: str = "",
+        session_id: str = "",
+        **kwargs,
+    ) -> ToolExecResult:
+        _tool_stats.record(self.name)
+        try:
+            return _unwrap(await _run_sync(_op_log_query, action, limit, file, tool, session_id))
+        except Exception as e:
+            return _err(f"op_log 失败: {e}")
 
 
 @dataclass
@@ -2665,6 +2873,49 @@ class CodeStatusTool(FunctionTool):
             return _err(f"code_status 失败: {e}")
 
 
+@dataclass
+class SymbolRenameTool(FunctionTool):
+    """全项目符号重命名：Python v1，基于 codegraph + token 替换。"""
+
+    name: str = "symbol_rename"
+    description: str = (
+        "Python 符号重命名。要求先运行 code_index；默认 dry_run 预览。"
+        "只替换 Python NAME token，不替换字符串和注释；dry_run=false 时通过 multi_edit 原子应用。"
+        "多文件重命名（>1 文件）需 confirm_multi_file=true 才能执行，先用 dry_run 审查预览 diff。"
+    )
+    parameters: dict = field(default_factory=lambda: {
+        "type": "object",
+        "properties": {
+            "old": {"type": "string", "description": "旧符号名，如 _auth_guard 或 Class.method"},
+            "new": {"type": "string", "description": "新符号名"},
+            "project_dir": {"type": "string", "description": "项目根目录，默认当前目录", "default": "."},
+            "dry_run": {"type": "boolean", "description": "是否仅预览，默认 true", "default": True},
+            "confirm_multi_file": {
+                "type": "boolean",
+                "description": "多文件重命名时需设为 true 确认，dry_run 预览后使用",
+                "default": False,
+            },
+        },
+        "required": ["old", "new"],
+    })
+
+    async def call(
+        self,
+        context: ContextWrapper[AstrAgentContext],
+        old: str,
+        new: str,
+        project_dir: str = ".",
+        dry_run: bool = True,
+        confirm_multi_file: bool = False,
+        **kwargs,
+    ) -> ToolExecResult:
+        _tool_stats.record(self.name)
+        try:
+            return _unwrap(await _run_sync(_symbol_rename_run, old, new, project_dir, dry_run, confirm_multi_file))
+        except Exception as e:
+            return _err(f"symbol_rename 失败: {e}")
+
+
 # ═══════════════════════════════════════════════════════════
 # Tool groups and registry
 # ═══════════════════════════════════════════════════════════
@@ -2678,6 +2929,8 @@ TOOL_GROUPS: dict[str, list[str]] = {
         "file_preview",
         "syntax_check",
         "lint_runner",
+        "test_runner",
+        "multi_edit",
     ],
     "Git & GitHub": [
         "git_status",
@@ -2707,6 +2960,7 @@ TOOL_GROUPS: dict[str, list[str]] = {
         "config_diff",
     ],
     "系统信息": ["port_check", "proc_list", "sys_snapshot", "tool_stats"],
+    "执行与审计": ["shell_exec", "op_log"],
     "网络": ["http_get", "http_post", "http_download"],
     "文本处理": [
         "html_extract",
@@ -2742,6 +2996,7 @@ TOOL_GROUPS: dict[str, list[str]] = {
         "code_diff_impact",
         "code_pack",
         "code_status",
+        "symbol_rename",
     ],
 }
 
@@ -2753,6 +3008,8 @@ _ALL_TOOLS = {
     "file_preview": FilePreviewTool,
     "syntax_check": SyntaxCheckTool,
     "lint_runner": LintRunnerTool,
+    "test_runner": TestRunnerTool,
+    "multi_edit": MultiEditTool,
     "git_status": GitStatusTool,
     "git_diff": GitDiffTool,
     "git_log": GitLogTool,
@@ -2780,6 +3037,8 @@ _ALL_TOOLS = {
     "proc_list": ProcListTool,
     "sys_snapshot": SysSnapshotTool,
     "tool_stats": ToolStatsTool,
+    "shell_exec": ShellExecTool,
+    "op_log": OpLogTool,
     "http_get": HttpGetTool,
     "http_post": HttpPostTool,
     "http_download": HttpDownloadTool,
@@ -2812,4 +3071,5 @@ _ALL_TOOLS = {
     "code_diff_impact": CodeDiffImpactTool,
     "code_pack": CodePackTool,
     "code_status": CodeStatusTool,
+    "symbol_rename": SymbolRenameTool,
 }

@@ -25,6 +25,11 @@ irmia_devkit_open/
 │   ├── test_file_remove.py      # Path sandbox, forbidden prefixes
 │   ├── test_rg_search.py        # Ripgrep + Python fallback
 │   ├── test_lint_runner.py      # Linter fallback chain
+│   ├── test_test_runner.py      # Unified test runner discovery/parsing
+│   ├── test_multi_edit.py       # Atomic multi-file edit and rollback
+│   ├── test_shell_exec.py       # Allowlisted command execution
+│   ├── test_op_log.py           # SQLite audit trail
+│   ├── test_symbol_rename.py    # Python token rename
 │   ├── test_syntax_check.py     # Multi-language syntax + context
 │   ├── test_regex.py            # ReDoS protection
 │   ├── test_http_utils.py       # SSRF validation
@@ -47,7 +52,11 @@ irmia_devkit_open/
     ├── file_patch.py            # Exact text replacement + preview
     ├── syntax_check.py          # Multi-language syntax (Python/Nim/Go/JS/TS)
     ├── lint_runner.py           # ruff/pylint/eslint with auto-fallback
+    ├── test_runner.py           # pytest/go/cargo/jest unified runner
+    ├── multi_edit.py            # Atomic multi-file edit coordinator
     ├── file_remove.py           # Path-sandboxed file/dir deletion
+    ├── shell_exec.py            # Strict allowlisted command execution
+    ├── op_log.py                # SQLite tool-call audit trail
     │
     ├── git_smart.py             # Structured git status/diff/log/commit/push
     ├── git_changelog.py         # Semantic git log grouping (feat/fix/docs)
@@ -89,7 +98,8 @@ irmia_devkit_open/
     ├── db_query.py              # Read-only SQLite (parameterized)
     ├── svg_render.py            # SVG → PNG (optional cairosvg)
     ├── json_schema_val.py       # JSON Schema validation (optional jsonschema)
-    └── codegraph.py              # Code semantic index (AST + FTS5 + BFS)
+    ├── codegraph.py              # Code semantic index (AST + FTS5 + BFS)
+    └── symbol_rename.py          # Python symbol rename via codegraph + tokenize
 ```
 
 ## Initialization Flow
@@ -140,7 +150,7 @@ LLM decides to call "safe_edit"
        │    ├─ Has proposal/options/evidence? → Yes → pass through as-is
        │    ├─ result["ok"] is False?         → Yes → err_json(result["error"])
        │    └─ Otherwise                      → wrap in {"ok": True, "data": result}
-       └─ Returns ToolExecResult (JSON string) to AstrBot → sent to LLM
+       └─ protect_tool records op_log best-effort, then returns ToolExecResult to AstrBot
 ```
 
 ## Response Protocol
@@ -184,6 +194,7 @@ Tools that need config:
   safe_edit.py  → get_config()["backup_dir"]  # restore backup path
   es_search.py  → get_config()["es_path"]     # custom es.exe location
   gh_cli.py     → get_config()["gh_path"]     # custom gh CLI location
+  op_log.py     → get_config()["op_log_db"]   # optional audit DB override
 ```
 
 ## Async Model
@@ -196,7 +207,8 @@ async def call(self, context, **kwargs):
     result = await _run_sync(tool_function, arg1, arg2)
     return _unwrap(result)
 ```
-Used by: safe_edit, git_*, http_*, file_*, rg_search, syntax_check, lint_runner, etc.
+Used by: safe_edit, git_*, http_*, file_*, rg_search, syntax_check, lint_runner,
+test_runner, multi_edit, shell_exec, op_log, symbol_rename, etc.
 The synchronous function runs in `ThreadPoolExecutor`, keeping the event loop unblocked.
 
 ### Pattern B: Direct call (CPU-bound, <1ms) — ACCEPTABLE

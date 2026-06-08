@@ -1,6 +1,6 @@
 # Irmia DevKit (弥亚开发工具箱)
 
-An AstrBot plugin providing 67 secure, structured code development tools for LLM Agents.
+An AstrBot plugin providing 71 secure, structured code development tools for LLM Agents.
 
 **Requires**: Python ≥ 3.10, AstrBot any version.
 
@@ -40,7 +40,7 @@ Place the plugin folder into AstrBot's `data/plugins/` directory and restart Ast
 | `config_diff` (YAML) | pyyaml (optional) | Returns install hint |
 | `code_index` (multi-lang) | tree-sitter + grammar (optional) | Zero-deps for Python; other languages skipped |
 
-> The remaining 56+ tools use Python standard library only.
+> The remaining 60+ tools use Python standard library only.
 
 ## Design
 
@@ -52,11 +52,11 @@ Place the plugin folder into AstrBot's `data/plugins/` directory and restart Ast
 
 `syntax_check`/`lint_runner`/`rg_search` include surrounding code context in their results, enabling the LLM to locate issues without an extra file read.
 
-67 tools organized into 10 groups. Disable entire groups or individual tools via `config.json`.
+71 tools organized into 11 groups. Disable entire groups or individual tools via `config.json`.
 
-## Tool List (67)
+## Tool List (71)
 
-### 🔒 Safe Edit Chain (7)
+### 🔒 Safe Edit Chain (9)
 
 | Tool | Description |
 |------|-------------|
@@ -67,6 +67,8 @@ Place the plugin folder into AstrBot's `data/plugins/` directory and restart Ast
 | `file_preview` | Preview replacement effect (dry-run diff) |
 | `syntax_check` | Syntax check for Python / Nim / Go / JS / TS |
 | `lint_runner` | Code quality check (ruff / pylint / eslint with auto-fallback) |
+| `test_runner` | Unified pytest / go test / cargo test / jest runner |
+| `multi_edit` | Atomic multi-file editing with full rollback |
 
 ### 🔀 Git & GitHub (11)
 
@@ -109,6 +111,13 @@ Place the plugin folder into AstrBot's `data/plugins/` directory and restart Ast
 | `proc_list` | Process list |
 | `sys_snapshot` | System snapshot (CPU/mem/processes/uptime) |
 | `tool_stats` | Tool call statistics |
+
+### 🧾 Execution & Audit (2)
+
+| Tool | Description |
+|------|-------------|
+| `shell_exec` | Strict allowlisted command execution with timeout/truncation |
+| `op_log` | SQLite audit trail query for tool calls |
 
 ### 🌐 Network (3)
 
@@ -162,7 +171,7 @@ Place the plugin folder into AstrBot's `data/plugins/` directory and restart Ast
 | `db_query` | SQLite read-only query |
 | `dep_scan` | Python import graph + cycle detection |
 
-### 🤖 Code Understanding (5)
+### 🤖 Code Understanding (6)
 
 | Tool | Description |
 |------|-------------|
@@ -171,6 +180,7 @@ Place the plugin folder into AstrBot's `data/plugins/` directory and restart Ast
 | `code_diff_impact` | Blast radius analysis for file changes |
 | `code_pack` | Precision context packing — collect call chain sources |
 | `code_status` | Index health check — coverage and status |
+| `symbol_rename` | Python symbol rename using codegraph + token replacement |
 
 ### 🧠 Skill
 
@@ -195,11 +205,11 @@ pip install pytest
 python -m pytest tests/ -v
 ```
 
-147 test cases covering SSRF, safe_edit, Zip-slip, SQL injection, ReDoS, registry consistency, linter fallback, auth permission checks, semantic indexing, and tool correctness.
+182 test cases; current local verification is 174 passed and 8 skipped. Coverage includes SSRF, safe_edit, Zip-slip, SQL injection, ReDoS, registry consistency, linter/test fallback, auth permission checks, semantic indexing, atomic edits, safe command execution, and audit logging.
 
 ## Version
 
-2.4.5 · [Changelog](CHANGELOG.md)
+2.5.0 · [Changelog](CHANGELOG.md)
 
 ## Author
 

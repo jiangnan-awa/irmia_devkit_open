@@ -7,6 +7,9 @@ _auth — 工具 call() 层权限守卫。
 
 import json
 import logging
+import time
+
+from . import op_log as _op_log
 
 logger = logging.getLogger(__name__)
 
@@ -30,7 +33,24 @@ def protect_tool(tool, allowed_ids, access_checker=None):
             else:
                 allowed = event.is_admin() or sender_id in allowed_ids
             if allowed:
-                return await original_call(context, **kwargs)
+                start = time.monotonic()
+                try:
+                    result = await original_call(context, **kwargs)
+                    _op_log.record(
+                        tool_name,
+                        kwargs,
+                        result,
+                        int((time.monotonic() - start) * 1000),
+                    )
+                    return result
+                except Exception as exc:
+                    _op_log.record_exception(
+                        tool_name,
+                        kwargs,
+                        exc,
+                        int((time.monotonic() - start) * 1000),
+                    )
+                    raise
 
             logger.warning(
                 "devkit auth blocked: tool=%s sender=%s", tool_name, sender_id

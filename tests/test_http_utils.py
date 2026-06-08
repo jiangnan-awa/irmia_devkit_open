@@ -1,5 +1,7 @@
 """Tests for _http_utils.validate_url — SSRF protection."""
 
+import socket
+
 from tools._http_utils import validate_url
 
 
@@ -37,7 +39,12 @@ class TestValidateUrl:
         assert err is not None
         assert "缺少有效主机名" in err["error"]
 
-    def test_allows_public_domain(self):
+    def test_allows_public_domain(self, monkeypatch):
+        def fake_getaddrinfo(hostname, *args, **kwargs):
+            assert hostname == "github.com"
+            return [(socket.AF_INET, socket.SOCK_STREAM, 6, "", ("140.82.112.3", 443))]
+
+        monkeypatch.setattr(socket, "getaddrinfo", fake_getaddrinfo)
         assert validate_url("https://github.com/") is None
 
     def test_blocks_dns_rebind_to_localhost(self):

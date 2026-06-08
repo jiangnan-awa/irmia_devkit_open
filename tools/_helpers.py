@@ -47,13 +47,13 @@ def err_json(error: str) -> str:
 
 def unwrap(result: dict) -> str:
     """检测嵌套 ok:false 并展开；成功则正常包装。
-    若结果已含 proposal/options/evidence 等协议字段，则直接透传——
-    无论 ok 值，避免 data.data 双层嵌套。
+    若结果已含 proposal/options/evidence/stdout/stderr 等协议或诊断字段，则直接透传——
+    无论 ok 值，避免丢失 LLM 需要的诊断信息。
     纯 ok:true 的无协议结果正常包入 data 字段。
     """
     if not isinstance(result, dict):
         return err_json(f"工具返回了非预期类型: {type(result).__name__}")
-    if any(k in result for k in ("proposal", "options", "evidence", "next_call")):
+    if any(k in result for k in ("proposal", "options", "evidence", "next_call", "stdout", "stderr", "cmd")):
         return json.dumps(result, ensure_ascii=False)
     if result.get("ok") is False:
         return err_json(result.get("error", "未知错误"))

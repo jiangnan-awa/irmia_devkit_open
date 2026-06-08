@@ -36,15 +36,17 @@ class TestRegistryConsistency:
     def test_tool_group_counts_match_readme(self):
         """组计数与 README 声明一致"""
         expected = {
-            "安全编辑链": 7,
+            "安全编辑链": 9,
             "Git & GitHub": 11,
             "文件系统": 12,
             "系统信息": 4,
+            "执行与审计": 2,
             "网络": 3,
             "文本处理": 10,
             "编码": 3,
             "时间": 3,
             "扩展": 8,
+            "代码理解": 6,
         }
         for group, expected_count in expected.items():
             actual = len(TOOL_GROUPS.get(group, []))
@@ -53,8 +55,8 @@ class TestRegistryConsistency:
             )
 
     def test_total_tool_count(self):
-        """_ALL_TOOLS 总数应为 61"""
-        assert len(_ALL_TOOLS) == 61
+        """_ALL_TOOLS 总数应为 71"""
+        assert len(_ALL_TOOLS) == 71
 
     def test_no_duplicate_tool_names(self):
         """TOOL_GROUPS 中跨组不得重名"""
@@ -80,3 +82,48 @@ class TestRegistryConsistency:
             assert instance.name == key, (
                 f"class {cls.__name__}.name='{instance.name}' 但 _ALL_TOOLS key='{key}'"
             )
+
+    def test_codegraph_wrappers_close_connections(self, monkeypatch, tmp_dir):
+        """5 个 codegraph 注册层包装函数必须关闭 CodeGraph 连接。"""
+        import tools._registry as registry
+
+        calls = []
+
+        class FakeCodeGraph:
+            def __init__(self, db_path):
+                self.db_path = db_path
+                self.closed = False
+
+            def close(self):
+                self.closed = True
+                calls.append(("close", self.db_path))
+
+            def index(self, project_dir, incremental=False):
+                calls.append(("index", project_dir, incremental))
+                return {"ok": True}
+
+            def explore(self, query, project_dir="."):
+                calls.append(("explore", query, project_dir))
+                return {"ok": True}
+
+            def code_diff_impact(self, filepaths, max_depth=3):
+                calls.append(("impact", filepaths, max_depth))
+                return {"ok": True}
+
+            def code_pack(self, target, depth=2, mode="both"):
+                calls.append(("pack", target, depth, mode))
+                return {"ok": True}
+
+            def code_status(self):
+                calls.append(("status",))
+                return {"ok": True}
+
+        monkeypatch.setattr(registry, "_CodeGraph", FakeCodeGraph)
+
+        registry._code_index(tmp_dir)
+        registry._code_explore("helper", tmp_dir)
+        registry._code_diff_impact(["a.py"])
+        registry._code_pack("helper")
+        registry._code_status()
+
+        assert len([c for c in calls if c[0] == "close"]) == 5

@@ -1,5 +1,19 @@
 # Changelog
 
+## v2.5.0 — 测试/执行/审计/重命名能力补完
+
+- **新工具 — 安全编辑链**: 新增 `test_runner`（pytest/go test/cargo test/jest 统一封装）和 `multi_edit`（原子多文件编辑，失败全量回滚，同文件顺序应用语义已文档化），补齐 syntax_check → lint_runner → test_runner 的验证链路。
+- **新工具 — 执行与审计组**: 新增 `shell_exec` 严格白名单命令执行器（七层防御：白名单→子命令→危险字符→shell=False→cwd限制→COLUMNS修复→高风险确认；移除 `go run`，已添加 APPDATA/LOCALAPPDATA/CARGO_HOME/GOPATH/NODE_PATH 环境变量）和 `op_log` SQLite 工具调用审计日志（recent/errors/file/stats 查询，session 自动轮转，敏感参数脱敏）。
+- **新工具 — 代码理解组**: 新增 `symbol_rename`，基于 codegraph 索引和 Python `tokenize` 做符号重命名，默认 dry-run，多文件重命名需 `confirm_multi_file=true` 确认，只替换 NAME token，不改字符串和注释。
+- **codegraph 泄漏修复落地**: `_registry.py` 的 5 个 `_code_*` 包装函数统一在 `finally` 中关闭 `CodeGraph` 连接，修正 v2.4.5 changelog 曾声称已修但包装层仍泄漏的问题。
+- **审计接入**: `protect_tool` 在授权工具调用完成后 best-effort 写入 `op_log`，鉴权失败不污染审计库，审计失败不影响原工具返回。
+- **受限环境兼容**: `safe_edit` 默认备份目录在用户目录不可写时降级到临时目录 `.irmia/backups`；HTTP SSRF 测试改为 mock 公网 DNS，避免本机 DNS 污染导致误判。
+- **Review 修复 (R1+R2)**:
+  - C1: 移除 `go run` 白名单；H1: 补全 Windows 环境变量（APPDATA/LOCALAPPDATA/CARGO_HOME/GOPATH/NODE_PATH）；H3: 临时文件写入系统 temp 目录；M1: 修复 shlex 冗余引号剥离；M4: jest JSON 健壮解析；M5/L4: multi_edit 同文件编辑语义文档化 + `replacements_made` 字段；L2: op_log 拆分 `_ensure_db` 单次建表
+  - C2: SymbolRenameTool 补 `confirm_multi_file` 参数（schema + call 方法 + description），修复多文件重命名安全阀；H4: `_unwrap` 扩展透传 stdout/stderr/cmd 诊断字段，shell_exec 超时不丢失输出；H5: op_log stats 移除 `db_path`/`session_id` 信息泄露
+- **文档与配置同步**: 工具数 66→71，工具组 10→11，新增「执行与审计」组；同步 README、README_EN、ARCHITECTURE、配置 schema、metadata 和版本号。
+- **测试扩展**: 新增 shell_exec/test_runner/multi_edit/op_log/symbol_rename 用例；当前本地验证 174 passed、8 skipped。
+
 ## v2.4.5 — 语义索引 5 工具 + gh_cli 自动定位 + 文档补完
 
 - **新工具 — 代码理解组**: 新增 `code_index` 建语义索引、`code_explore` 符号搜索与调用链追踪、`code_diff_impact` 变更波及分析、`code_pack` 精准上下文打包、`code_status` 索引健康检查。Python AST 零依赖解析 + 可选 tree-sitter 多语言（JS/TS/Go/Rust/Java/C/C++），SQLite FTS5 存储，一次调用即答案。64→67 工具，9 组→10 组

@@ -11,7 +11,7 @@ from tools._auth import protect_tool, build_allowed_ids
 _DEVKIT_TOOL_NAMES = {
     # 安全编辑链
     "safe_edit", "safe_rollback", "safe_backups", "file_patch", "file_preview",
-    "syntax_check", "lint_runner",
+    "syntax_check", "lint_runner", "test_runner", "multi_edit",
     # Git & GitHub
     "git_status", "git_diff", "git_log", "git_commit", "git_branch",
     "git_remote", "git_push", "gh_pr", "gh_issue", "gh_release", "gh_repo",
@@ -21,6 +21,8 @@ _DEVKIT_TOOL_NAMES = {
     "file_remove", "config_diff",
     # 系统信息
     "proc_list", "sys_snapshot", "port_check", "tool_stats",
+    # 执行与审计
+    "shell_exec", "op_log",
     # 网络
     "http_get", "http_post", "http_download",
     # 文本处理
@@ -34,6 +36,9 @@ _DEVKIT_TOOL_NAMES = {
     # 扩展
     "uuid_gen", "semver_compare", "svg_render", "project_init",
     "git_changelog", "db_query", "dep_scan",
+    # 代码理解
+    "code_index", "code_explore", "code_diff_impact", "code_pack",
+    "code_status", "symbol_rename",
 }
 
 
@@ -235,7 +240,7 @@ class TestLayer1Filtering:
     def test_no_devkit_tools_nothing_removed(self):
         tools = [
             MockTool(name="web_search"),
-            MockTool(name="shell_exec"),
+            MockTool(name="unknown_shell_exec"),
         ]
         removed, kept = self._filter(tools)
         assert removed == []

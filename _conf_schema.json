@@ -19,16 +19,17 @@
     "description": "工具组开关（关闭整组禁用该组所有工具，需重启生效）",
     "type": "object",
     "items": {
-      "安全编辑链": { "type": "bool", "default": true, "description": "🔒 安全编辑链 — 编辑/备份/语法/回滚/代码质量检查" },
+      "安全编辑链": { "type": "bool", "default": true, "description": "🔒 安全编辑链 — 编辑/备份/语法/测试/原子多文件编辑" },
       "Git & GitHub": { "type": "bool", "default": true, "description": "🔀 Git & GitHub — git操作+PR/Issue/Release/CI" },
       "文件系统": { "type": "bool", "default": true, "description": "📁 文件系统 — 搜索/浏览/哈希/压缩/磁盘/删除" },
       "系统信息": { "type": "bool", "default": true, "description": "📊 系统信息 — 端口/进程/快照/统计" },
+      "执行与审计": { "type": "bool", "default": true, "description": "🧾 执行与审计 — 安全命令执行/工具调用日志" },
       "网络": { "type": "bool", "default": true, "description": "🌐 网络 — HTTP GET/POST/下载" },
       "文本处理": { "type": "bool", "default": true, "description": "📝 文本处理 — HTML/JSON/CSV/正则/日志" },
       "编码": { "type": "bool", "default": true, "description": "🔤 编码 — Base64/URL/Hex 编解码" },
       "时间": { "type": "bool", "default": true, "description": "⏱ 时间 — 时间戳/ISO互转/时间差" },
       "扩展": { "type": "bool", "default": true, "description": "🧩 扩展 — 项目初始化/变更日志/SVG/Schema/版本/UUID/DB/依赖" },
-      "代码理解": { "type": "bool", "default": true, "description": "🤖 代码理解 — 语义索引/探索/影响分析/上下文打包/健康检查" }
+      "代码理解": { "type": "bool", "default": true, "description": "🤖 代码理解 — 语义索引/探索/影响分析/上下文打包/符号重命名" }
     }
   },
   "disabled_tools": {

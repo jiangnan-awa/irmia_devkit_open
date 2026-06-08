@@ -17,7 +17,7 @@ Python ≥ 3.10
 | `owner_sid` | 管理员会话 ID（可不填，插件自动读取 AstrBot 管理员列表） |
 | `allowed_ids` | 额外允许的用户 ID（逗号分隔，平台无关） |
 | `group_config_enabled` | 启用群级权限配置（默认关闭，需重启生效） |
-| `tool_groups` | 10 组 bool 开关，`false` = 关闭整组 |
+| `tool_groups` | 11 组 bool 开关，`false` = 关闭整组 |
 | `disabled_tools` | 逗号分隔单独禁用的工具名 |
 | `es_path` | Everything CLI 路径，空自动检测 |
 | `gh_path` | GitHub CLI 路径，空自动检测 |
@@ -40,7 +40,7 @@ Python ≥ 3.10
 | `config_diff` (YAML) | pyyaml（可选） | 返回安装提示 |
 | `code_index` (多语言) | tree-sitter + grammar（可选） | Python 零依赖；其他语言跳过 |
 
-> 其余 56+ 工具为 Python 标准库实现，无外部依赖。
+> 其余 60+ 工具为 Python 标准库实现，无外部依赖。
 
 ## 设计说明
 
@@ -52,7 +52,7 @@ Python ≥ 3.10
 
 `syntax_check`/`lint_runner`/`rg_search` 在返回结果中附带代码上下文片段，帮助 LLM 直接定位问题，无需额外读文件。
 
-67 个工具按 10 组管理，可在 `config.json` 中按组或按单个工具关闭。
+71 个工具按 11 组管理，可在 `config.json` 中按组或按单个工具关闭。
 
 ## 架构
 
@@ -63,9 +63,9 @@ Python ≥ 3.10
 - 安全设计架构（SSRF 四层、safe_edit 防御链、ReDoS 三重盾）
 - 异步执行模型和测试策略
 
-## 工具列表 (67)
+## 工具列表 (71)
 
-### 🔒 安全编辑链 (7)
+### 🔒 安全编辑链 (9)
 
 | 工具 | 用途 |
 |------|------|
@@ -76,6 +76,8 @@ Python ≥ 3.10
 | `file_preview` | 预览替换效果 (dry-run diff) |
 | `syntax_check` | Python / Nim / Go / JS / TS 语法 |
 | `lint_runner` | ruff / pylint / eslint 代码质量 |
+| `test_runner` | pytest / go test / cargo test / jest 统一运行 |
+| `multi_edit` | 原子多文件编辑，失败全量回滚 |
 
 ### 🔀 Git & GitHub (11)
 
@@ -118,6 +120,13 @@ Python ≥ 3.10
 | `proc_list` | 进程列表 |
 | `sys_snapshot` | 系统快照 (CPU/内存/进程/开机) |
 | `tool_stats` | 工具调用统计 |
+
+### 🧾 执行与审计 (2)
+
+| 工具 | 用途 |
+|------|------|
+| `shell_exec` | 严格白名单命令执行（测试/构建、超时、截断） |
+| `op_log` | SQLite 工具调用审计日志查询 |
 
 ### 🌐 网络 (3)
 
@@ -171,7 +180,7 @@ Python ≥ 3.10
 | `db_query` | SQLite 只读查询 |
 | `dep_scan` | Python 依赖图 + 循环检测 |
 
-### 🤖 代码理解 (5)
+### 🤖 代码理解 (6)
 
 | 工具 | 用途 |
 |------|------|
@@ -180,6 +189,7 @@ Python ≥ 3.10
 | `code_diff_impact` | 变更影响分析——追踪波及范围 |
 | `code_pack` | 精准上下文打包——收集调用链源码 |
 | `code_status` | 索引健康检查——覆盖范围和状态 |
+| `symbol_rename` | Python 符号重命名（codegraph + token 替换） |
 
 ### 🧠 Skill
 
@@ -211,7 +221,7 @@ pip install pytest
 python -m pytest tests/ -v
 ```
 
-147 用例，覆盖 SSRF、safe_edit 防御链、Zip-slip、SQL 注入、ReDoS、注册表一致性、linter fallback、权限鉴权、语义索引等。
+182 用例；当前本地验证为 174 passed、8 skipped。覆盖 SSRF、safe_edit 防御链、Zip-slip、SQL 注入、ReDoS、注册表一致性、linter/test fallback、权限鉴权、语义索引、原子编辑、安全命令执行和审计日志等。
 
 ## 英文文档
 
@@ -219,7 +229,7 @@ python -m pytest tests/ -v
 
 ## 版本
 
-2.4.5 · [Changelog](CHANGELOG.md)
+2.5.0 · [Changelog](CHANGELOG.md)
 
 ## 作者
 

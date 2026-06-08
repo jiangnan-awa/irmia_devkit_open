@@ -141,6 +141,14 @@ class Main(star.Star):
         tools = [_ALL_TOOLS[name]() for name in enabled if name in _ALL_TOOLS]
         tools = [protect_tool(t, allowed_ids) for t in tools]
         context.add_llm_tools(*tools)
+
+        # Rotate op_log session on each plugin init/reload
+        try:
+            from .tools import op_log as _op_log
+            _op_log.reset_session()
+        except Exception:
+            pass
+
         self._tool_names = {t.name for t in tools}
         # handler_module_path 设为 plugin.module_path 的真前缀：
         #   turn_off_plugin: "data.plugins...main".startswith("data.plugins...irmia_devkit") → TRUE  ✅
