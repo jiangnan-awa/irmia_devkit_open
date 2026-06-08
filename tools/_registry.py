@@ -849,13 +849,16 @@ class HttpPostTool(FunctionTool):
         try:
             body = data
             json_failed = False
-            if data:
+            if isinstance(data, dict):
+                # LLM passed a dict directly — use as-is (matches schema description)
+                body = data
+            elif data:
                 try:
                     parsed = json.loads(data)
                     body = parsed if isinstance(parsed, dict) else data
                 except (json.JSONDecodeError, TypeError):
                     json_failed = True
-            if json_failed and data.strip():
+            if json_failed and isinstance(data, str) and data.strip():
                 if data.strip()[0] in ("{", "["):
                     return _err("data 看起来是 JSON 但解析失败——请检查 JSON 语法后重试")
             result = await _run_sync(_http_post, url, body if body else None, headers)

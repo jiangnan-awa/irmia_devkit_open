@@ -34,13 +34,16 @@ def _db_path() -> Path:
     return Path(root).expanduser().resolve() / ".irmia" / "op_log.db"
 
 
-_INITIALIZED = False
+_INITIALIZED_DB: str | None = None
 
 
 def _ensure_db() -> None:
-    """Create tables and indexes once per process lifetime."""
-    global _INITIALIZED
-    if _INITIALIZED:
+    """Create tables and indexes for the current database path.
+    Tracks the last-initialized path so tests can safely switch DBs.
+    """
+    global _INITIALIZED_DB
+    path = str(_db_path())
+    if _INITIALIZED_DB == path:
         return
     path = _db_path()
     path.parent.mkdir(parents=True, exist_ok=True)
@@ -61,7 +64,7 @@ def _ensure_db() -> None:
     conn.execute("CREATE INDEX IF NOT EXISTS idx_op_log_created ON op_log(created_at)")
     conn.commit()
     conn.close()
-    _INITIALIZED = True
+    _INITIALIZED_DB = path
 
 
 def _connect() -> sqlite3.Connection:
