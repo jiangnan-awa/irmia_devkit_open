@@ -2813,7 +2813,7 @@ class CodeDiffImpactTool(FunctionTool):
     description: str = (
         "【变更影响分析 + multi_edit 上游】追踪变更波及的文件和符号。"
         "适合 commit 前检查影响范围；结果可直接构建 edits 列表喂给 multi_edit 做批量原子编辑。"
-        "⚠️ 返回的文件列表是候选——调用前务必用 read_file 确认每个文件的 old 文本，不要凭记忆构造 edits。不是每个受影响文件都需要改。"
+        "⚠️ 返回的文件列表是候选——调用前务必先读文件确认每个 old 文本，不要凭记忆构造 edits。不是每个受影响文件都需要改。"
         "不适合：查单个函数的调用者（用 code_explore）。BFS 追踪调用者链，max_depth 控制深度（默认 3）。"
     )
     parameters: dict = field(default_factory=lambda: {
