@@ -178,6 +178,7 @@ class SafeEditTool(FunctionTool):
         "通过保留/失败自动回滚。支持 .py/.nim/.go/.js/.ts（语法检查）+ 其他扩展名（跳过语法检查）。"
         "不要用 file_write 改已有代码（无备份无回滚）。不要用 astrbot_file_edit_tool 改代码（无备份无语法检查）。"
         "非代码文件（.md/.txt/.json）可以用 file_patch 或 safe_edit，两者均可。"
+        "单文件单改优选；跨文件批量/同一文件多改 → 用 multi_edit（原子提交，继承本工具的空白容错能力）。"
         "当 old 文本在文件中多处匹配时，工具会报错并列出所有位置——用 occurrence=N 指定第几次出现继续。"
     )
     parameters: dict = field(
@@ -2485,8 +2486,10 @@ class TestRunnerTool(FunctionTool):
 class MultiEditTool(FunctionTool):
     name: str = "multi_edit"
     description: str = (
-        "原子多文件编辑：接收 edits=[{file, old, new}]，全部预检查和语法检查通过后一次性写入。"
-        "任一失败会回滚全部文件。适合跨文件重构或批量替换。"
+        "【批量编辑唯一选择】原子多文件编辑，继承 safe_edit 的空白自动对齐+最近行提示能力。"
+        "接收 edits=[{file, old, new}]，全部语法检查通过后一次性提交，任一失败全体回滚。"
+        "配合 code_diff_impact 使用：先查出受影响文件 → 再构建 edits 列表 → 一次性原子提交。"
+        "单文件单处改动请用 safe_edit（API 更简洁）。"
     )
     parameters: dict = field(
         default_factory=lambda: {
@@ -2808,8 +2811,9 @@ class CodeDiffImpactTool(FunctionTool):
 
     name: str = "code_diff_impact"
     description: str = (
-        "【变更影响分析】改完代码后追踪波及范围。适合 commit 前检查哪些符号和文件受影响。"
-        "不适合：查单个函数的调用者（用 code_explore）。基于 BFS 追踪调用者链，参数 max_depth 控制深度（默认 3）。"
+        "【变更影响分析 + multi_edit 上游】追踪变更波及的文件和符号。"
+        "适合 commit 前检查影响范围；结果可直接构建 edits 列表喂给 multi_edit 做批量原子编辑。"
+        "不适合：查单个函数的调用者（用 code_explore）。BFS 追踪调用者链，max_depth 控制深度（默认 3）。"
     )
     parameters: dict = field(default_factory=lambda: {
         "type": "object",

@@ -10,7 +10,7 @@ import tempfile
 from datetime import datetime
 from pathlib import Path
 
-from ._file_utils import SAFE_EDIT_MAX_SIZE, read_file_with_encoding
+from ._file_utils import SAFE_EDIT_MAX_SIZE, read_file_with_encoding, find_closest_line, align_whitespace
 from .safe_edit import _backup_dir
 from .syntax_check import check as syntax_check_file
 
@@ -45,7 +45,21 @@ def _apply_one(content: str, edit_item: dict, item_index: int) -> tuple[str, dic
         raise ValueError(f"edit #{item_index}: old must not be empty")
     positions = _positions(content, old)
     if not positions:
-        raise ValueError(f"edit #{item_index}: old text not found")
+        # P0-1: whitespace-tolerant fallback (inherited from safe_edit)
+        aligned = align_whitespace(content, old, new)
+        if aligned and not replace_all:
+            old, new = aligned
+            positions = _positions(content, old)
+        if not positions:
+            closest = find_closest_line(content, old)
+            hint = (
+                f"最接近的行 #{closest['line']}: {closest['text']}——建议复制此行作为 old 参数重试。"
+                if closest
+                else "old 文本在文件中未找到，检查是否包含完整且精确的文本片段（包括缩进和换行）。"
+            )
+            raise ValueError(
+                f"edit #{item_index}: old text not found — {hint}"
+            )
     if replace_all:
         return content.replace(old, new), {"replaced": len(positions), "replace_all": True}
     if occurrence > 0:
