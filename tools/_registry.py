@@ -1044,6 +1044,7 @@ class PortCheckTool(FunctionTool):
                 },
                 "ports": {
                     "type": "array",
+                    "items": {"type": "integer"},
                     "description": "端口列表，如 [7860, 19530, 6199]。单端口传 [7860]",
                 },
             },
@@ -1193,7 +1194,7 @@ class FileZipTool(FunctionTool):
         default_factory=lambda: {
             "type": "object",
             "properties": {
-                "files": {"type": "array", "description": "要打包的文件/目录路径列表"},
+                "files": {"type": "array", "items": {"type": "string"}, "description": "要打包的文件/目录路径列表"},
                 "output": {"type": "string", "description": "输出 ZIP 文件路径"},
             },
             "required": ["files", "output"],
@@ -2656,6 +2657,7 @@ class DbQueryTool(FunctionTool):
                 "sql": {"type": "string", "description": "SELECT 或 PRAGMA 查询语句"},
                 "params": {
                     "type": "array",
+                    "items": {"type": "string"},
                     "description": '查询参数列表，如 [42, "active"]',
                 },
             },
