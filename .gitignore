@@ -26,4 +26,5 @@ Thumbs.db
 *.db-shm
 *.db-wal
 .codegraph/
+.reasonix/
 notes/
