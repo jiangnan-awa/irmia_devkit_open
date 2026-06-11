@@ -22,7 +22,7 @@ def reset_session() -> str:
     global _SESSION_ID
     _SESSION_ID = uuid.uuid4().hex
     return _SESSION_ID
-_SENSITIVE_KEYS = ("token", "secret", "password", "key", "authorization", "cookie")
+_SENSITIVE_KEYS = ("token", "secret", "password", "passwd", "pwd", "key", "private_key", "credential", "api_key", "authorization", "cookie")
 
 
 def _db_path() -> Path:

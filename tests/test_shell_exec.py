@@ -14,6 +14,11 @@ class TestShellExec:
         else:
             raise AssertionError("expected ValueError")
 
+    def test_rejects_path_separator_in_command(self):
+        result = run(r"C:\Python\python -m pytest", dry_run=True)
+        assert result["ok"] is False
+        assert "bare executable name" in result.get("error", "")
+
     def test_allows_pytest_dry_run(self):
         result = run("pytest -q", dry_run=True)
         assert result["ok"] is True

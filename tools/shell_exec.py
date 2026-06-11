@@ -44,6 +44,9 @@ def split_command(cmd: str) -> list[str]:
     cleaned = [p for p in parts if p.strip()]
     if not cleaned:
         raise ValueError("cmd must not be empty")
+    # 禁止带路径的命令，防止 /malicious/python 被当作 python 放行
+    if any(sep in cleaned[0] for sep in ("/", "\\")):
+        raise ValueError("command must be a bare executable name (no path separators)")
     for arg in cleaned:
         if any(part in arg for part in _DANGEROUS_RAW):
             raise ValueError("argument contains shell control characters")

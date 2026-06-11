@@ -112,6 +112,20 @@ class TestRgSearchBasic:
         result = search("[unclosed", path=project_dir)
         assert result["ok"] is False
 
+    def test_python_fallback_redos_long_pattern(self, project_dir, monkeypatch):
+        """Python fallback 应拒绝超长 pattern。"""
+        monkeypatch.setattr("tools.rg_search._find_rg", lambda: None)
+        result = search("x" * 2000, path=project_dir)
+        assert result.get("ok") is False
+        assert "pattern_too_long" in str(result)
+
+    def test_python_fallback_redos_nested_quantifiers(self, project_dir, monkeypatch):
+        """Python fallback 应拒绝嵌套量词。"""
+        monkeypatch.setattr("tools.rg_search._find_rg", lambda: None)
+        result = search("(a+)+b", path=project_dir)
+        assert result.get("ok") is False
+        assert "nested_quantifiers" in str(result)
+
     def test_returns_engine_field(self, project_dir):
         result = search("class", path=project_dir)
         assert "engine" in result
