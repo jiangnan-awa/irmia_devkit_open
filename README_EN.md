@@ -1,6 +1,6 @@
 # Irmia DevKit (弥亚开发工具箱)
 
-An AstrBot plugin providing 71 secure, structured code development tools for LLM Agents.
+An AstrBot plugin providing 63 secure, structured code development tools for LLM Agents.
 
 **Requires**: Python ≥ 3.10, AstrBot any version.
 
@@ -17,7 +17,7 @@ Place the plugin folder into AstrBot's `data/plugins/` directory and restart Ast
 | Field | Description |
 |------|------|
 | `owner_sid` | Admin session ID (optional; plugin auto-reads AstrBot admin list) |
-| `allowed_ids` | Additional allowed user IDs (comma-separated, platform-agnostic) |
+| `allowed_ids` | Additional allowed user IDs (comma-separated) |
 | `group_config_enabled` | Enable per-group permission config (default: false, restart required) |
 | `tool_groups` | 10 group bool switches (`false` = disable entire group) |
 | `disabled_tools` | Comma-separated names of individually disabled tools |
@@ -29,18 +29,16 @@ Place the plugin folder into AstrBot's `data/plugins/` directory and restart Ast
 
 | Tool | Dependency | Behavior if missing |
 |------|-----------|-------------------|
-| `es_search` | Everything + es.exe (Windows) | Returns error |
+| `es_search` | Everything + es.exe (Windows) / locate / fd | Returns error or Python os.walk scan |
 | `gh_pr` / `gh_issue` / `gh_release` / `gh_repo` | GitHub CLI | Returns error |
 | `html_extract` | `beautifulsoup4`, lxml optional | bs4 required, lxml falls back to html.parser |
 | `syntax_check` (Nim/Go/JS/TS) | Respective compilers | Skipped (skipped=true) |
 | `lint_runner` | ruff / pylint / eslint (auto-fallback) | Returns install hint |
 | `rg_search` | ripgrep (optional, Python fallback) | Falls back to stdlib scan |
-| `svg_render` | cairosvg (optional) | Returns install hint |
-| `json_schema_val` | jsonschema (optional) | Returns install hint |
 | `config_diff` (YAML) | pyyaml (optional) | Returns install hint |
 | `code_index` (multi-lang) | tree-sitter + grammar (optional) | Zero-deps for Python; other languages skipped |
 
-> The remaining 60+ tools use Python standard library only.
+> The remaining 50+ tools use Python standard library only.
 
 ## Design
 
@@ -52,15 +50,16 @@ Place the plugin folder into AstrBot's `data/plugins/` directory and restart Ast
 
 `syntax_check`/`lint_runner`/`rg_search` include surrounding code context in their results, enabling the LLM to locate issues without an extra file read.
 
-71 tools organized into 11 groups. Disable entire groups or individual tools via `config.json`.
+63 tools organized into 10 groups. Disable entire groups or individual tools via `config.json`.
 
-## Tool List (71)
+## Tool List (63)
 
-### 🔒 Safe Edit Chain (9)
+### 🔒 Safe Edit Chain (10)
 
 | Tool | Description |
 |------|-------------|
 | `safe_edit` | Backup → replace → syntax check → keep/rollback. **Only way to edit code** |
+| `safe_write` | Create new files / overwrite whole files with syntax check |
 | `safe_rollback` | Rollback file to a backup |
 | `safe_backups` | List all backup files |
 | `file_patch` | Exact text replacement for non-code files |
@@ -86,11 +85,11 @@ Place the plugin folder into AstrBot's `data/plugins/` directory and restart Ast
 | `gh_release` | Release: create/list |
 | `gh_repo` | Repo: create/view/CI/auth check |
 
-### 📁 File System (12)
+### 📁 File System (11)
 
 | Tool | Description |
 |------|-------------|
-| `es_search` | Everything filename search (Windows) |
+| `es_search` | Everything/locate/fd filename search |
 | `rg_search` | File content search (ripgrep + Python fallback) |
 | `dir_tree` | Directory tree visualization |
 | `dir_list` | Structured directory listing |
@@ -100,7 +99,6 @@ Place the plugin folder into AstrBot's `data/plugins/` directory and restart Ast
 | `file_unzip` | ZIP extract (Zip-slip protection) |
 | `file_remove` | Delete files/directories (sandbox + confirmation) |
 | `disk_info` | Disk partition usage (Windows/Linux) |
-| `file_watch` | File change monitoring |
 | `config_diff` | Key-level JSON/YAML config comparison |
 
 ### 📊 System Info (4)
@@ -127,7 +125,7 @@ Place the plugin folder into AstrBot's `data/plugins/` directory and restart Ast
 | `http_post` | HTTP POST |
 | `http_download` | Binary download (500MB cap + path sandbox) |
 
-### 📝 Text Processing (10)
+### 📝 Text Processing (8)
 
 | Tool | Description |
 |------|-------------|
@@ -135,37 +133,24 @@ Place the plugin folder into AstrBot's `data/plugins/` directory and restart Ast
 | `json_query` | jq-style JSON path query |
 | `text_filter` | Line filter (grep/head/tail/count) |
 | `diff_strings` | String unified diff |
-| `regex_test` | Regex match testing |
-| `regex_replace` | Regex replacement |
 | `csv_parse` | CSV/TSV → structured data |
 | `csv_gen` | Structured data → CSV/TSV |
 | `md_strip` | Markdown → plain text |
 | `log_parse` | Nginx/Apache/syslog/JSONL parser |
 
-### 🔤 Encoding (3)
+### 🔤 Encoding & ⏱ Time (2)
 
 | Tool | Description |
 |------|-------------|
-| `base64_` | Base64 encode/decode (action: encode/decode) |
-| `hex_` | Hex encode/decode (action: encode/decode) |
-| `url_` | URL encode/decode (action: encode/decode) |
+| `encode_decode` | Base64 / URL / Hex encode/decode (action + format) |
+| `time` | Current time / timestamp ↔ ISO / time diff (action) |
 
-### ⏱ Time (3)
-
-| Tool | Description |
-|------|-------------|
-| `time_now` | Current time (ISO + timestamp) |
-| `time_convert` | Timestamp ↔ ISO conversion (direction: to_iso/to_ts) |
-| `time_diff` | Time delta between two ISO timestamps |
-
-### 🧩 Extensions (8)
+### 🧩 Extensions (6)
 
 | Tool | Description |
 |------|-------------|
 | `semver_compare` | Semantic version comparison |
 | `uuid_gen` | UUID / hex / token generation |
-| `svg_render` | SVG → PNG rendering |
-| `json_schema_val` | JSON Schema validation |
 | `project_init` | Project structure scan |
 | `git_changelog` | Git log semantic grouping |
 | `db_query` | SQLite read-only query |
@@ -205,11 +190,11 @@ pip install pytest
 python -m pytest tests/ -v
 ```
 
-182 test cases; current local verification is 174 passed and 8 skipped. Coverage includes SSRF, safe_edit, Zip-slip, SQL injection, ReDoS, registry consistency, linter/test fallback, auth permission checks, semantic indexing, atomic edits, safe command execution, and audit logging.
+180 test cases; current local verification is 180 passed and 8 skipped. Coverage includes SSRF, safe_edit, Zip-slip, SQL injection, ReDoS, registry consistency, linter/test fallback, auth permission checks, semantic indexing, atomic edits, safe command execution, and audit logging.
 
 ## Version
 
-2.5.0 · [Changelog](CHANGELOG.md)
+2.5.5 · [Changelog](CHANGELOG.md)
 
 ## Author
 

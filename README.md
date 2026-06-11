@@ -17,7 +17,7 @@ Python ≥ 3.10
 | `owner_sid` | 管理员会话 ID（可不填，插件自动读取 AstrBot 管理员列表） |
 | `allowed_ids` | 额外允许的用户 ID（逗号分隔，平台无关） |
 | `group_config_enabled` | 启用群级权限配置（默认关闭，需重启生效） |
-| `tool_groups` | 11 组 bool 开关，`false` = 关闭整组 |
+| `tool_groups` | 10 组 bool 开关，`false` = 关闭整组 |
 | `disabled_tools` | 逗号分隔单独禁用的工具名 |
 | `es_path` | Everything CLI 路径，空自动检测 |
 | `gh_path` | GitHub CLI 路径，空自动检测 |
@@ -29,18 +29,16 @@ Python ≥ 3.10
 
 | 工具 | 依赖 | 未安装时 |
 |------|------|----------|
-| `es_search` | Everything + es.exe (Windows) | 返回错误提示 |
+| `es_search` | Everything + es.exe (Windows) / locate / fd | 返回错误提示或 Python os.walk 扫描 |
 | `gh_pr` / `gh_issue` / `gh_release` / `gh_repo` | GitHub CLI | 返回错误提示 |
 | `html_extract` | `beautifulsoup4`，lxml 可选 | 缺 bs4 报错，缺 lxml 回退 html.parser |
 | `syntax_check` (Nim/Go/JS/TS) | 对应编译器 | 跳过 (skipped=true) |
 | `lint_runner` | ruff / pylint / eslint 任一（自动 fallback） | 返回安装提示 |
 | `rg_search` | ripgrep（可选），未安装时 Python fallback | 降级到纯标库扫描 |
-| `svg_render` | cairosvg（可选） | 返回安装提示 |
-| `json_schema_val` | jsonschema（可选） | 返回安装提示 |
 | `config_diff` (YAML) | pyyaml（可选） | 返回安装提示 |
 | `code_index` (多语言) | tree-sitter + grammar（可选） | Python 零依赖；其他语言跳过 |
 
-> 其余 60+ 工具为 Python 标准库实现，无外部依赖。
+> 其余 50+ 工具为 Python 标准库实现，无外部依赖。
 
 ## 设计说明
 
@@ -52,7 +50,7 @@ Python ≥ 3.10
 
 `syntax_check`/`lint_runner`/`rg_search` 在返回结果中附带代码上下文片段，帮助 LLM 直接定位问题，无需额外读文件。
 
-71 个工具按 11 组管理，可在 `config.json` 中按组或按单个工具关闭。
+63 个工具按 10 组管理，可在 `config.json` 中按组或按单个工具关闭。
 
 ## 架构
 
@@ -63,13 +61,14 @@ Python ≥ 3.10
 - 安全设计架构（SSRF 四层、safe_edit 防御链、ReDoS 三重盾）
 - 异步执行模型和测试策略
 
-## 工具列表 (71)
+## 工具列表 (63)
 
-### 🔒 安全编辑链 (9)
+### 🔒 安全编辑链 (10)
 
 | 工具 | 用途 |
 |------|------|
 | `safe_edit` | 备份→替换→语法检查→通过保留/失败回滚 |
+| `safe_write` | 新建文件/整体覆盖写入，自动创建父目录，语法检查 |
 | `safe_rollback` | 回滚到指定或最近备份 |
 | `safe_backups` | 列出备份文件 |
 | `file_patch` | 精确文本替换，非代码文件用 |
@@ -95,11 +94,11 @@ Python ≥ 3.10
 | `gh_release` | Release：创建/列出 |
 | `gh_repo` | 仓库：创建/查看/CI/认证 |
 
-### 📁 文件系统 (12)
+### 📁 文件系统 (11)
 
 | 工具 | 用途 |
 |------|------|
-| `es_search` | Everything 文件名搜索 (Windows) |
+| `es_search` | Everything/locate/fd 文件名搜索 |
 | `rg_search` | 文件内容搜索（ripgrep + Python fallback） |
 | `dir_tree` | 目录树 |
 | `dir_list` | 目录列表 |
@@ -109,7 +108,6 @@ Python ≥ 3.10
 | `file_unzip` | ZIP 解压（Zip-slip 防护） |
 | `file_remove` | 删除文件/目录（沙箱+批量确认） |
 | `disk_info` | 磁盘分区使用情况 |
-| `file_watch` | 文件变化监控 |
 | `config_diff` | 配置文件 key 级差异 |
 
 ### 📊 系统信息 (4)
@@ -136,7 +134,7 @@ Python ≥ 3.10
 | `http_post` | HTTP POST |
 | `http_download` | 二进制下载 (500MB 上限 + 路径沙箱) |
 
-### 📝 文本处理 (10)
+### 📝 文本处理 (8)
 
 | 工具 | 用途 |
 |------|------|
@@ -144,37 +142,24 @@ Python ≥ 3.10
 | `json_query` | jq 式 JSON 路径查询 |
 | `text_filter` | 行过滤 (grep/head/tail/count) |
 | `diff_strings` | 字符串 unified diff |
-| `regex_test` | 正则匹配测试 |
-| `regex_replace` | 正则替换 |
 | `csv_parse` | CSV/TSV → 结构化数据 |
 | `csv_gen` | 结构化 → CSV/TSV |
 | `md_strip` | Markdown → 纯文本 |
 | `log_parse` | Nginx/Apache/syslog/JSON Lines |
 
-### 🔤 编码 (3)
+### 🔤 编码 & ⏱ 时间 (2)
 
 | 工具 | 用途 |
 |------|------|
-| `base64_` | Base64 编解码（action: encode/decode） |
-| `hex_` | 十六进制编解码（action: encode/decode） |
-| `url_` | URL 编解码（action: encode/decode） |
+| `encode_decode` | Base64 / URL / Hex 编解码（action + format） |
+| `time` | 当前时间 / 时间戳↔ISO 互转 / 时间差（action） |
 
-### ⏱ 时间 (3)
-
-| 工具 | 用途 |
-|------|------|
-| `time_now` | 当前时间 |
-| `time_convert` | 时间戳↔ISO 互转（direction: to_iso/to_ts） |
-| `time_diff` | 时间差 |
-
-### 🧩 扩展 (8)
+### 🧩 扩展 (6)
 
 | 工具 | 用途 |
 |------|------|
 | `semver_compare` | 语义版本比较 |
 | `uuid_gen` | UUID / hex / token |
-| `svg_render` | SVG→PNG |
-| `json_schema_val` | JSON Schema 校验 |
 | `project_init` | 项目结构扫描 |
 | `git_changelog` | git log 分类 |
 | `db_query` | SQLite 只读查询 |
@@ -221,7 +206,7 @@ pip install pytest
 python -m pytest tests/ -v
 ```
 
-182 用例；当前本地验证为 174 passed、8 skipped。覆盖 SSRF、safe_edit 防御链、Zip-slip、SQL 注入、ReDoS、注册表一致性、linter/test fallback、权限鉴权、语义索引、原子编辑、安全命令执行和审计日志等。
+180 用例；当前本地验证为 180 passed、8 skipped。覆盖 SSRF、safe_edit 防御链、Zip-slip、SQL 注入、ReDoS、注册表一致性、linter/test fallback、权限鉴权、语义索引、原子编辑、安全命令执行和审计日志等。
 
 ## 英文文档
 
@@ -229,7 +214,7 @@ python -m pytest tests/ -v
 
 ## 版本
 
-2.5.0 · [Changelog](CHANGELOG.md)
+2.5.5 · [Changelog](CHANGELOG.md)
 
 ## 作者
 

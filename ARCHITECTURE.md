@@ -20,10 +20,12 @@ irmia_devkit_open/
 ├── tests/
 │   ├── conftest.py              # Shared pytest fixtures
 │   ├── test_registry.py         # TOOL_GROUPS ↔ _ALL_TOOLS consistency
+│   ├── test_registry_static.py  # Static registry checks without AstrBot
 │   ├── test_helpers.py          # unwrap / err_json / proposal_reply
 │   ├── test_safe_edit.py        # Backup → patch → syntax → rollback chain
+│   ├── test_safe_write.py       # New file / overwrite with syntax check
 │   ├── test_file_remove.py      # Path sandbox, forbidden prefixes
-│   ├── test_rg_search.py        # Ripgrep + Python fallback
+│   ├── test_rg_search.py        # Ripgrep + Python fallback + ReDoS guard
 │   ├── test_lint_runner.py      # Linter fallback chain
 │   ├── test_test_runner.py      # Unified test runner discovery/parsing
 │   ├── test_multi_edit.py       # Atomic multi-file edit and rollback
@@ -31,7 +33,6 @@ irmia_devkit_open/
 │   ├── test_op_log.py           # SQLite audit trail
 │   ├── test_symbol_rename.py    # Python token rename
 │   ├── test_syntax_check.py     # Multi-language syntax + context
-│   ├── test_regex.py            # ReDoS protection
 │   ├── test_http_utils.py       # SSRF validation
 │   ├── test_db_query.py         # SQL injection, read-only enforcement
 │   ├── test_file_zip.py         # Zip-slip protection
@@ -41,14 +42,15 @@ irmia_devkit_open/
 └── tools/
     ├── __init__.py              # Package marker
     ├── _registry.py             # Tool class definitions + TOOL_GROUPS + _ALL_TOOLS
-    ├── _helpers.py              # err_json, unwrap, run_sync, proposal_reply
-    ├── _file_utils.py           # read_file, find_closest_line, size limits
+    ├── _helpers.py              # err_json, unwrap, run_sync, proposal_reply, _run_cmd
+    ├── _file_utils.py           # read_file, find_closest_line, size limits, SymlinkGuard
     ├── _http_utils.py           # SSRF validate_url, SafeRedirectHandler
     ├── _auth.py                 # protect_tool wrapper + build_allowed_ids
     ├── config.py                # Module-level config singleton
     ├── tool_stats.py            # In-memory call counter
     │
     ├── safe_edit.py             # Backup → replace → syntax check → auto-rollback
+    ├── safe_write.py            # New file / overwrite with syntax check
     ├── file_patch.py            # Exact text replacement + preview
     ├── syntax_check.py          # Multi-language syntax (Python/Nim/Go/JS/TS)
     ├── lint_runner.py           # ruff/pylint/eslint with auto-fallback
@@ -62,14 +64,13 @@ irmia_devkit_open/
     ├── git_changelog.py         # Semantic git log grouping (feat/fix/docs)
     ├── gh_cli.py                # GitHub CLI wrapper (PR/Issue/Release/Repo/CI)
     │
-    ├── es_search.py             # Windows Everything filename search
+    ├── es_search.py             # Everything/locate/fd filename search
     ├── rg_search.py             # File content search (rg + Python fallback)
     ├── dir_tree.py              # Visual directory tree
     ├── dir_list.py              # Structured directory listing
     ├── file_diff.py             # File-to-file unified diff
     ├── file_hash.py             # MD5/SHA1/SHA256 computation
     ├── file_zip.py              # ZIP compress/extract with Zip-slip protection
-    ├── file_watch.py            # Polling-based file change monitor
     ├── config_diff.py           # Key-level JSON/YAML config comparison
     │
     ├── http_get.py              # HTTP GET/POST with SSRF protection
@@ -78,13 +79,12 @@ irmia_devkit_open/
     ├── json_query.py            # jq-style JSON path traversal
     ├── text_filter.py           # grep/invert/head/tail/count
     ├── diff_strings.py          # In-memory string unified diff
-    ├── regex_tester.py          # Regex test + replace with ReDoS protection
     ├── csv_utils.py             # CSV/TSV parse and generate
     ├── md_strip.py              # Markdown → plain text
     ├── log_parse.py             # Nginx/Apache/syslog/JSONL parser
     │
-    ├── encode_utils.py          # base64/URL/hex encode/decode
-    ├── time_utils.py            # Timestamp↔ISO, time diff
+    ├── encode_utils.py          # base64/URL/hex encode/decode (used by encode_decode)
+    ├── time_utils.py            # Timestamp↔ISO, time diff (used by time)
     ├── semver.py                # Semantic version comparison
     ├── uuid_gen.py              # UUID4/hex/token generation
     │
@@ -96,10 +96,8 @@ irmia_devkit_open/
     ├── project_init.py          # Project language/framework/dep detection
     ├── dep_scan.py              # Python import graph + cycle detection
     ├── db_query.py              # Read-only SQLite (parameterized)
-    ├── svg_render.py            # SVG → PNG (optional cairosvg)
-    ├── json_schema_val.py       # JSON Schema validation (optional jsonschema)
-    ├── codegraph.py              # Code semantic index (AST + FTS5 + BFS)
-    └── symbol_rename.py          # Python symbol rename via codegraph + tokenize
+    ├── codegraph.py             # Code semantic index (AST + FTS5 + BFS)
+    └── symbol_rename.py         # Python symbol rename via codegraph + tokenize
 ```
 
 ## Initialization Flow
@@ -192,6 +190,7 @@ config.set_config(_config, plugin_dir)    # Module-level singleton
   ↓
 Tools that need config:
   safe_edit.py  → get_config()["backup_dir"]  # restore backup path
+  safe_write.py → get_config()["backup_dir"]  # same backup directory
   es_search.py  → get_config()["es_path"]     # custom es.exe location
   gh_cli.py     → get_config()["gh_path"]     # custom gh CLI location
   op_log.py     → get_config()["op_log_db"]   # optional audit DB override
@@ -207,7 +206,7 @@ async def call(self, context, **kwargs):
     result = await _run_sync(tool_function, arg1, arg2)
     return _unwrap(result)
 ```
-Used by: safe_edit, git_*, http_*, file_*, rg_search, syntax_check, lint_runner,
+Used by: safe_edit, safe_write, git_*, http_*, file_*, rg_search, syntax_check, lint_runner,
 test_runner, multi_edit, shell_exec, op_log, symbol_rename, etc.
 The synchronous function runs in `ThreadPoolExecutor`, keeping the event loop unblocked.
 
@@ -216,11 +215,8 @@ The synchronous function runs in `ThreadPoolExecutor`, keeping the event loop un
 async def call(self, context, **kwargs):
     return _unwrap(tool_function(arg1))
 ```
-Used by: base64_*, hex_*, url_*, time_*, semver_compare, uuid_gen, md_strip.
+Used by: encode_decode, time, semver_compare, uuid_gen, md_strip.
 These operations are sub-millisecond pure computation. Direct execution is fine.
-
-> Note: `regex_test` / `regex_replace` originally used Pattern B and blocked the event loop for up to 3 seconds.
-> Fixed in v2.3 to use Pattern A with thread-safe SIGALRM fallback.
 
 ## How to Add a New Tool
 
@@ -291,7 +287,7 @@ Layer 3: DNS resolution + IP check after hostname → IP lookup
 Layer 4: SafeRedirectHandler re-validates on every HTTP redirect
 ```
 
-### File Editing Safety (safe_edit.py)
+### File Editing Safety (safe_edit.py / safe_write.py)
 ```
 1. Validate file exists and is under size limit
 2. Read content (UTF-8 → GBK fallback)
@@ -311,13 +307,12 @@ Layer 4: SafeRedirectHandler re-validates on every HTTP redirect
 4. Row factory: sqlite3.Row for dict-like access
 ```
 
-### ReDoS Protection (regex_tester.py)
+### ReDoS Protection
 ```
-1. Pattern length limit (2000 chars)
-2. Input text length limit (100,000 chars)
-3. Nested quantifier detection (e.g., (a+)+) → reject
-4. SIGALRM timeout (3s, Unix main thread)
-5. Match count hard limit (500, Windows/thread fallback)
+rg_search Python fallback:
+- Pattern length limit (1000 chars)
+- Nested quantifier detection (e.g., (a+)+) → reject
+- Search step limit (500,000) → truncate
 ```
 
 ### Zip-Slip Protection (file_zip.py)

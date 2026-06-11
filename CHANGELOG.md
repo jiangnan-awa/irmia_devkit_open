@@ -1,5 +1,13 @@
 # Changelog
 
+## v2.5.5 — MCP 改动同步 + 安全修复 + 文档对齐
+
+- **MCP 改动同步（本插件适配）**: 新增 `safe_write` 新建/整体覆盖写入工具；删除非核心工具 `file_watch`、`svg_render`、`json_schema_val` 和 `regex_test`/`regex_replace`；合并 `base64_`+`hex_`+`url_` 为 `encode_decode`，合并 `time_now`+`time_convert`+`time_diff` 为 `time`。工具数 71→63，工具组 11→10。
+- **Bug 修复（从 MCP 版移植）**: `shell_exec` `_DANGEROUS_RAW` 追加 `&` 和 `%`；`symbol_rename` 跨文件重命名改用 `proposal_reply()` 协议；`http_get` HTTPError 返回增加 `status` 字段；`syntax_check` 编译器缺失返回 `ok=False`；`file_remove` 系统目录黑名单从 `C:/Windows` 收窄到 `System32`+`SysWOW64`。
+- **真实安全问题修复**: `shell_exec` 禁止带路径的命令（防止 `/malicious/python` 被当作 `python` 放行）；`rg_search` Python fallback 增加 ReDoS 防护（pattern 长度 1000、嵌套量词检测、搜索步数上限 50 万）；`op_log` 扩展敏感词（`passwd`/`pwd`/`private_key`/`credential`/`api_key`）。
+- **文档与配置同步**: README、README_EN、ARCHITECTURE、`_conf_schema.json`、metadata 全面更新到 63 工具/10 组，移除已删工具的残留引用。
+- **测试**: 新增 `test_safe_write.py` 覆盖新建/覆盖/语法错误保留/回滚/系统目录拦截；`test_auth.py` 工具名同步；`test_registry.py` 计数改为 63；`test_rg_search.py` 新增 ReDoS 防护用例；`test_op_log.py` 新增 api_key/private_key 脱敏用例。当前本地验证 180 passed、8 skipped。
+
 ## v2.5.0 — 测试/执行/审计/重命名能力补完
 
 - **新工具 — 安全编辑链**: 新增 `test_runner`（pytest/go test/cargo test/jest 统一封装）和 `multi_edit`（原子多文件编辑，失败全量回滚，同文件顺序应用语义已文档化），补齐 syntax_check → lint_runner → test_runner 的验证链路。
@@ -11,7 +19,7 @@
 - **Review 修复 (R1+R2)**:
   - C1: 移除 `go run` 白名单；H1: 补全 Windows 环境变量（APPDATA/LOCALAPPDATA/CARGO_HOME/GOPATH/NODE_PATH）；H3: 临时文件写入系统 temp 目录；M1: 修复 shlex 冗余引号剥离；M4: jest JSON 健壮解析；M5/L4: multi_edit 同文件编辑语义文档化 + `replacements_made` 字段；L2: op_log 拆分 `_ensure_db` 单次建表
   - C2: SymbolRenameTool 补 `confirm_multi_file` 参数（schema + call 方法 + description），修复多文件重命名安全阀；H4: `_unwrap` 扩展透传 stdout/stderr/cmd 诊断字段，shell_exec 超时不丢失输出；H5: op_log stats 移除 `db_path`/`session_id` 信息泄露
-- **文档与配置同步**: 工具数 66→71，工具组 10→11，新增「执行与审计」组；同步 README、README_EN、ARCHITECTURE、配置 schema、metadata 和版本号。
+- **文档与配置同步**: 工具数 66→71，工具组 10→11，新增「执行与审计」组；同步 README、README_En、ARCHITECTURE、配置 schema、metadata 和版本号。
 - **测试扩展**: 新增 shell_exec/test_runner/multi_edit/op_log/symbol_rename 用例；当前本地验证 174 passed、8 skipped。
 
 ## v2.4.5 — 语义索引 5 工具 + gh_cli 自动定位 + 文档补完
