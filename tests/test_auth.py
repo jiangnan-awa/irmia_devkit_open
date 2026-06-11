@@ -11,13 +11,13 @@ from tools._auth import protect_tool, build_allowed_ids
 _DEVKIT_TOOL_NAMES = {
     # 安全编辑链
     "safe_edit", "safe_rollback", "safe_backups", "file_patch", "file_preview",
-    "syntax_check", "lint_runner", "test_runner", "multi_edit",
+    "safe_write", "syntax_check", "lint_runner", "test_runner", "multi_edit",
     # Git & GitHub
     "git_status", "git_diff", "git_log", "git_commit", "git_branch",
     "git_remote", "git_push", "gh_pr", "gh_issue", "gh_release", "gh_repo",
     # 文件系统
     "es_search", "rg_search", "dir_tree", "dir_list", "file_diff",
-    "file_hash", "file_zip", "file_unzip", "disk_info", "file_watch",
+    "file_hash", "file_zip", "file_unzip", "disk_info",
     "file_remove", "config_diff",
     # 系统信息
     "proc_list", "sys_snapshot", "port_check", "tool_stats",
@@ -26,15 +26,13 @@ _DEVKIT_TOOL_NAMES = {
     # 网络
     "http_get", "http_post", "http_download",
     # 文本处理
-    "html_extract", "text_filter", "json_query", "json_schema_val",
-    "csv_parse", "csv_gen", "regex_test", "regex_replace", "diff_strings",
+    "html_extract", "text_filter", "json_query",
+    "csv_parse", "csv_gen", "diff_strings",
     "md_strip", "log_parse",
-    # 编码
-    "base64_", "hex_", "url_",
-    # 时间
-    "time_now", "time_convert", "time_diff",
+    # 编码与时间（合并）
+    "encode_decode", "time",
     # 扩展
-    "uuid_gen", "semver_compare", "svg_render", "project_init",
+    "uuid_gen", "semver_compare", "project_init",
     "git_changelog", "db_query", "dep_scan",
     # 代码理解
     "code_index", "code_explore", "code_diff_impact", "code_pack",

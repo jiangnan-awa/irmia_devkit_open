@@ -58,7 +58,10 @@ class TestRegistryStatic:
 
         assert "test_runner" in groups["安全编辑链"]
         assert "multi_edit" in groups["安全编辑链"]
+        assert "safe_write" in groups["安全编辑链"]
         assert groups["执行与审计"] == ["shell_exec", "op_log"]
         assert "symbol_rename" in groups["代码理解"]
-        for name in ("test_runner", "multi_edit", "shell_exec", "op_log", "symbol_rename"):
+        assert "encode_decode" in all_tools
+        assert "time" in all_tools
+        for name in ("test_runner", "multi_edit", "safe_write", "shell_exec", "op_log", "symbol_rename", "encode_decode", "time"):
             assert name in all_tools

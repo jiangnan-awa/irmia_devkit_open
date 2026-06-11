@@ -54,7 +54,7 @@ class TestRegistryConsistency:
             )
 
     def test_total_tool_count(self):
-        """_ALL_TOOLS 总数应为 71"""
+        """_ALL_TOOLS 总数应为 63（原 71，精简后）"""
         assert len(_ALL_TOOLS) == 63
 
     def test_no_duplicate_tool_names(self):
