@@ -49,9 +49,9 @@ class TestRegistryStatic:
         grouped = {name for names in groups.values() for name in names}
 
         assert grouped == set(all_tools)
-        assert len(groups) == 11
-        assert len(all_tools) == 71
-        assert sum(len(names) for names in groups.values()) == 71
+        assert len(groups) == 10
+        assert len(all_tools) == 63
+        assert sum(len(names) for names in groups.values()) == 63
 
     def test_new_v250_tools_registered(self):
         groups, all_tools = _load_registry_literals()

@@ -9,7 +9,7 @@ from ._helpers import proposal_reply
 from ._file_utils import human_size
 
 _FORBIDDEN_PREFIXES = [
-    "C:/Windows", "C:/windows",
+    "C:/Windows/System32", "C:/Windows/SysWOW64",
     "C:/Program Files", "C:/Program Files (x86)",
     "C:/Users/All Users",
     "/bin", "/boot", "/dev", "/etc", "/lib", "/proc", "/root", "/sbin", "/sys", "/usr", "/var",

@@ -36,16 +36,15 @@ class TestRegistryConsistency:
     def test_tool_group_counts_match_readme(self):
         """组计数与 README 声明一致"""
         expected = {
-            "安全编辑链": 9,
+            "安全编辑链": 10,
             "Git & GitHub": 11,
-            "文件系统": 12,
+            "文件系统": 11,
             "系统信息": 4,
             "执行与审计": 2,
             "网络": 3,
-            "文本处理": 10,
-            "编码": 3,
-            "时间": 3,
-            "扩展": 8,
+            "文本处理": 8,
+            "编码/时间（合并）": 2,
+            "扩展": 6,
             "代码理解": 6,
         }
         for group, expected_count in expected.items():
@@ -56,7 +55,7 @@ class TestRegistryConsistency:
 
     def test_total_tool_count(self):
         """_ALL_TOOLS 总数应为 71"""
-        assert len(_ALL_TOOLS) == 71
+        assert len(_ALL_TOOLS) == 63
 
     def test_no_duplicate_tool_names(self):
         """TOOL_GROUPS 中跨组不得重名"""

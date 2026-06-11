@@ -11,7 +11,7 @@ import time
 from pathlib import Path
 
 
-_DANGEROUS_RAW = ("|", ";", "&&", "||", ">", "<", "$(", "`", "\n", "\r")
+_DANGEROUS_RAW = ("|", ";", "&", "||", ">", "<", "$(", "`", "\n", "\r", "%")
 _SAFE_COMMANDS: dict[str, tuple[str, ...]] = {
     "npm": ("test", "run", "build", "lint", "install"),
     "npx": ("jest", "vitest", "tsc", "eslint"),

@@ -39,6 +39,7 @@ from .safe_edit import (
     list_backups as _list_backups,
     rollback as _rollback,
 )
+from .safe_write import write as _safe_write
 from .es_search import search as _es_search
 from .rg_search import search as _rg_search
 from .http_get import get as _http_get, post as _http_post
@@ -61,7 +62,6 @@ from .encode_utils import (
     hex_decode,
 )
 from .time_utils import now as _time_now, ts_to_iso, iso_to_ts, time_diff
-from .regex_tester import test as _regex_test, replace as _regex_replace
 from .dir_list import list_dir as _list_dir
 from .json_query import query as _json_query
 from .text_filter import filter_lines as _text_filter
@@ -86,10 +86,7 @@ from .gh_cli import (
     auth_status as _gh_auth_status,
 )
 from .log_parse import parse as _log_parse
-from .file_watch import watch as _file_watch
 from .config_diff import diff as _config_diff
-from .svg_render import render as _svg_render
-from .json_schema_val import validate as _json_schema_val
 from .project_init import scan as _project_init_scan
 from .git_changelog import changelog as _git_changelog
 from .lint_runner import run as _lint_run
@@ -1275,237 +1272,99 @@ class SysSnapshotTool(FunctionTool):
             return _err(f"sys_snapshot 失败: {e}")
 
 
-# ══ 编码 ══
+# ══ 编码/时间（合并）══
 @dataclass
-class Base64Tool(FunctionTool):
-    name: str = "base64_"
+class EncodeDecodeTool(FunctionTool):
+    """编解码：base64 / url / hex 三合一。"""
+
+    name: str = "encode_decode"
     description: str = (
-        "【替代 base64 命令——首选】Base64 编解码。"
-        "action: encode(编码)/decode(解码)。encode 时 as_uri=True 可生成 data: URI，"
-        "decode 时 strip_uri=True 自动剥离 data: URI 前缀。"
-        "比 shell base64 命令少一步管道拼接。"
+        "【替代 base64_/hex_/url_——首选】编解码三合一。"
+        "用 format=base64/url/hex + action=encode/decode 统一入口。"
+        "比三个独立工具少占 token，调用路径更短。"
     )
     parameters: dict = field(
         default_factory=lambda: {
             "type": "object",
             "properties": {
                 "action": {"type": "string", "description": "encode / decode", "enum": ["encode", "decode"]},
+                "format": {"type": "string", "description": "base64 / url / hex", "default": "base64"},
                 "data": {"type": "string", "description": "要处理的文本"},
-                "as_uri": {"type": "boolean", "description": "encode 时是否生成 data: URI", "default": False},
-                "strip_uri": {"type": "boolean", "description": "decode 时是否剥离 data: URI 前缀", "default": False},
+                "as_uri": {"type": "boolean", "description": "base64 encode 时生成 data: URI", "default": False},
+                "strip_uri": {"type": "boolean", "description": "base64 decode 时剥离 data: URI 前缀", "default": False},
             },
             "required": ["action", "data"],
         }
     )
+
     async def call(
         self, context: ContextWrapper[AstrAgentContext], action: str, data: str,
-        as_uri: bool = False, strip_uri: bool = False, **kwargs
+        format: str = "base64", as_uri: bool = False, strip_uri: bool = False, **kwargs
     ) -> ToolExecResult:
         _tool_stats.record(self.name)
         try:
-            if action == "encode": return _unwrap(await _run_sync(b64_encode, data, as_uri))
-            return _unwrap(await _run_sync(b64_decode, data, strip_uri))
-        except Exception as e: return _err(f"base64_ 失败: {e}")
-
-
-@dataclass
-class HexTool(FunctionTool):
-    name: str = "hex_"
-    description: str = (
-        "【替代 xxd/od——首选】十六进制与文本互转。"
-        "action: encode(文本→十六进制) / decode(十六进制→文本)。比 shell xxd 少 5 个参数。"
-    )
-    parameters: dict = field(
-        default_factory=lambda: {
-            "type": "object",
-            "properties": {
-                "action": {"type": "string", "description": "encode / decode", "enum": ["encode", "decode"]},
-                "data": {"type": "string", "description": "要处理的文本"},
-            },
-            "required": ["action", "data"],
-        }
-    )
-    async def call(self, context: ContextWrapper[AstrAgentContext], action: str, data: str, **kwargs) -> ToolExecResult:
-        _tool_stats.record(self.name)
-        try:
-            if action == "encode": return _unwrap(await _run_sync(hex_encode, data))
-            return _unwrap(await _run_sync(hex_decode, data))
-        except Exception as e: return _err(f"hex_ 失败: {e}")
-
-
-@dataclass
-class UrlTool(FunctionTool):
-    name: str = "url_"
-    description: str = "URL 编解码。action: encode(编码) / decode(解码)。比手写 urllib.parse 少 4 行样板。"
-    parameters: dict = field(
-        default_factory=lambda: {
-            "type": "object",
-            "properties": {
-                "action": {"type": "string", "description": "encode / decode", "enum": ["encode", "decode"]},
-                "data": {"type": "string", "description": "要处理的文本"},
-            },
-            "required": ["action", "data"],
-        }
-    )
-    async def call(self, context: ContextWrapper[AstrAgentContext], action: str, data: str, **kwargs) -> ToolExecResult:
-        _tool_stats.record(self.name)
-        try:
-            if action == "encode": return _unwrap(await _run_sync(url_encode, data))
-            return _unwrap(await _run_sync(url_decode, data))
-        except Exception as e: return _err(f"url_ 失败: {e}")
-
-
-# ══ 时间 ══
-@dataclass
-class TimeNowTool(FunctionTool):
-    name: str = "time_now"
-    description: str = "获取当前时间：ISO 字符串 + Unix 时间戳（秒和毫秒）。"
-    parameters: dict = field(
-        default_factory=lambda: {"type": "object", "properties": {}, "required": []}
-    )
-    async def call(
-        self, context: ContextWrapper[AstrAgentContext], **kwargs
-    ) -> ToolExecResult:
-        _tool_stats.record(self.name)
-        try:
-            return _unwrap(await _run_sync(_time_now))
+            fmt = format.lower()
+            if fmt == "base64":
+                if action == "encode":
+                    return _unwrap(await _run_sync(b64_encode, data, as_uri))
+                return _unwrap(await _run_sync(b64_decode, data, strip_uri))
+            elif fmt == "url":
+                if action == "encode":
+                    return _unwrap(await _run_sync(url_encode, data))
+                return _unwrap(await _run_sync(url_decode, data))
+            elif fmt == "hex":
+                if action == "encode":
+                    return _unwrap(await _run_sync(hex_encode, data))
+                return _unwrap(await _run_sync(hex_decode, data))
+            else:
+                return _err(f"不支持的格式: {format}，使用 base64/url/hex")
         except Exception as e:
-            return _err(f"time_now 失败: {e}")
+            return _err(f"encode_decode 失败: {e}")
 
 
 @dataclass
-class TimeConvertTool(FunctionTool):
-    name: str = "time_convert"
-    description: str = "【替代手动乘除——首选】Unix 时间戳与 ISO 互转。direction: to_iso(时间戳→ISO) / to_ts(ISO→时间戳)。ms=True 表示毫秒。"
+class TimeTool(FunctionTool):
+    """时间工具：获取时间 / 时间戳互转 / 时间差三合一。"""
+
+    name: str = "time"
+    description: str = (
+        "【替代 time_now/time_convert/time_diff——首选】时间工具三合一。"
+        "action: now(当前时间) / convert(时间戳↔ISO互转) / diff(两ISO时间差)。"
+    )
     parameters: dict = field(
         default_factory=lambda: {
             "type": "object",
             "properties": {
-                "direction": {"type": "string", "description": "to_iso / to_ts", "enum": ["to_iso", "to_ts"]},
-                "ts": {"type": "integer", "description": "时间戳（to_iso 时使用）"},
-                "ms": {"type": "boolean", "description": "毫秒时间戳", "default": False},
-                "iso": {"type": "string", "description": "ISO 字符串（to_ts 时使用）"},
+                "action": {"type": "string", "description": "now / convert / diff", "enum": ["now", "convert", "diff"]},
+                "value": {"type": "string", "description": "ISO 时间字符串 (convert→时间戳)"},
+                "ts": {"type": "integer", "description": "Unix 时间戳 (convert→ISO)"},
+                "ms": {"type": "boolean", "description": "是否为毫秒时间戳", "default": False},
+                "iso1": {"type": "string", "description": "第一个 ISO 时间 (diff)"},
+                "iso2": {"type": "string", "description": "第二个 ISO 时间 (diff)"},
             },
-            "required": ["direction"],
+            "required": ["action"],
         }
     )
-    async def call(self, context: ContextWrapper[AstrAgentContext], direction: str, ts: int = None,
-                   ms: bool = False, iso: str = "", **kwargs) -> ToolExecResult:
+
+    async def call(
+        self, context: ContextWrapper[AstrAgentContext], action: str,
+        value: str = "", ts: int = 0, ms: bool = False,
+        iso1: str = "", iso2: str = "", **kwargs
+    ) -> ToolExecResult:
         _tool_stats.record(self.name)
         try:
-            if direction == "to_iso":
-                if ts is None: return _err("to_iso 需要 ts 参数")
+            if action == "now":
+                return _unwrap(await _run_sync(_time_now))
+            elif action == "convert":
+                if value:
+                    return _unwrap(await _run_sync(iso_to_ts, value))
                 return _unwrap(await _run_sync(ts_to_iso, ts, ms))
-            if not iso: return _err("to_ts 需要 iso 参数")
-            return _unwrap(await _run_sync(iso_to_ts, iso))
-        except Exception as e: return _err(f"time_convert 失败: {e}")
-
-
-@dataclass
-class TimeDiffTool(FunctionTool):
-    name: str = "time_diff"
-    description: str = "计算两个 ISO 时间的差值（秒/分/时）。"
-    parameters: dict = field(
-        default_factory=lambda: {
-            "type": "object",
-            "properties": {
-                "iso1": {"type": "string", "description": "第一个 ISO 时间"},
-                "iso2": {"type": "string", "description": "第二个 ISO 时间"},
-            },
-            "required": ["iso1", "iso2"],
-        }
-    )
-    async def call(
-        self, context: ContextWrapper[AstrAgentContext], iso1: str, iso2: str, **kwargs
-    ) -> ToolExecResult:
-        _tool_stats.record(self.name)
-        try:
-            return _unwrap(await _run_sync(time_diff, iso1, iso2))
+            elif action == "diff":
+                return _unwrap(await _run_sync(time_diff, iso1, iso2))
+            else:
+                return _err(f"不支持的 action: {action}，使用 now/convert/diff")
         except Exception as e:
-            return _err(f"time_diff 失败: {e}")
-
-
-@dataclass
-class RegexTestTool(FunctionTool):
-    """正则测试。"""
-
-    name: str = "regex_test"
-    description: str = (
-        "测试正则表达式：返回匹配项、位置(start/end)、分组信息（有名/数字）。"
-        "flags 支持: i(忽略大小写) m(多行) s(DOTALL) x(VERBOSE)，可组合如 'im'。"
-        "纯 re 标准库。匹配上限 50 条，超过会标记 truncated。"
-    )
-    parameters: dict = field(
-        default_factory=lambda: {
-            "type": "object",
-            "properties": {
-                "pattern": {"type": "string", "description": "正则表达式"},
-                "text": {"type": "string", "description": "要匹配的文本"},
-                "flags": {
-                    "type": "string",
-                    "description": "正则标志，如 'i' 'im' 'imsx'，可选",
-                },
-            },
-            "required": ["pattern", "text"],
-        }
-    )
-
-    async def call(
-        self,
-        context: ContextWrapper[AstrAgentContext],
-        pattern: str,
-        text: str,
-        flags: str = "",
-        **kwargs,
-    ) -> ToolExecResult:
-        _tool_stats.record(self.name)
-        try:
-            return _unwrap(await _run_sync(_regex_test, pattern, text, flags))
-        except Exception as e:
-            return _err(f"regex_test 失败: {e}")
-
-
-@dataclass
-class RegexReplaceTool(FunctionTool):
-    """正则替换。"""
-
-    name: str = "regex_replace"
-    description: str = (
-        "正则替换：用 replacement 替换 text 中所有匹配 pattern 的内容。"
-        "支持反向引用 \\1 \\2 和有名分组 \\g<name>。"
-        "flags 同 regex_test。返回替换后文本（限 5000 字符）和替换次数。"
-        "纯 re 标准库。"
-    )
-    parameters: dict = field(
-        default_factory=lambda: {
-            "type": "object",
-            "properties": {
-                "pattern": {"type": "string", "description": "正则表达式（匹配规则）"},
-                "replacement": {
-                    "type": "string",
-                    "description": "替换文本，支持 \\1 \\2 反向引用",
-                },
-                "text": {"type": "string", "description": "原始文本"},
-                "flags": {"type": "string", "description": "正则标志，如 'i'"},
-            },
-            "required": ["pattern", "replacement", "text"],
-        }
-    )
-
-    async def call(
-        self,
-        context: ContextWrapper[AstrAgentContext],
-        pattern: str,
-        replacement: str,
-        text: str,
-        flags: str = "",
-        **kwargs,
-    ) -> ToolExecResult:
-        _tool_stats.record(self.name)
-        try:
-            return _unwrap(await _run_sync(_regex_replace, pattern, replacement, text, flags))
-        except Exception as e:
-            return _err(f"regex_replace 失败: {e}")
+            return _err(f"time 失败: {e}")
 
 
 @dataclass
@@ -2203,43 +2062,6 @@ class LogParseTool(FunctionTool):
 
 
 @dataclass
-class FileWatchTool(FunctionTool):
-    name: str = "file_watch"
-    description: str = "监控目录/文件变化（轮询 mtime/size），用于观察操作后的文件变更。duration_s 监控时长(默认10s)，interval_s 轮询间隔(默认1s)。注意会阻塞 duration_s 秒。"
-    parameters: dict = field(
-        default_factory=lambda: {
-            "type": "object",
-            "properties": {
-                "path": {"type": "string", "description": "目录或文件路径"},
-                "duration_s": {
-                    "type": "integer",
-                    "description": "监控时长（秒），默认 10",
-                },
-                "interval_s": {
-                    "type": "number",
-                    "description": "轮询间隔（秒），默认 1.0",
-                },
-            },
-            "required": ["path"],
-        }
-    )
-
-    async def call(
-        self,
-        context: ContextWrapper[AstrAgentContext],
-        path: str,
-        duration_s: int = 10,
-        interval_s: float = 1.0,
-        **kwargs,
-    ) -> ToolExecResult:
-        _tool_stats.record(self.name)
-        try:
-            return _unwrap(await _run_sync(_file_watch, path, duration_s, interval_s))
-        except Exception as e:
-            return _err(f"file_watch 失败: {e}")
-
-
-@dataclass
 class ConfigDiffTool(FunctionTool):
     name: str = "config_diff"
     description: str = (
@@ -2269,71 +2091,6 @@ class ConfigDiffTool(FunctionTool):
         except Exception as e:
             return _err(f"config_diff 失败: {e}")
 
-
-@dataclass
-class SvgRenderTool(FunctionTool):
-    name: str = "svg_render"
-    description: str = "将 SVG 文件渲染为 PNG，用于预览 SVG 图标/图形效果。需要 cairosvg (pip install cairosvg)。"
-    parameters: dict = field(
-        default_factory=lambda: {
-            "type": "object",
-            "properties": {
-                "svg_path": {"type": "string", "description": "SVG 文件路径"},
-                "output_path": {
-                    "type": "string",
-                    "description": "输出 PNG 路径，默认同名",
-                },
-            },
-            "required": ["svg_path"],
-        }
-    )
-
-    async def call(
-        self,
-        context: ContextWrapper[AstrAgentContext],
-        svg_path: str,
-        output_path: str = "",
-        **kwargs,
-    ) -> ToolExecResult:
-        _tool_stats.record(self.name)
-        try:
-            return _unwrap(await _run_sync(_svg_render, svg_path, output_path))
-        except Exception as e:
-            return _err(f"svg_render 失败: {e}")
-
-
-@dataclass
-class JsonSchemaValTool(FunctionTool):
-    name: str = "json_schema_val"
-    description: str = (
-        "根据 JSON Schema 校验 JSON 数据。需要 jsonschema (pip install jsonschema)。"
-    )
-    parameters: dict = field(
-        default_factory=lambda: {
-            "type": "object",
-            "properties": {
-                "data": {"type": "string", "description": "JSON 字符串（待校验数据）"},
-                "schema": {
-                    "type": "string",
-                    "description": "JSON 字符串（Schema 定义）",
-                },
-            },
-            "required": ["data", "schema"],
-        }
-    )
-
-    async def call(
-        self,
-        context: ContextWrapper[AstrAgentContext],
-        data: str,
-        schema: str,
-        **kwargs,
-    ) -> ToolExecResult:
-        _tool_stats.record(self.name)
-        try:
-            return _unwrap(await _run_sync(_json_schema_val, data, schema))
-        except Exception as e:
-            return _err(f"json_schema_val 失败: {e}")
 
 
 @dataclass
@@ -2533,6 +2290,49 @@ class MultiEditTool(FunctionTool):
             return _unwrap(await _run_sync(_multi_edit_run, edits, syntax_check))
         except Exception as e:
             return _err(f"multi_edit 失败: {e}")
+
+
+@dataclass
+class SafeWriteTool(FunctionTool):
+    """新建或整体覆盖文件。"""
+
+    name: str = "safe_write"
+    description: str = (
+        "【新建文件首选】新建或整体覆盖文件。自动创建父目录，写入后做语法检查。"
+        "新建：语法检查失败【不阻塞、不删除】——新文件无旧版可回滚，文件保留+修正指引。"
+        "改已有文件局部内容请用 safe_edit / multi_edit。"
+        "确需整体覆盖（如重写生成的配置文件）：设置 overwrite=True（先备份，语法检查失败自动回滚）。"
+    )
+    parameters: dict = field(
+        default_factory=lambda: {
+            "type": "object",
+            "properties": {
+                "filepath": {"type": "string", "description": "目标文件路径（父目录不存在时自动创建）"},
+                "content": {"type": "string", "description": "完整文件内容（文本，UTF-8）"},
+                "overwrite": {
+                    "type": "boolean",
+                    "description": "文件已存在时是否覆盖。默认 False——返回 proposal 而不写入",
+                    "default": False,
+                },
+            },
+            "required": ["filepath", "content"],
+        }
+    )
+
+    async def call(
+        self,
+        context: ContextWrapper[AstrAgentContext],
+        filepath: str,
+        content: str,
+        overwrite: bool = False,
+        **kwargs,
+    ) -> ToolExecResult:
+        _tool_stats.record(self.name)
+        try:
+            result = await _run_sync(_safe_write, filepath, content, overwrite)
+            return _unwrap(result)
+        except Exception as e:
+            return _err(f"safe_write 失败: {e}")
 
 
 @dataclass
@@ -2936,6 +2736,7 @@ TOOL_GROUPS: dict[str, list[str]] = {
         "safe_backups",
         "file_patch",
         "file_preview",
+        "safe_write",
         "syntax_check",
         "lint_runner",
         "test_runner",
@@ -2964,7 +2765,6 @@ TOOL_GROUPS: dict[str, list[str]] = {
         "file_zip",
         "file_unzip",
         "disk_info",
-        "file_watch",
         "file_remove",
         "config_diff",
     ],
@@ -2976,22 +2776,16 @@ TOOL_GROUPS: dict[str, list[str]] = {
         "json_query",
         "text_filter",
         "diff_strings",
-        "regex_test",
-        "regex_replace",
         "csv_parse",
         "csv_gen",
         "md_strip",
         "log_parse",
     ],
-    "编码": [
-        "base64_",
-        "hex_",
-        "url_",
+    "编码/时间（合并）": [
+        "encode_decode",
+        "time",
     ],
-    "时间": ["time_now", "time_convert", "time_diff"],
     "扩展": [
-        "svg_render",
-        "json_schema_val",
         "semver_compare",
         "uuid_gen",
         "project_init",
@@ -3015,10 +2809,13 @@ _ALL_TOOLS = {
     "safe_backups": SafeBackupsTool,
     "file_patch": FilePatchTool,
     "file_preview": FilePreviewTool,
+    "safe_write": SafeWriteTool,
     "syntax_check": SyntaxCheckTool,
     "lint_runner": LintRunnerTool,
     "test_runner": TestRunnerTool,
     "multi_edit": MultiEditTool,
+    "encode_decode": EncodeDecodeTool,
+    "time": TimeTool,
     "git_status": GitStatusTool,
     "git_diff": GitDiffTool,
     "git_log": GitLogTool,
@@ -3039,7 +2836,6 @@ _ALL_TOOLS = {
     "file_zip": FileZipTool,
     "file_unzip": FileUnzipTool,
     "disk_info": DiskInfoTool,
-    "file_watch": FileWatchTool,
     "file_remove": FileRemoveTool,
     "config_diff": ConfigDiffTool,
     "port_check": PortCheckTool,
@@ -3055,20 +2851,10 @@ _ALL_TOOLS = {
     "json_query": JsonQueryTool,
     "text_filter": TextFilterTool,
     "diff_strings": DiffStringsTool,
-    "regex_test": RegexTestTool,
-    "regex_replace": RegexReplaceTool,
     "csv_parse": CsvParseTool,
     "csv_gen": CsvGenTool,
     "md_strip": MdStripTool,
     "log_parse": LogParseTool,
-    "base64_": Base64Tool,
-    "hex_": HexTool,
-    "url_": UrlTool,
-    "time_now": TimeNowTool,
-    "time_convert": TimeConvertTool,
-    "time_diff": TimeDiffTool,
-    "svg_render": SvgRenderTool,
-    "json_schema_val": JsonSchemaValTool,
     "semver_compare": SemverTool,
     "uuid_gen": UuidGenTool,
     "project_init": ProjectInitTool,

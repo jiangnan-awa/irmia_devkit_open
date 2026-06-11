@@ -3,6 +3,7 @@ http_get — 纯标准库 HTTP 客户端。
 快速 GET/POST，10s 超时，返回 status + body + size。
 用于取 raw GitHub 内容、API 调用等场景。
 """
+from __future__ import annotations
 
 import urllib.request
 import urllib.error
@@ -45,7 +46,7 @@ def get(url: str, headers: dict | None = None, timeout: int = 10) -> dict:
             body = e.read().decode("utf-8", errors="replace")[:500]
         except Exception:
             pass
-        return {"ok": False, "error": f"HTTP {e.code}: {e.reason}", "body": body}
+        return {"ok": False, "error": f"HTTP {e.code}: {e.reason}", "status": e.code, "body": body}
     except urllib.error.URLError as e:
         return {"ok": False, "error": f"连接失败: {e.reason}"}
     except Exception as e:
@@ -80,7 +81,7 @@ def post(
             body = e.read().decode("utf-8", errors="replace")[:500]
         except Exception:
             pass
-        return {"ok": False, "error": f"HTTP {e.code}: {e.reason}", "body": body}
+        return {"ok": False, "error": f"HTTP {e.code}: {e.reason}", "status": e.code, "body": body}
     except urllib.error.URLError as e:
         return {"ok": False, "error": f"连接失败: {e.reason}"}
     except Exception as e:

@@ -14,6 +14,7 @@ from pathlib import Path
 
 from ._file_utils import read_file_with_encoding
 from .multi_edit import run as multi_edit_run
+from ._helpers import proposal_reply
 
 
 _IDENT_RE = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
@@ -184,16 +185,16 @@ def run(old: str, new: str, project_dir: str = ".", dry_run: bool = True, confir
     # Safety valve: renaming renames ALL same-named tokens project-wide
     # with no scope disambiguation — require explicit confirmation for multi-file.
     if len(result.get("files_changed", [])) > 1 and not confirm_multi_file:
-        return {
-            "ok": False,
-            "error": (
-                f"symbol_rename would rename {old_short}→{new_short} in "
-                f"{len(result['files_changed'])} files with no scope disambiguation. "
-                f"Review the dry_run diffs first, then retry with confirm_multi_file=true."
-            ),
-            "preview": result,
-            "options": ["dry_run=true to review diffs", "confirm_multi_file=true to proceed"],
-        }
+        return proposal_reply(
+            False,
+            f"symbol_rename would rename {old_short}→{new_short} in "
+            f"{len(result['files_changed'])} files with no scope disambiguation. "
+            f"Review the dry_run diffs first, then retry with confirm_multi_file=true.",
+            error="cross_file_rename",
+            evidence={"files_changed": result.get("files_changed", []),
+                      "files_count": len(result.get("files_changed", []))},
+            options=["dry_run=true to review diffs", "confirm_multi_file=true to proceed", "cancel"],
+        )
 
     applied = multi_edit_run(edits, syntax_check=True)
     if not applied.get("ok"):
