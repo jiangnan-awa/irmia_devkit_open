@@ -64,7 +64,10 @@ _DEFAULT_IGNORE = {
     "__pycache__", ".git", "node_modules", ".venv", "venv",
     ".tox", ".mypy_cache", ".pytest_cache", ".ruff_cache",
     ".eggs", "build", "dist", "target", ".codegraph",
+    "tests", "__pycache__",
 }
+
+_MAX_FILE_SIZE = 1_000_000  # 1 MB，超大文件（测试数据/json fixture）跳过
 
 _QUERY_ROUTES = [
     (re.compile(r"从\s+(\S+)\s+到\s+(\S+)"), "trace_closed"),
@@ -211,7 +214,9 @@ class CodeGraph:
         files_scanned = 0
 
         all_files = [f for f in root.rglob("*") if f.is_file() and f.suffix.lower() in _LANG_MAP
-                     and not any(p in _DEFAULT_IGNORE for p in f.parts)]
+                     and not any(p in _DEFAULT_IGNORE for p in f.parts)
+                     and f.stat().st_size <= _MAX_FILE_SIZE
+                     and not f.name.startswith("test_")]
         for fpath in all_files:
             rp = str(fpath.relative_to(root)).replace("\\", "/")
             if incremental and rp in mtimes and mtimes[rp] >= fpath.stat().st_mtime:
