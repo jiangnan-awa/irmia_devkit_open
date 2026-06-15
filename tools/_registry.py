@@ -126,9 +126,9 @@ def _code_explore(query: str, project_dir: str = ".") -> dict:
         cg.close()
 
 
-def _code_diff_impact(filepaths: list, max_depth: int = 3) -> dict:
+def _code_diff_impact(filepaths: list, max_depth: int = 3, project_dir: str = ".") -> dict:
     from pathlib import Path
-    root = Path(".").resolve()
+    root = Path(project_dir).resolve()
     db_path = str(root / ".codegraph" / "codegraph.db")
     cg = _CodeGraph(db_path)
     try:
@@ -137,9 +137,9 @@ def _code_diff_impact(filepaths: list, max_depth: int = 3) -> dict:
         cg.close()
 
 
-def _code_pack(target: str, depth: int = 2, mode: str = "both") -> dict:
+def _code_pack(target: str, depth: int = 2, mode: str = "both", project_dir: str = ".") -> dict:
     from pathlib import Path
-    root = Path(".").resolve()
+    root = Path(project_dir).resolve()
     db_path = str(root / ".codegraph" / "codegraph.db")
     cg = _CodeGraph(db_path)
     try:
@@ -148,9 +148,9 @@ def _code_pack(target: str, depth: int = 2, mode: str = "both") -> dict:
         cg.close()
 
 
-def _code_status() -> dict:
+def _code_status(project_dir: str = ".") -> dict:
     from pathlib import Path
-    root = Path(".").resolve()
+    root = Path(project_dir).resolve()
     db_path = str(root / ".codegraph" / "codegraph.db")
     cg = _CodeGraph(db_path)
     try:
@@ -2622,14 +2622,15 @@ class CodeDiffImpactTool(FunctionTool):
         "properties": {
             "filepaths": {"type": "array", "items": {"type": "string"}, "description": "变更的文件路径列表"},
             "max_depth": {"type": "integer", "description": "BFS 最大深度，默认 3", "default": 3},
+            "project_dir": {"type": "string", "description": "项目根目录，须与 code_index 时传入的目录一致，默认当前目录", "default": "."},
         },
         "required": ["filepaths"],
     })
 
-    async def call(self, context: ContextWrapper[AstrAgentContext], filepaths: list, max_depth: int = 3, **kwargs) -> ToolExecResult:
+    async def call(self, context: ContextWrapper[AstrAgentContext], filepaths: list, max_depth: int = 3, project_dir: str = ".", **kwargs) -> ToolExecResult:
         _tool_stats.record(self.name)
         try:
-            return _unwrap(await _run_sync(_code_diff_impact, filepaths, max_depth))
+            return _unwrap(await _run_sync(_code_diff_impact, filepaths, max_depth, project_dir))
         except Exception as e:
             return _err(f"code_diff_impact 失败: {e}")
 
@@ -2649,14 +2650,15 @@ class CodePackTool(FunctionTool):
             "target": {"type": "string", "description": "目标符号名（如 'Main._heal_inactivated_tools'）"},
             "depth": {"type": "integer", "description": "展开层数，默认 2", "default": 2},
             "mode": {"type": "string", "description": "callers / callees / both，默认 both", "default": "both"},
+            "project_dir": {"type": "string", "description": "项目根目录，须与 code_index 时传入的目录一致，默认当前目录", "default": "."},
         },
         "required": ["target"],
     })
 
-    async def call(self, context: ContextWrapper[AstrAgentContext], target: str, depth: int = 2, mode: str = "both", **kwargs) -> ToolExecResult:
+    async def call(self, context: ContextWrapper[AstrAgentContext], target: str, depth: int = 2, mode: str = "both", project_dir: str = ".", **kwargs) -> ToolExecResult:
         _tool_stats.record(self.name)
         try:
-            return _unwrap(await _run_sync(_code_pack, target, depth, mode))
+            return _unwrap(await _run_sync(_code_pack, target, depth, mode, project_dir))
         except Exception as e:
             return _err(f"code_pack 失败: {e}")
 
@@ -2671,13 +2673,17 @@ class CodeStatusTool(FunctionTool):
         "不适合：索引正常时调它——直接调 code_explore。返回文件数、符号数、边数、上次索引时间、DB 大小、FTS5 状态、缺失的 grammar。"
     )
     parameters: dict = field(default_factory=lambda: {
-        "type": "object", "properties": {}, "required": [],
+        "type": "object",
+        "properties": {
+            "project_dir": {"type": "string", "description": "项目根目录，须与 code_index 时传入的目录一致，默认当前目录", "default": "."},
+        },
+        "required": [],
     })
 
-    async def call(self, context: ContextWrapper[AstrAgentContext], **kwargs) -> ToolExecResult:
+    async def call(self, context: ContextWrapper[AstrAgentContext], project_dir: str = ".", **kwargs) -> ToolExecResult:
         _tool_stats.record(self.name)
         try:
-            return _unwrap(await _run_sync(_code_status))
+            return _unwrap(await _run_sync(_code_status, project_dir))
         except Exception as e:
             return _err(f"code_status 失败: {e}")
 
