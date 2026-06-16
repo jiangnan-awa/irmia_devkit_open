@@ -8,7 +8,9 @@ tree-sitter 多语言支持（可选依赖：tree-sitter-{go,rust,java,c,cpp,jav
 from __future__ import annotations
 
 import ast as py_ast
+import concurrent.futures
 import json
+import multiprocessing
 import os
 import re
 import sqlite3
@@ -31,9 +33,6 @@ def _try_import_grammar(pkg: str):
     except ImportError:
         return None
 
-import concurrent.futures
-import multiprocessing
-
 # ── constants ────────────────────────────────────────
 
 _FTS_MIN_LENGTH = 2
@@ -42,8 +41,7 @@ _SOURCE_HEAD_LINES = 15
 _SOURCE_TAIL_LINES = 5
 _PACK_MAX_LINES = 2000
 _PROGRESS_INTERVAL_FILES = 50
-_BATCH_SIZE = 100  # SQLite batch insert size
-_MAX_SOURCE_SIZE = 6000  # Max source chars to store in DB
+_STREAM_BATCH_SIZE = 50  # Write to DB every N files to limit memory
 
 # Worker count for parallel parsing
 _MAX_WORKERS = max(1, min(multiprocessing.cpu_count() // 2, 8))
@@ -76,8 +74,6 @@ _DEFAULT_IGNORE = {
 }
 
 _MAX_FILE_SIZE = 1_000_000  # 1 MB，超大文件（测试数据/json fixture）跳过
-_MAX_FULL_ANALYSIS_SIZE = 80_000   # 80 KB：全文分析（符号 + 边）
-_MAX_SYMBOL_ONLY_SIZE = 200_000    # 200 KB：仅符号（跳过调用/引用边提取）
 
 _QUERY_ROUTES = [
     (re.compile(r"从\s+(\S+)\s+到\s+(\S+)"), "trace_closed"),
@@ -189,7 +185,7 @@ class CodeGraph:
 
     def _conn_get(self) -> sqlite3.Connection:
         if self._conn is None:
-            self._ensure_db()  # already sets self._conn
+            self._ensure_db()
         return self._conn
 
     def close(self) -> None:
@@ -257,76 +253,40 @@ class CodeGraph:
         total_files = len(all_files)
         changed_count = len(changed_files)
 
-        # ── Parallel parsing for changed files ──
+        # ── Parallel parsing + streaming write ──
         if changed_count > 0:
             worker_args = [(str(f), f.suffix.lower(), str(root)) for f in changed_files]
             
-            parsed_results: list[tuple[str, str, float, list[dict], list[dict]]] = []
-            
-            with concurrent.futures.ThreadPoolExecutor(max_workers=_MAX_WORKERS) as executor:
-                futures = {executor.submit(_extract_file_worker, args): args for args in worker_args}
-                for future in concurrent.futures.as_completed(futures):
-                    try:
-                        result = future.result()
-                        parsed_results.append(result)
-                    except Exception:
-                        stats["skipped"] += 1
-
-            # Batch insert into SQLite
-            symbols_batch: list[dict] = []
-            edges_batch: list[dict] = []
-            
-            for rp, suffix, mtime_val, symbols, edges in parsed_results:
-                if incremental:
-                    conn.execute("DELETE FROM symbols WHERE file=?", (rp,))
-                    conn.execute("DELETE FROM edges WHERE file=?", (rp,))
-                    try:
-                        conn.execute("DELETE FROM sym_fts WHERE file=?", (rp,))
-                    except Exception:
-                        pass
-                    mtimes[rp] = mtime_val
-                
-                if symbols or edges:
-                    for s in symbols:
-                        symbols_batch.append({
-                            "name": s["name"], "kind": s["kind"], "file": rp,
-                            "line": s.get("line"), "signature": s.get("signature"),
-                            "source": s.get("source"), "doc": s.get("doc"),
-                            "visibility": s.get("visibility", "public"),
-                            "is_async": s.get("is_async", 0),
-                        })
-                    for e in edges:
-                        edges_batch.append({
-                            "from": e["from"], "to": e["to"], "kind": e["kind"],
-                            "file": rp, "line": e.get("line"),
-                        })
-                    stats["symbols"] += len(symbols)
-                    stats["edges"] += len(edges)
-                    stats["files"] += 1
-                
-                files_scanned += 1
-                if files_scanned % _PROGRESS_INTERVAL_FILES == 0:
-                    progress_log.append({"phase": "indexing", "file": rp,
-                                       "progress": f"{stats['files']}/{total_files}",
-                                       "elapsed_s": round(time.time() - start, 1)})
-            
-            # Bulk insert
-            if symbols_batch:
-                conn.executemany(
-                    "INSERT INTO symbols(name,kind,file,line,signature,source,doc,visibility,is_async) "
-                    "VALUES(:name,:kind,:file,:line,:signature,:source,:doc,:visibility,:is_async)",
-                    symbols_batch,
-                )
-            if edges_batch:
-                conn.executemany(
-                    "INSERT INTO edges(from_sym,to_sym,kind,file,line) VALUES(:from,:to,:kind,:file,:line)",
-                    edges_batch,
-                )
-            
-            # Incremental FTS5 update
-            if incremental and changed_count < total_files * 0.5:
-                for rp, _, _, symbols, _ in parsed_results:
+            def _write_batch(batch: list[tuple]):
+                """Write a batch of parsed files to SQLite."""
+                nonlocal stats, mtimes
+                for rp, suffix, mtime_val, symbols, edges in batch:
+                    if incremental:
+                        conn.execute("DELETE FROM symbols WHERE file=?", (rp,))
+                        conn.execute("DELETE FROM edges WHERE file=?", (rp,))
+                        try:
+                            conn.execute("DELETE FROM sym_fts WHERE file=?", (rp,))
+                        except Exception:
+                            pass
+                        mtimes[rp] = mtime_val
+                    
                     if symbols:
+                        conn.executemany(
+                            "INSERT INTO symbols(name,kind,file,line,signature,source,doc,visibility,is_async) "
+                            "VALUES(:name,:kind,:file,:line,:signature,:source,:doc,:visibility,:is_async)",
+                            [{"name": s["name"], "kind": s["kind"], "file": rp,
+                              "line": s.get("line"), "signature": s.get("signature"),
+                              "source": s.get("source"), "doc": s.get("doc"),
+                              "visibility": s.get("visibility", "public"),
+                              "is_async": s.get("is_async", 0)} for s in symbols],
+                        )
+                    if edges:
+                        conn.executemany(
+                            "INSERT INTO edges(from_sym,to_sym,kind,file,line) VALUES(:from,:to,:kind,:file,:line)",
+                            [{"from": e["from"], "to": e["to"], "kind": e["kind"],
+                              "file": rp, "line": e.get("line")} for e in edges],
+                        )
+                    if incremental and symbols:
                         try:
                             conn.executemany(
                                 "INSERT INTO sym_fts(name, file, signature) VALUES(?, ?, ?)",
@@ -334,7 +294,38 @@ class CodeGraph:
                             )
                         except Exception:
                             pass
-            else:
+                    
+                    stats["symbols"] += len(symbols)
+                    stats["edges"] += len(edges)
+                    stats["files"] += 1
+            
+            with concurrent.futures.ThreadPoolExecutor(max_workers=_MAX_WORKERS) as executor:
+                futures = {executor.submit(_extract_file_worker, args): args for args in worker_args}
+                
+                batch: list[tuple] = []
+                for future in concurrent.futures.as_completed(futures):
+                    try:
+                        result = future.result()
+                        batch.append(result)
+                        if len(batch) >= _STREAM_BATCH_SIZE:
+                            _write_batch(batch)
+                            batch.clear()
+                    except Exception:
+                        stats["skipped"] += 1
+                    
+                    files_scanned += 1
+                    if files_scanned % _PROGRESS_INTERVAL_FILES == 0:
+                        rp = result[0] if 'result' in dir() else ""
+                        progress_log.append({"phase": "indexing", "file": rp,
+                                           "progress": f"{stats['files']}/{total_files}",
+                                           "elapsed_s": round(time.time() - start, 1)})
+                
+                if batch:
+                    _write_batch(batch)
+                    batch.clear()
+            
+            # Full FTS5 rebuild if not incremental or too many changes
+            if not incremental or changed_count >= total_files * 0.5:
                 try:
                     conn.execute("DELETE FROM sym_fts")
                     conn.execute("INSERT INTO sym_fts(name, file, signature) SELECT name, file, signature FROM symbols")
@@ -482,6 +473,7 @@ class CodeGraph:
                 symbols[i]["source"] = sr[0]
         rmap = self._build_relationship_map(conn, [s["name"] for s in symbols])
         grouped = self._build_grouped_by_file(conn, symbols)
+
         return {"ok": True, "found": True, "query_type": "explore",
                 "summary": f"自然语言探索 '{query}'：找到 {len(symbols)} 个相关符号。",
                 "symbols": symbols, "relationship_map": rmap, "grouped_by_file": grouped,
@@ -812,10 +804,10 @@ def _row_to_dict(r) -> dict:
 
 # ── file extraction ──────────────────────────────────
 
-def _extract_file(filepath: str, suffix: str, file_size: int = 0) -> tuple[list[dict], list[dict]]:
+def _extract_file(filepath: str, suffix: str) -> tuple[list[dict], list[dict]]:
     lang = _LANG_MAP.get(suffix, "")
     if lang == "python":
-        return _extract_python(filepath, file_size)
+        return _extract_python(filepath)
     if HAS_TREE_SITTER:
         try:
             return _extract_ts(filepath, lang)
@@ -837,28 +829,22 @@ def _extract_file_worker(args: tuple) -> tuple[str, str, float, list[dict], list
 
 # ── Python AST ───────────────────────────────────────
 
-def _extract_python(filepath: str, file_size: int = 0) -> tuple[list[dict], list[dict]]:
+def _extract_python(filepath: str) -> tuple[list[dict], list[dict]]:
     with open(filepath, "r", encoding="utf-8", errors="replace") as f:
         source = f.read()
     tree = py_ast.parse(source)
     symbols: list[dict] = []
     edges: list[dict] = []
 
-    # ── file-size tiering ──
-    skip_edges = file_size > _MAX_FULL_ANALYSIS_SIZE  # 80KB+ skip per-symbol edge extraction
-    skip_body = file_size > _MAX_SYMBOL_ONLY_SIZE      # 200KB+ skip body walk entirely
-
     class Visitor(py_ast.NodeVisitor):
         def __init__(self):
             self._scope: list[str] = []
             self._current_cls = ""
-            self._has_symbols = False  # track whether we found any function/class
 
         def _full_name(self, name: str) -> str:
             return ".".join(self._scope + [name]) if self._scope else name
 
         def visit_FunctionDef(self, node):
-            self._has_symbols = True
             fn = self._full_name(node.name)
             sig = f"def {node.name}(...)"
             try:
@@ -876,16 +862,13 @@ def _extract_python(filepath: str, file_size: int = 0) -> tuple[list[dict], list
                            "source": (py_ast.get_source_segment(source, node) or "")[:6000],
                            "doc": py_ast.get_docstring(node) or "",
                            "visibility": "public" if not node.name.startswith("_") else "private"})
-            if not skip_edges:
-                edges.extend(_py_calls(node, source, fn))
-                edges.extend(_py_refs(node, source, fn))
-            if not skip_body:
-                self._scope.append(node.name)
-                self.generic_visit(node)
-                self._scope.pop()
+            edges.extend(_py_calls(node, source, fn))
+            edges.extend(_py_refs(node, source, fn))
+            self._scope.append(node.name)
+            self.generic_visit(node)
+            self._scope.pop()
 
         def visit_AsyncFunctionDef(self, node):
-            self._has_symbols = True
             fn = self._full_name(node.name)
             sig = f"async def {node.name}(...)"
             try:
@@ -904,16 +887,13 @@ def _extract_python(filepath: str, file_size: int = 0) -> tuple[list[dict], list
                            "doc": py_ast.get_docstring(node) or "",
                            "visibility": "public" if not node.name.startswith("_") else "private",
                            "is_async": 1})
-            if not skip_edges:
-                edges.extend(_py_calls(node, source, fn))
-                edges.extend(_py_refs(node, source, fn))
-            if not skip_body:
-                self._scope.append(node.name)
-                self.generic_visit(node)
-                self._scope.pop()
+            edges.extend(_py_calls(node, source, fn))
+            edges.extend(_py_refs(node, source, fn))
+            self._scope.append(node.name)
+            self.generic_visit(node)
+            self._scope.pop()
 
         def visit_ClassDef(self, node):
-            self._has_symbols = True
             cls = self._full_name(node.name)
             bases = [".".join(_unparse_attr(b)) for b in getattr(node, "bases", []) if isinstance(b, (py_ast.Name, py_ast.Attribute))]
             sig = f"class {node.name}({', '.join(bases)})" if bases else f"class {node.name}"
@@ -923,13 +903,12 @@ def _extract_python(filepath: str, file_size: int = 0) -> tuple[list[dict], list
                            "visibility": "public" if not node.name.startswith("_") else "private"})
             for bn in bases:
                 edges.append({"from": cls, "to": bn, "kind": "extends", "line": node.lineno})
-            if not skip_body:
-                prev = self._current_cls
-                self._current_cls = node.name
-                self._scope.append(node.name)
-                self.generic_visit(node)
-                self._scope.pop()
-                self._current_cls = prev
+            prev = self._current_cls
+            self._current_cls = node.name
+            self._scope.append(node.name)
+            self.generic_visit(node)
+            self._scope.pop()
+            self._current_cls = prev
 
         def visit_Import(self, node):
             scope = self._scope[-1] if self._scope else "(module)"
@@ -942,14 +921,7 @@ def _extract_python(filepath: str, file_size: int = 0) -> tuple[list[dict], list
             for a in node.names:
                 edges.append({"from": scope, "to": f"{mod}.{a.name}" if mod else a.name, "kind": "imports", "line": node.lineno})
 
-    visitor = Visitor()
-    visitor.visit(tree)
-
-    # ── pure-data early exit: no function/class symbols found ──
-    # Files like default.py (7k AST nodes, 0 symbols) skip wasted walk
-    if not visitor._has_symbols:
-        return symbols, edges
-
+    Visitor().visit(tree)
     return symbols, edges
 
 
@@ -1153,7 +1125,7 @@ def _ts_extract_import_path(node, source) -> str | None:
             if child.type == "import_path":
                 for gc in child.children:
                     if gc.type in ("string_literal", "interpreted_string_literal", "raw_string_literal"):
-                        return text(gc).strip("\"`'")
+                        return text(gc).strip("\"'`")
     # Rust: use std::collections::HashMap
     if t == "use_declaration":
         parts = _ts_collect_identifiers(node)
