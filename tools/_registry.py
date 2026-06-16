@@ -179,13 +179,15 @@ def make_tool(
     clean 步骤自动将空字符串转为 None，统一处理所有 ``or None`` 模式。
     """
 
-    @dataclass
-    class _T(FunctionTool):
-        pass
-
-    _T.name = name
-    _T.description = description
-    _T.parameters = field(default_factory=lambda: parameters)
+    # Build the tool class with type() + dataclass() to access closure variables
+    _T_dict = {
+        '__annotations__': {'name': str, 'description': str, 'parameters': dict},
+        'name': name,
+        'description': description,
+        'parameters': field(default_factory=lambda: parameters),
+    }
+    _T = type(name.title().replace('_', '') + 'Tool', (FunctionTool,), _T_dict)
+    _T = dataclass(_T)
 
     if io_bound:
         async def call(self, context, **kwargs):
@@ -205,7 +207,6 @@ def make_tool(
                 return _err(f"{name} 失败: {e}")
 
     _T.call = call
-    _T.__name__ = f"{name.title().replace('_', '')}Tool"
     return _T
 
 
