@@ -1,5 +1,16 @@
 # Changelog
 
+## v2.5.6 — codegraph 性能修复 + review 安全加固
+
+- **op_log 修复**: `_redact_value` 子串匹配改为下划线分词语义匹配，修复 `keyboard`/`monkey` 等参数被 `key` 误脱敏；`_result_status` 非 JSON 字符串返回 `error` 而非 `ok`；`_INITIALIZED_DB` 类型修复（Path→str），修复 Python 3.12 下 `Path == str` 永远 False 导致每次 `record()` 重复建表。
+
+- **codegraph 索引性能修复**: `_resolve_references` Phase 2（跨文件 import 解析）从 O(N×M) 次 SQL 查询改为预建哈希索引 O(1) 查表，修复 500+ 文件项目索引超时问题。astrbot-fork（504 文件/4917 符号/75459 边）从 >120s 超时恢复到 3.8s。
+- **codegraph P0 Bug 修复（Claude 审查）**: `_code_diff_impact`/`_code_pack`/`_code_status` 增加 `project_dir` 参数，修复与 `code_index` 路径不一致导致的"索引为空"静默误报；`_extract_python` source 截断上限 500→6000 字符，`_row_to_dict` 补全 `source_truncated`/`total_lines` 透传；增量索引增加已删除文件清理逻辑，确保 `mtimes`/`symbols`/`edges`/`fts` 同步。
+- **codegraph 性能优化（无效回退）**: 尝试 ThreadPool/ProcessPool 自适应并行，Windows 上线程调度开销 > 解析收益，恢复单线程。流式写入每 50 文件批处理。超大文件（>1MB）跳过索引。
+- **安全加固**: `safe_write.py` 路径穿越检查在 `Path()` 解析前执行，防止 `Path.normalize()` 消除 `..`；`_extract_file_worker` 增加 `relative_to` ValueError 保护。
+- **Review 修复**: `FakeCodeGraph` mock 签名同步 `project_dir` 参数；进度日志 `result` 变量 NameError 修复。
+- **测试**: 180 passed、8 skipped。
+
 ## v2.5.5 — MCP 改动同步 + 安全修复 + 文档对齐
 
 - **MCP 改动同步（本插件适配）**: 新增 `safe_write` 新建/整体覆盖写入工具；删除非核心工具 `file_watch`、`svg_render`、`json_schema_val` 和 `regex_test`/`regex_replace`；合并 `base64_`+`hex_`+`url_` 为 `encode_decode`，合并 `time_now`+`time_convert`+`time_diff` 为 `time`。工具数 71→63，工具组 11→10。

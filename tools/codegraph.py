@@ -225,8 +225,7 @@ class CodeGraph:
 
         all_files = [f for f in root.rglob("*") if f.is_file() and f.suffix.lower() in _LANG_MAP
                      and not any(p in _DEFAULT_IGNORE for p in f.parts)
-                     and f.stat().st_size <= _MAX_FILE_SIZE
-                     and not f.name.startswith("test_")]
+                     and f.stat().st_size <= _MAX_FILE_SIZE]
         
         # P0-3 fix: clean up deleted files in incremental mode
         changed_files: list[Path] = []

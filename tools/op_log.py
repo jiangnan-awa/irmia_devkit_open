@@ -42,10 +42,9 @@ def _ensure_db() -> None:
     Tracks the last-initialized path so tests can safely switch DBs.
     """
     global _INITIALIZED_DB
-    path = str(_db_path())
-    if _INITIALIZED_DB == path:
-        return
     path = _db_path()
+    if _INITIALIZED_DB == str(path):
+        return
     path.parent.mkdir(parents=True, exist_ok=True)
     conn = sqlite3.connect(str(path))
     conn.execute("""CREATE TABLE IF NOT EXISTS op_log (
@@ -64,7 +63,7 @@ def _ensure_db() -> None:
     conn.execute("CREATE INDEX IF NOT EXISTS idx_op_log_created ON op_log(created_at)")
     conn.commit()
     conn.close()
-    _INITIALIZED_DB = path
+    _INITIALIZED_DB = str(path)
 
 
 def _connect() -> sqlite3.Connection:
@@ -76,7 +75,9 @@ def _connect() -> sqlite3.Connection:
 
 def _redact_value(key: str, value: Any) -> Any:
     lowered = key.lower()
-    if any(marker in lowered for marker in _SENSITIVE_KEYS):
+    # 拆分为下划线分隔的词，精确匹配防止 key→keyboard/monkey 过度脱敏
+    parts = lowered.replace("-", "_").split("_")
+    if any(marker in parts for marker in _SENSITIVE_KEYS):
         return "<redacted>"
     if isinstance(value, str):
         return value if len(value) <= 160 else value[:157] + "..."
@@ -120,12 +121,13 @@ def _result_status(result: Any) -> tuple[str, str]:
         try:
             result = json.loads(result)
         except Exception:
-            return "ok", ""
+            return "error", str(result)[:500]
     if isinstance(result, dict):
         if result.get("timeout"):
             return "timeout", str(result.get("error", ""))[:500]
         if result.get("ok") is False:
             return "error", str(result.get("error", ""))[:500]
+        return "ok", ""
     return "ok", ""
 
 

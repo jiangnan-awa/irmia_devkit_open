@@ -147,6 +147,7 @@ def write(filepath: str, content: str, overwrite: bool = False) -> dict:
 
         # ── overwrite=True：备份 → 写入 → 语法检查（阻塞，失败回滚）──
         backup_root = _backup_dir()
+        backup_root.mkdir(parents=True, exist_ok=True)  # 先创建，确保 disk_usage 路径存在
         try:
             usage = shutil.disk_usage(backup_root)
             if usage.free < 100 * 1024 * 1024:
@@ -163,7 +164,6 @@ def write(filepath: str, content: str, overwrite: bool = False) -> dict:
             encoding = "utf-8"
 
         ts = datetime.now().strftime("%Y%m%d_%H%M%S_%f")
-        backup_root.mkdir(parents=True, exist_ok=True)
         backup_path = backup_root / f"{p.name}.{ts}.write.bak"
         try:
             shutil.copy2(str(p), str(backup_path))
