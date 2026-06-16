@@ -304,6 +304,7 @@ class CodeGraph:
                 
                 batch: list[tuple] = []
                 for future in concurrent.futures.as_completed(futures):
+                    result = None
                     try:
                         result = future.result()
                         batch.append(result)
@@ -315,7 +316,7 @@ class CodeGraph:
                     
                     files_scanned += 1
                     if files_scanned % _PROGRESS_INTERVAL_FILES == 0:
-                        rp = result[0] if 'result' in dir() else ""
+                        rp = result[0] if result else ""
                         progress_log.append({"phase": "indexing", "file": rp,
                                            "progress": f"{stats['files']}/{total_files}",
                                            "elapsed_s": round(time.time() - start, 1)})
@@ -822,9 +823,17 @@ def _extract_file_worker(args: tuple) -> tuple[str, str, float, list[dict], list
     fpath = Path(fpath_str)
     try:
         symbols, edges = _extract_file(fpath_str, suffix)
-        return (str(fpath.relative_to(root_str)).replace("\\", "/"), suffix, fpath.stat().st_mtime, symbols, edges)
+        try:
+            rp = str(fpath.relative_to(root_str)).replace("\\", "/")
+        except ValueError:
+            rp = str(fpath)
+        return (rp, suffix, fpath.stat().st_mtime, symbols, edges)
     except Exception:
-        return (str(fpath.relative_to(root_str)).replace("\\", "/"), suffix, fpath.stat().st_mtime, [], [])
+        try:
+            rp = str(fpath.relative_to(root_str)).replace("\\", "/")
+        except ValueError:
+            rp = str(fpath)
+        return (rp, suffix, fpath.stat().st_mtime, [], [])
 
 
 # ── Python AST ───────────────────────────────────────

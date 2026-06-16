@@ -105,16 +105,16 @@ class TestRegistryConsistency:
                 calls.append(("explore", query, project_dir))
                 return {"ok": True}
 
-            def code_diff_impact(self, filepaths, max_depth=3):
-                calls.append(("impact", filepaths, max_depth))
+            def code_diff_impact(self, filepaths, max_depth=3, project_dir="."):
+                calls.append(("impact", filepaths, max_depth, project_dir))
                 return {"ok": True}
 
-            def code_pack(self, target, depth=2, mode="both"):
-                calls.append(("pack", target, depth, mode))
+            def code_pack(self, target, depth=2, mode="both", project_dir="."):
+                calls.append(("pack", target, depth, mode, project_dir))
                 return {"ok": True}
 
-            def code_status(self):
-                calls.append(("status",))
+            def code_status(self, project_dir="."):
+                calls.append(("status", project_dir))
                 return {"ok": True}
 
         monkeypatch.setattr(registry, "_CodeGraph", FakeCodeGraph)

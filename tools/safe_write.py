@@ -44,7 +44,8 @@ def _preview(content: str, n: int = _PREVIEW_LINES) -> dict:
 
 def _check_forbidden(p: Path, raw: str) -> dict | None:
     """复用 file_remove 的路径沙箱：拒绝 .. 穿越和系统目录写入。"""
-    if any(part == ".." for part in raw.replace("\\", "/").split("/")):
+    # 在 Path 解析之前检查原始字符串，防止 Path.normalize() 消除 ..
+    if ".." in raw.replace("\\", "/"):
         return {"ok": False, "error": "路径包含 .. 穿越，已被拒绝"}
 
     path_str = str(p).replace("\\", "/")
