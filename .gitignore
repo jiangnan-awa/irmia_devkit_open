@@ -27,4 +27,6 @@ Thumbs.db
 *.db-wal
 .codegraph/
 .reasonix/
+reasonix.toml
+doc_extracted.txt
 notes/
