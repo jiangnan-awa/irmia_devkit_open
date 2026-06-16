@@ -299,7 +299,9 @@ class CodeGraph:
                     stats["edges"] += len(edges)
                     stats["files"] += 1
             
-            with concurrent.futures.ThreadPoolExecutor(max_workers=_MAX_WORKERS) as executor:
+            # Choose executor based on file count: ProcessPool for large projects, ThreadPool for small
+            Executor = concurrent.futures.ProcessPoolExecutor if changed_count >= 200 else concurrent.futures.ThreadPoolExecutor
+            with Executor(max_workers=_MAX_WORKERS) as executor:
                 futures = {executor.submit(_extract_file_worker, args): args for args in worker_args}
                 
                 batch: list[tuple] = []
