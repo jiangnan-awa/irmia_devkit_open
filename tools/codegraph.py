@@ -253,79 +253,63 @@ class CodeGraph:
         total_files = len(all_files)
         changed_count = len(changed_files)
 
-        # ── Parallel parsing + streaming write ──
+        # ── Single-threaded parsing + batch write ──
         if changed_count > 0:
             worker_args = [(str(f), f.suffix.lower(), str(root)) for f in changed_files]
             
-            def _write_batch(batch: list[tuple]):
-                """Write a batch of parsed files to SQLite."""
-                nonlocal stats, mtimes
-                for rp, suffix, mtime_val, symbols, edges in batch:
-                    if incremental:
-                        conn.execute("DELETE FROM symbols WHERE file=?", (rp,))
-                        conn.execute("DELETE FROM edges WHERE file=?", (rp,))
-                        try:
-                            conn.execute("DELETE FROM sym_fts WHERE file=?", (rp,))
-                        except Exception:
-                            pass
-                        mtimes[rp] = mtime_val
-                    
-                    if symbols:
-                        conn.executemany(
-                            "INSERT INTO symbols(name,kind,file,line,signature,source,doc,visibility,is_async) "
-                            "VALUES(:name,:kind,:file,:line,:signature,:source,:doc,:visibility,:is_async)",
-                            [{"name": s["name"], "kind": s["kind"], "file": rp,
-                              "line": s.get("line"), "signature": s.get("signature"),
-                              "source": s.get("source"), "doc": s.get("doc"),
-                              "visibility": s.get("visibility", "public"),
-                              "is_async": s.get("is_async", 0)} for s in symbols],
-                        )
-                    if edges:
-                        conn.executemany(
-                            "INSERT INTO edges(from_sym,to_sym,kind,file,line) VALUES(:from,:to,:kind,:file,:line)",
-                            [{"from": e["from"], "to": e["to"], "kind": e["kind"],
-                              "file": rp, "line": e.get("line")} for e in edges],
-                        )
-                    if incremental and symbols:
-                        try:
-                            conn.executemany(
-                                "INSERT INTO sym_fts(name, file, signature) VALUES(?, ?, ?)",
-                                [(s["name"], rp, s.get("signature", "")) for s in symbols],
-                            )
-                        except Exception:
-                            pass
-                    
-                    stats["symbols"] += len(symbols)
-                    stats["edges"] += len(edges)
-                    stats["files"] += 1
+            # Single-threaded parsing is faster for typical projects (<1000 files)
+            results = []
+            for args in worker_args:
+                try:
+                    results.append(_extract_file_worker(args))
+                except Exception:
+                    stats["skipped"] += 1
             
-            # Choose executor based on file count: ProcessPool for large projects, ThreadPool for small
-            Executor = concurrent.futures.ProcessPoolExecutor if changed_count >= 200 else concurrent.futures.ThreadPoolExecutor
-            with Executor(max_workers=_MAX_WORKERS) as executor:
-                futures = {executor.submit(_extract_file_worker, args): args for args in worker_args}
-                
-                batch: list[tuple] = []
-                for future in concurrent.futures.as_completed(futures):
-                    result = None
+            # Batch write
+            for rp, suffix, mtime_val, symbols, edges in results:
+                if incremental:
+                    conn.execute("DELETE FROM symbols WHERE file=?", (rp,))
+                    conn.execute("DELETE FROM edges WHERE file=?", (rp,))
                     try:
-                        result = future.result()
-                        batch.append(result)
-                        if len(batch) >= _STREAM_BATCH_SIZE:
-                            _write_batch(batch)
-                            batch.clear()
+                        conn.execute("DELETE FROM sym_fts WHERE file=?", (rp,))
                     except Exception:
-                        stats["skipped"] += 1
-                    
-                    files_scanned += 1
-                    if files_scanned % _PROGRESS_INTERVAL_FILES == 0:
-                        rp = result[0] if result else ""
-                        progress_log.append({"phase": "indexing", "file": rp,
-                                           "progress": f"{stats['files']}/{total_files}",
-                                           "elapsed_s": round(time.time() - start, 1)})
+                        pass
+                    mtimes[rp] = mtime_val
                 
-                if batch:
-                    _write_batch(batch)
-                    batch.clear()
+                if symbols:
+                    conn.executemany(
+                        "INSERT INTO symbols(name,kind,file,line,signature,source,doc,visibility,is_async) "
+                        "VALUES(:name,:kind,:file,:line,:signature,:source,:doc,:visibility,:is_async)",
+                        [{"name": s["name"], "kind": s["kind"], "file": rp,
+                          "line": s.get("line"), "signature": s.get("signature"),
+                          "source": s.get("source"), "doc": s.get("doc"),
+                          "visibility": s.get("visibility", "public"),
+                          "is_async": s.get("is_async", 0)} for s in symbols],
+                    )
+                if edges:
+                    conn.executemany(
+                        "INSERT INTO edges(from_sym,to_sym,kind,file,line) VALUES(:from,:to,:kind,:file,:line)",
+                        [{"from": e["from"], "to": e["to"], "kind": e["kind"],
+                          "file": rp, "line": e.get("line")} for e in edges],
+                    )
+                if incremental and symbols:
+                    try:
+                        conn.executemany(
+                            "INSERT INTO sym_fts(name, file, signature) VALUES(?, ?, ?)",
+                            [(s["name"], rp, s.get("signature", "")) for s in symbols],
+                        )
+                    except Exception:
+                        pass
+                
+                stats["symbols"] += len(symbols)
+                stats["edges"] += len(edges)
+                stats["files"] += 1
+                
+                files_scanned += 1
+                if files_scanned % _PROGRESS_INTERVAL_FILES == 0:
+                    progress_log.append({"phase": "indexing", "file": rp,
+                                       "progress": f"{stats['files']}/{total_files}",
+                                       "elapsed_s": round(time.time() - start, 1)})
             
             # Full FTS5 rebuild if not incremental or too many changes
             if not incremental or changed_count >= total_files * 0.5:
@@ -1179,28 +1163,38 @@ def _resolve_references(conn):
             if len(candidates) == 1:
                 conn.execute("UPDATE edges SET to_sym=?, resolved=1 WHERE id=?", (candidates[0], eid))
 
-    # Phase 2: cross-file import resolution
+    # Phase 2: cross-file import resolution (optimized: batch resolve)
+    from collections import defaultdict as dd2
+    file_imports: dict[str, list[str]] = dd2(list)
+    all_imports = conn.execute("SELECT file, to_sym FROM edges WHERE kind='imports'").fetchall()
+    for f, imp in all_imports:
+        file_imports[f].append(imp)
+    
+    # Build a lookup: (import_prefix, short_name) -> set of candidate full names
+    # This avoids N*M individual SQL queries
+    import_startswith_map: dict[tuple[str, str], list[str]] = dd2(list)
+    all_symbol_names = [r[0] for r in conn.execute("SELECT name FROM symbols").fetchall()]
+    for qn in all_symbol_names:
+        short = qn.rsplit(".", 1)[-1]
+        # For each possible import that matches this symbol's package prefix
+        for i in range(1, len(qn.split("."))):
+            prefix = ".".join(qn.split(".")[:i])
+            import_startswith_map[(prefix, short)].append(qn)
+    
     unresolved = conn.execute(
         "SELECT e.id, e.from_sym, e.to_sym, s.file "
         "FROM edges e JOIN symbols s ON s.name=e.from_sym "
-        "WHERE e.kind='calls' AND e.resolved=0"
+        "WHERE e.kind='calls' AND e.resolved=0 LIMIT 10000"
     ).fetchall()
-    file_imports: dict[str, list[str]] = {}
-    all_imports = conn.execute("SELECT file, to_sym FROM edges WHERE kind='imports'").fetchall()
-    for f, imp in all_imports:
-        file_imports.setdefault(f, []).append(imp)
-
+    
     for eid, from_sym, to_sym, from_file in unresolved:
         if from_file not in file_imports:
             continue
         candidates = set()
         for imp in file_imports[from_file]:
-            rows = conn.execute(
-                "SELECT name FROM symbols WHERE name=? OR name LIKE ?",
-                (f"{imp}.{to_sym}", f"{imp}.%.{to_sym}"),
-            ).fetchall()
-            for (qn,) in rows:
-                candidates.add(qn)
+            key = (imp, to_sym)
+            if key in import_startswith_map:
+                candidates.update(import_startswith_map[key])
         if len(candidates) == 1:
             conn.execute("UPDATE edges SET to_sym=?, resolved=1 WHERE id=?", (candidates.pop(), eid))
 
