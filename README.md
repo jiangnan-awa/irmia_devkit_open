@@ -2,7 +2,7 @@
 
 AstrBot 插件，为 LLM Agent 提供代码开发工具集。
 
-Python ≥ 3.10
+Python ≥ 3.10 · 支持 Windows / Linux / macOS（`es_search`、`gh_*` 在非 Windows 平台自动降级到原生替代方案）
 
 ## 安装
 
@@ -19,8 +19,8 @@ Python ≥ 3.10
 | `group_config_enabled` | 启用群级权限配置（默认关闭，需重启生效） |
 | `tool_groups` | 10 组 bool 开关，`false` = 关闭整组 |
 | `disabled_tools` | 逗号分隔单独禁用的工具名 |
-| `es_path` | Everything CLI 路径，空自动检测 |
-| `gh_path` | GitHub CLI 路径，空自动检测 |
+| `es_path` | Everything CLI 路径（Windows），空自动检测；Linux/macOS 自动 fallback 到 locate/fd/os.walk |
+| `gh_path` | GitHub CLI 路径（Windows: gh.exe / Linux: gh），空自动检测 |
 | `backup_dir` | safe_edit 备份目录，空 → `~/.irmia/backups` |
 | `state_dir` | （已弃用）异步任务目录 |
 | `lock_dirs` | （已弃用）文件锁检测目录 |
@@ -29,8 +29,8 @@ Python ≥ 3.10
 
 | 工具 | 依赖 | 未安装时 |
 |------|------|----------|
-| `es_search` | Everything + es.exe (Windows) / locate / fd | 返回错误提示或 Python os.walk 扫描 |
-| `gh_pr` / `gh_issue` / `gh_release` / `gh_repo` | GitHub CLI | 返回错误提示 |
+| `es_search` | Everything + es.exe (Windows) / locate (Linux/m macOS mlocate/plocate) / fd | 返回错误提示或 Python os.walk 扫描 |
+| `gh_pr` / `gh_issue` / `gh_release` / `gh_repo` | GitHub CLI（跨平台：winget / apt / dnf / brew） | 返回含平台对应安装命令的错误提示 |
 | `html_extract` | `beautifulsoup4`，lxml 可选 | 缺 bs4 报错，缺 lxml 回退 html.parser |
 | `syntax_check` (Nim/Go/JS/TS) | 对应编译器 | 跳过 (skipped=true) |
 | `lint_runner` | ruff / pylint / eslint 任一（自动 fallback） | 返回安装提示 |

@@ -1,16 +1,22 @@
 """
 gh_cli — GitHub CLI 封装。
 通过 gh 命令直接操作 GitHub，无需浏览器。
+跨平台：Windows / Linux / macOS。
 """
 from __future__ import annotations
 
 import json
 import os
+import platform
 import shutil
 import tempfile
 
 from .config import get_config
 from ._helpers import _run_cmd
+
+
+def _is_windows() -> bool:
+    return platform.system() == "Windows"
 
 
 def _find_gh() -> str:
@@ -22,15 +28,35 @@ def _find_gh() -> str:
     path = shutil.which("gh")
     if path:
         return path
-    # Windows 常见安装位置
-    for guess in [
-        r"C:\Program Files\GitHub CLI\gh.exe",
-        r"C:\Program Files (x86)\GitHub CLI\gh.exe",
-        os.path.expandvars(r"%LOCALAPPDATA%\Programs\GitHub CLI\gh.exe"),
-    ]:
+    # 常见安装位置（按平台）
+    guesses: list[str]
+    if _is_windows():
+        guesses = [
+            r"C:\Program Files\GitHub CLI\gh.exe",
+            r"C:\Program Files (x86)\GitHub CLI\gh.exe",
+            os.path.expandvars(r"%LOCALAPPDATA%\Programs\GitHub CLI\gh.exe"),
+        ]
+    else:
+        # Linux / macOS 常见安装位置
+        guesses = [
+            "/usr/bin/gh",           # apt / dnf / pacman 系统包
+            "/usr/local/bin/gh",     # 手动编译 / Homebrew (Intel Mac)
+            "/opt/homebrew/bin/gh",  # Homebrew (Apple Silicon)
+            "/snap/bin/gh",          # snap
+            os.path.expanduser("~/.local/bin/gh"),       # pipx / 用户安装
+            os.path.expanduser("~/go/bin/gh"),           # go install
+        ]
+    for guess in guesses:
         if os.path.exists(guess):
             return guess
     return "gh"
+
+
+def _install_hint() -> str:
+    """按平台返回 gh CLI 安装提示。"""
+    if _is_windows():
+        return "winget install GitHub.cli"
+    return "sudo apt install gh  # Debian/Ubuntu\n或: sudo dnf install gh / brew install gh / conda install gh --channel conda-forge"
 
 
 def _run_gh(args: list[str], cwd: str = None, timeout: int = 20) -> dict:
@@ -38,15 +64,18 @@ def _run_gh(args: list[str], cwd: str = None, timeout: int = 20) -> dict:
         cwd = os.getcwd()
     gh_bin = _find_gh()
     result = _run_cmd([gh_bin] + args, cwd=cwd, timeout=timeout)
-    if not result["ok"] and gh_bin not in result.get("error", ""):
-        if gh_bin != "gh":
-            result["error"] = f"gh 未找到: {gh_bin}"
-    if not result["ok"] and gh_bin == "gh":
-        result["error"] = (
-            f"{result.get('error', 'gh 未找到')}。"
-            "如已安装 gh CLI，用 es_search('gh.exe') 找到路径后填入 config.json 的 gh_path；"
-            "或安装 GitHub CLI: winget install GitHub.cli"
-        )
+    # _run_cmd 在 FileNotFoundError 时返回 {"ok": False, "error": "<name> 未安装或不在 PATH 中"}
+    if not result["ok"]:
+        err = result.get("error", "")
+        # gh 可执行文件未找到的情况（_run_cmd 的 FileNotFoundError 路径）
+        if "未安装" in err or gh_bin == "gh":
+            if _is_windows():
+                locate_hint = "用 es_search('gh.exe') 找到路径后填入 config.json 的 gh_path；或"
+            else:
+                locate_hint = "用 shell_exec('which gh') 或 dir_list('/usr/local/bin') 定位后填入 config.json 的 gh_path；或"
+            result["error"] = (
+                f"{err or 'gh 未找到'}。{locate_hint}安装 GitHub CLI: {_install_hint()}"
+            )
     return result
 
 

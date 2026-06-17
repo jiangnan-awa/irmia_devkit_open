@@ -41,12 +41,12 @@
     "type": "object",
     "items": {
       "es_path": {
-        "description": "Everything CLI (es.exe) 路径",
+        "description": "Everything CLI (es.exe) 路径。Linux/macOS 无需填写，自动使用 locate/fd/os.walk fallback",
         "type": "string",
         "default": ""
       },
       "gh_path": {
-        "description": "GitHub CLI (gh.exe) 路径",
+        "description": "GitHub CLI 路径（Windows: gh.exe；Linux/macOS: gh）。留空自动检测 PATH 及常见安装位置",
         "type": "string",
         "default": ""
       },

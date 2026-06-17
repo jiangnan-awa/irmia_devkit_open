@@ -50,6 +50,7 @@ _MAX_POSIX_FILES = 10000
 def _posix_search(
     query: str, path: str | None = None, max_results: int = 100,
     case_sensitive: bool = False, file_type: str = "all", ext: str | None = None,
+    regex: bool = False, whole_word: bool = False, sort_by: str | None = None,
 ) -> dict:
     """Linux/macOS 文件名搜索：locate → fd → os.walk 三层 fallback。"""
     search_root = path or "/"
@@ -68,6 +69,8 @@ def _posix_search(
                 items = _parse_locate_output(r["stdout"], max_results, search_root,
                                               file_type, ext, case_sensitive)
                 if items:
+                    items = _apply_extra_filters(items, query, regex, whole_word, case_sensitive)
+                    items = _apply_sort(items, sort_by, max_results)
                     return {"ok": True, "count": len(items), "total_size": 0, "items": items,
                             "engine": "locate"}
         except Exception:
@@ -77,11 +80,18 @@ def _posix_search(
     fd_path = shutil.which("fd")
     if fd_path:
         try:
-            args = [fd_path, "--max-results", str(max_results), "--type", "f" if file_type == "file" else ("d" if file_type == "folder" else "f")]
+            args = [fd_path, "--max-results", str(max_results),
+                    "--type", "f" if file_type == "file" else ("d" if file_type == "folder" else "e")]
             if ext:
                 args.extend(["-e", ext])
             if case_sensitive:
                 args.append("--case-sensitive")
+            else:
+                args.append("--ignore-case")
+            if whole_word:
+                args.append("-w")
+            if regex:
+                args.append("--regex")
             args.append(query)
             if search_root != "/":
                 args.append(search_root)
@@ -90,13 +100,52 @@ def _posix_search(
                 items = _parse_locate_output(r["stdout"], max_results, search_root,
                                               file_type, ext, case_sensitive)
                 if items:
+                    items = _apply_sort(items, sort_by, max_results)
                     return {"ok": True, "count": len(items), "total_size": 0, "items": items,
                             "engine": "fd", "note": "Linux 搜索模式：搜索语法有限（不支持 ext: folder: 等 Everything 语法）"}
         except Exception:
             pass
 
     # --- Layer 3: Python os.walk ---
-    return _python_fallback_search(query, search_root, max_results, case_sensitive, file_type, ext)
+    return _python_fallback_search(query, search_root, max_results, case_sensitive,
+                                   file_type, ext, regex, whole_word, sort_by)
+
+
+_SORT_KEYS = {
+    "name": "name",
+    "path": "path",
+    "size": "size",
+    "date_modified": "date_modified",
+}
+
+
+def _apply_sort(items: list[dict], sort_by: str | None, max_results: int) -> list[dict]:
+    """对 locate/fd 结果排序（locate 无 -s 排序，需在解析后统一处理）。"""
+    if not sort_by or sort_by not in _SORT_KEYS or not items:
+        return items
+    key = _SORT_KEYS[sort_by]
+    try:
+        items.sort(key=lambda it: (it.get(key) or 0 if key in ("size",) else (it.get(key) or "")))
+        if key == "size":
+            items.sort(key=lambda it: it.get("size", 0), reverse=True)
+    except Exception:
+        pass
+    return items[:max_results]
+
+
+def _apply_extra_filters(
+    items: list[dict], query: str, regex: bool, whole_word: bool, case_sensitive: bool
+) -> list[dict]:
+    """locate 只做字面子串匹配，regex/whole_word 需在 Python 侧补过滤。"""
+    if not regex and not whole_word:
+        return items
+    flags = 0 if case_sensitive else re.IGNORECASE
+    pattern_src = query if regex else (r"\b" + re.escape(query) + r"\b")
+    try:
+        rx = re.compile(pattern_src, flags)
+    except re.error:
+        return [it for it in items if query in it["name"]]
+    return [it for it in items if rx.search(it["name"])]
 
 
 def _parse_locate_output(stdout: str, max_results: int, search_root: str,
@@ -143,51 +192,71 @@ def _parse_locate_output(stdout: str, max_results: int, search_root: str,
 
 
 def _python_fallback_search(query: str, search_root: str, max_results: int,
-                            case_sensitive: bool, file_type: str, ext: str) -> dict:
+                            case_sensitive: bool, file_type: str, ext: str,
+                            regex: bool = False, whole_word: bool = False,
+                            sort_by: str | None = None) -> dict:
     """Python os.walk 兜底搜索（最慢，但一定可用）。"""
     items = []
     files_scanned = 0
     rp = Path(search_root).resolve()
-    try:
-        for root, dirs, files in os.walk(search_root):
-            dirs[:] = [d for d in dirs if d not in _POSIX_SKIP_DIRS and not d.startswith(".")]
-            if files_scanned >= _MAX_POSIX_FILES:
-                break
-            entries = []
-            if file_type == "folder":
-                entries = dirs
-            elif file_type == "file":
-                entries = files
+    # 预编译匹配模式
+    flags = 0 if case_sensitive else re.IGNORECASE
+    name_matcher = None
+    if regex:
+        try:
+            name_matcher = re.compile(query, flags)
+        except re.error as e:
+            return {"ok": False, "error": f"非法正则表达式: {e}"}
+    elif whole_word:
+        name_matcher = re.compile(r"\b" + re.escape(query) + r"\b", flags)
+    for root, dirs, files in os.walk(search_root):
+        dirs[:] = [d for d in dirs if d not in _POSIX_SKIP_DIRS and not d.startswith(".")]
+        if files_scanned >= _MAX_POSIX_FILES:
+            break
+        entries = []
+        if file_type == "folder":
+            entries = dirs
+        elif file_type == "file":
+            entries = files
+        else:
+            entries = files + dirs
+        for entry in entries:
+            files_scanned += 1
+            ep = Path(root) / entry
+            try:
+                st = ep.stat()
+            except OSError:
+                continue
+            if ext and ep.suffix.lstrip(".") != ext.lstrip("."):
+                continue
+            name = ep.name
+            if name_matcher is not None:
+                if not name_matcher.search(name):
+                    continue
             else:
-                entries = files + dirs
-            for entry in entries:
-                files_scanned += 1
-                ep = Path(root) / entry
-                try:
-                    st = ep.stat()
-                except OSError:
+                name_cmp = name if case_sensitive else name.lower()
+                q_cmp = query if case_sensitive else query.lower()
+                if q_cmp not in name_cmp and not fnmatch.fnmatch(name_cmp, q_cmp):
                     continue
-                if ext and ep.suffix.lstrip(".") != ext.lstrip("."):
-                    continue
-                name_lower = ep.name.lower() if not case_sensitive else ep.name
-                q_lower = query.lower() if not case_sensitive else query
-                if q_lower not in name_lower and not fnmatch.fnmatch(name_lower, q_lower):
-                    continue
-                items.append({
-                    "name": ep.name,
-                    "path": str(ep.parent),
-                    "full": str(ep),
-                    "size": st.st_size,
-                    "date_modified": str(st.st_mtime),
-                })
-                if len(items) >= max_results:
-                    break
+            items.append({
+                "name": name,
+                "path": str(ep.parent),
+                "full": str(ep),
+                "size": st.st_size,
+                "date_modified": str(st.st_mtime),
+            })
             if len(items) >= max_results:
                 break
-    except PermissionError:
-        pass
+        if len(items) >= max_results:
+            break
 
-    note = "Python 扫描模式（较慢）。建议安装 Everything（voidtools.com）或 fd（choco install fd / winget install sharkdp.fd）"
+    # 排序
+    if sort_by and sort_by in _SORT_KEYS and items:
+        items = _apply_sort(items, sort_by, max_results)
+
+    note = ("Python 扫描模式（较慢）。"
+            "Linux/macOS 建议安装 fd（apt/dnf install fd-find 或 brew install fd）或 locate（mlocate/plocate 包）；"
+            "Windows 建议安装 Everything（voidtools.com）或 fd（choco install fd / winget install sharkdp.fd）")
     return {"ok": True, "count": len(items), "total_size": 0, "items": items, "engine": "python", "note": note}
 
 
@@ -222,7 +291,9 @@ def search(
     """
     es_path = _get_es_path()
     if not Path(es_path).exists():
-        return _posix_search(query, path, max_results, case_sensitive, file_type, ext)
+        # es.exe 不可用 → 进入跨平台 fallback（Linux/macOS 主要路径）
+        return _posix_search(query, path, max_results, case_sensitive, file_type, ext,
+                             regex=regex, whole_word=whole_word, sort_by=sort_by)
 
     args = [es_path]
 
